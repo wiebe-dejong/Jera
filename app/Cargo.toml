@@ -1,0 +1,17 @@
+[package]
+name = "cockpit"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+gpui-kit = { version = "0.9.1", default-features = false }
+alacritty_terminal = "0.26.0"
+flume = "0.12"
+gpui-pre = { version = "=0.3.12", features = ["test-support"], optional = true }
+gpui-pre-platform = { version = "=0.3.12", features = ["test-support"], optional = true }
+image = { version = "0.25", default-features = false, features = ["png"], optional = true }
+
+[features]
+# Alleen om te testen: bewaart het venster als afbeelding, zie `main::testhulp`.
+schermafdruk = ["dep:gpui-pre", "dep:gpui-pre-platform", "dep:image"]
