@@ -82,6 +82,8 @@ pub struct TerminalView {
     pub focus: FocusHandle,
     /// De titel die het programma zet, leeg tot het dat doet.
     pub title: String,
+    /// Het pid van de shell die het programma start.
+    pub pid: u32,
     scroll_rest: f32,
     /// Het thema van de laatste keer tekenen, voor antwoorden op kleurvragen.
     thema: &'static Thema,
@@ -108,6 +110,7 @@ impl TerminalView {
         };
         let size = WindowSize { num_lines: 30, num_cols: 100, cell_width: 8, cell_height: 16 };
         let pty = tty::new(&options, size, 0).expect("pty openen");
+        let pid = pty.child().id();
         let event_loop =
             EventLoop::new(term.clone(), proxy, pty, false, false).expect("event loop starten");
         let pty = event_loop.channel();
@@ -128,6 +131,7 @@ impl TerminalView {
             pty,
             focus: cx.focus_handle(),
             title: String::new(),
+            pid,
             scroll_rest: 0.0,
             thema: &thema::DONKER,
         }

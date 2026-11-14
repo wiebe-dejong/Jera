@@ -1,7 +1,18 @@
 //! Cockpit: Claude Code-sessies draaien en overzien.
 //!
-//! Gebruik: cargo run -- [map ...]. Elke map krijgt een sessie; zonder map de huidige.
+//! Gebruik: cargo run -- [map ...]. Elke map krijgt een sessie; zonder map staat Openen open.
 
+extern crate gpui_kit as gpui;
+
+mod agents;
+mod bestandsicoon;
+mod bewerk;
+mod git;
+mod gitpaneel;
+mod instellingen;
+mod openen;
+mod oud;
+mod status;
 mod terminal;
 mod thema;
 mod venster;
@@ -30,13 +41,11 @@ fn main() {
         }
     }
 
-    let mut mappen: Vec<PathBuf> = std::env::args().skip(1).map(PathBuf::from).collect();
-    if mappen.is_empty() {
-        mappen.push(std::env::current_dir().expect("huidige map"));
-    }
+    let mappen: Vec<PathBuf> = std::env::args().skip(1).map(PathBuf::from).collect();
 
     gpui_kit::application().run(move |cx| {
         gpui_kit::init(cx);
+        instellingen::init(cx);
         cx.text_system()
             .add_fonts(LETTERS.iter().map(|bytes| Cow::Borrowed(*bytes)).collect())
             .expect("letters laden");
@@ -55,7 +64,7 @@ fn main() {
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
             titlebar: Some(TitlebarOptions {
-                title: Some("Cockpit".into()),
+                title: Some("Jera".into()),
                 appears_transparent: true,
                 traffic_light_position: Some(point(px(14.0), px(11.0))),
             }),
@@ -64,10 +73,14 @@ fn main() {
         gpui_kit::open_window(options, cx, |window, cx| {
             cx.new(|cx| {
                 cx.observe_window_appearance(window, |_, _, cx| cx.notify()).detach();
-                let mut cockpit = Cockpit::new();
+                let mut cockpit = Cockpit::new(window, cx);
+                if mappen.is_empty() {
+                    cockpit.toon_openen(false, window, cx);
+                }
                 for map in mappen {
                     cockpit.start(map, window, cx);
                 }
+                Cockpit::volg(window, cx);
                 #[cfg(feature = "schermafdruk")]
                 testhulp(window, cx);
                 cockpit
@@ -81,7 +94,8 @@ fn main() {
 
 /// COCKPIT_SHOT=pad bewaart elke seconde het venster als afbeelding.
 /// COCKPIT_TYPE=stap|stap typt de stappen een voor een in de gekozen sessie, vanaf acht seconden.
-/// In een stap staat \\r voor Enter en \\e voor Escape.
+/// In een stap staat \\r voor Enter en \\e voor Escape. Een stap met @ ervoor gaat naar
+/// `Cockpit::test_stap`. "muis x y" zet de muis op die plek.
 #[cfg(feature = "schermafdruk")]
 fn testhulp(window: &mut Window, cx: &mut Context<Cockpit>) {
     use std::time::Duration;
@@ -116,14 +130,40 @@ fn testhulp(window: &mut Window, cx: &mut Context<Cockpit>) {
                     cx.background_executor().timer(Duration::from_millis(30)).await;
                 }
             }
+            // "muis x y" zet de muis op die plek in het venster, in punten.
+            let step = match step.as_deref().and_then(|s| s.strip_prefix("muis ")) {
+                Some(plek) => {
+                    if let Some((x, y)) = plek.split_once(' ').and_then(|(x, y)| Some((x.parse().ok()?, y.parse().ok()?))) {
+                        let _ = cx.update(|window, cx| {
+                            let event = MouseMoveEvent { position: point(px(x), px(y)), pressed_button: None, modifiers: Modifiers::default() };
+                            window.dispatch_event(PlatformInput::MouseMove(event), cx);
+                        });
+                    }
+                    None
+                }
+                None => step,
+            };
             let shot = shot.clone();
             let gedaan = this.update_in(cx, |cockpit, window, cx| {
-                if let (Some(step), Some(terminal)) = (step, cockpit.gekozen_terminal()) {
-                    terminal.read(cx).write(step.into_bytes());
+                match step {
+                    Some(step) if step.starts_with('@') => cockpit.test_stap(&step[1..], window, cx),
+                    Some(step) => {
+                        if let Some(terminal) = cockpit.gekozen_terminal() {
+                            terminal.read(cx).write(step.into_bytes());
+                        }
+                    }
+                    None => {}
                 }
                 if let Some(path) = shot {
-                    if let Ok(image) = window.render_to_image() {
-                        let _ = image.save(path);
+                    match window.render_to_image() {
+                        Ok(image) => {
+                            // Eerst ernaast, zodat wie de afbeelding leest nooit een halve krijgt.
+                            let tijdelijk = format!("{path}.tmp.png");
+                            if image.save(&tijdelijk).is_ok() {
+                                let _ = std::fs::rename(&tijdelijk, &path);
+                            }
+                        }
+                        Err(fout) => eprintln!("schermafdruk: {fout}"),
                     }
                 }
             });

@@ -932,11 +932,13 @@ name = "cockpit"
 version = "0.1.0"
 dependencies = [
  "alacritty_terminal",
+ "chrono",
  "flume",
  "gpui-kit",
  "gpui-pre",
  "gpui-pre-platform",
  "image",
+ "serde_json",
 ]
 
 [[package]]

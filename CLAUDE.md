@@ -1,4 +1,4 @@
-# Cockpit
+# Jera
 
 Eigen Mac-app waarin ik mijn Claude Code-sessies draai en overzie: sessies met status, bestanden, poorten en git in één venster. Geen browser, geen viewers, geen IDE.
 
@@ -16,13 +16,15 @@ Besloten op 2026-11-14, zie `SPEC.md`. De feiten staan in `research/native.md`.
 ## Bestanden
 
 - `SPEC.md`: het doel, de gemeten werkwijze en wat besloten is.
-- `app/`: de app. Starten: `~/.cargo/bin/cargo run --manifest-path app/Cargo.toml -- [map ...]`; elke map krijgt een Claude-sessie. Kleuren en maten staan in `src/thema.rs`, overgenomen uit `stijl/design-system/tokens.json`. Het startcommando staat in `src/venster.rs`. Met `--features schermafdruk` bewaart het venster zichzelf als afbeelding (`COCKPIT_SHOT`, `COCKPIT_THEMA=donker|licht`, `COCKPIT_TYPE`), zie `src/main.rs`. JetBrains Mono staat in `fonts/` (OFL).
+- `app/`: de app. Starten: `~/.cargo/bin/cargo run --manifest-path app/Cargo.toml -- [map ...]`; elke map krijgt een Claude-sessie. Kleuren en maten staan in `src/thema.rs`, overgenomen uit `stijl/design-system/tokens.json`. Het startcommando staat in `src/venster.rs`. Met `--features schermafdruk` bewaart het venster zichzelf als afbeelding (`COCKPIT_SHOT`, `COCKPIT_THEMA=donker|licht`, `COCKPIT_TYPE`), zie `src/main.rs`. JetBrains Mono staat in `fonts/` (OFL). De iconen staan in `iconen/`: de eigen iconen, die van GitLab (bestanden) en Catppuccin (mappen) met hun licentie, en die van Zed (licentie niet per icoon vermeld); welk bestand welk icoon krijgt staat in `src/bestandsicoon.rs`. Wat het menu van een twee-vingerklik in Bestanden met bestanden doet (kopiëren, plakken, prullenmand, hernoemen, nieuw) staat in `src/bewerk.rs`. Het git-paneel leest de branches met git in `src/git.rs` (overgenomen uit `git-graaf/lees_repo.py`) en tekent ze in `src/gitpaneel.rs` (de logica van `git-graaf/paneel.html`). Het scherm Openen (open, clone repository via `gh`, de mappen die ik het laatst in Cockpit opende, en nieuw project met ⌘N) staat in `src/openen.rs`; de recente mappen staan in `~/Library/Application Support/Cockpit/recent.json`. Zonder map bij de start staat Openen open. De agents van een sessie (subagents en teamleden) leest `src/agents.rs`, volgens `research/agents.md`. De instellingen staan in de menubalk (`src/instellingen.rs`) en in `~/Library/Application Support/Jera/instellingen.json`.
 - `indeling/editor.html`: de editor waarin ik de indeling teken (https://claude.ai/artifact/8eNKyZX3XSg83T7d9ejG8J). De varianten staan in de opslag van dat artifact, collectie `varianten`; lees ze met ArtifactData.
 - `git-graaf/`: ontwerp van het git-paneel als werkend HTML-voorbeeld (https://claude.ai/artifact/BT7Ues1JGeMQKJj5Be5AWQ). `paneel.html` is het paneel zelf. `python3 git-graaf/lees_repo.py <pad naar repo>` leest de branches van een repo naar `data/`; `python3 git-graaf/bouw.py` maakt daarvan `graaf.html` (voor het artifact) en `test-graaf.html` (lokaal te openen).
 - `stijl/design-system/`: het design system (https://claude.ai/artifact/QKTtDToW7LYRivNM1vYG88). De kleuren en maten staan in `tokens.json`, de onderdelen in `components/`, met een voorbeeld per onderdeel. Lees `README.md` daarvan voordat je een scherm of onderdeel ontwerpt of bouwt. Dit is de bron: verander het hier en publiceer het artifact daarna opnieuw.
+- `stijl/git-paneel/`: de drie stijlen voor het git-paneel en de gekozen (https://claude.ai/artifact/LfeunM49x3iSRWZrLbtZLT). `bron.html` is de bron, `python3 stijl/git-paneel/bouw.py` maakt `opties.html` met de data uit `git-graaf/data/`.
 - `stijl/cockpit/`: het keuzebord voor het uiterlijk (`keuzebord.html`, https://claude.ai/artifact/6M7pWS1JLMd6jWtFqZkoj3) en `keuzes.md` met de stand per ronde.
 - `proef/terminal`: proef die Claude Code draait in een zelfgetekende terminal (GPUI Kit en `alacritty_terminal`). Starten: `~/.cargo/bin/cargo run --manifest-path proef/terminal/Cargo.toml`. De uitkomst staat in `research/native.md`.
 - `research/` bevat het onderzoek met bronnen:
   - `native.md` (2026-11-14): GPUI met GPUI Kit, Swift, Rune en andere native app-bases, en de terminalpakketten voor GPUI.
+  - `agents.md` (2026-11-14): subagents en teamleden van een sessie, waar ze staan en hoe hun stand af te lezen is. Gemeten.
   - `werkwijze.md` (2026-11-04): hoe ik nu werk, gemeten.
   - `zelf-bouwen.md` (2026-11-04): app-bases, onderdelen, risico's. De techniek per onderdeel gaat uit van Electron.
