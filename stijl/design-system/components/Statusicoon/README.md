@@ -10,5 +10,6 @@ Geef de status. Het icoon levert zelf zijn woord als tooltip en als label voor s
 - net klaar: vinkje in `ok`.
 - idle: streepje in `mute`.
 - live: vinkje in `ok`. deploy mislukt: kruis in `bad`.
+- Een agent: bezig is het boogje, klaar het vinkje in `ok`, gestopt het streepje in `mute`.
 - Maat `icoon`. Zet het woord er in de app niet naast; in dit voorbeeld staat het erbij om de iconen te benoemen.
 - Gebruik deze kleuren en vormen nergens voor iets anders dan status.

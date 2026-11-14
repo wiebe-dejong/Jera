@@ -167,11 +167,32 @@ body{margin:0;background:var(--c-bg);color:var(--c-fg);font-family:var(--c-ui);p
 .ck .ck-gitp text{font-family:var(--ui);font-size:11px;fill:var(--mute)}
 .ck .ck-gitp text.bn{font:600 12px var(--mono)}
 .ck .ck-gitp text.n{font-size:11.5px;font-weight:700}
+
+/* agents van een sessie */
+.site.licht .ck{--k-blue:var(--k-blue-l);--k-green:var(--k-green-l);--k-yellow:var(--k-yellow-l);--k-purple:var(--k-purple-l);--k-orange:var(--k-orange-l);--k-pink:var(--k-pink-l);--k-cyan:var(--k-cyan-l);--k-red:var(--k-red-l)}
+.ck .ck-ag{font-weight:400;padding-left:calc(var(--pad) + 23px)}
+.ck .ck-ag.vlak,.ck .ck-agkop.vlak{padding-left:var(--pad)}
+.ck .ck-sum{flex:none;display:flex;align-items:center;gap:2px;color:var(--mute);font-weight:400}
+.ck .ck-mini .ck-st,.ck .ck-mini svg{width:10px;height:10px}
+.ck .ck-pijl{flex:none;display:flex;margin-right:-4px}
+.ck .ck-kl{flex:none;display:block;width:3px;height:12px}
+.ck .ck-d{color:var(--mute);margin-left:1ch}
+.ck .ck-meta{flex:none;color:var(--mute);font-weight:400}
+.ck .ck-agkop{display:flex;align-items:center;gap:6px;height:20px;padding-left:calc(var(--pad) + 23px);font-size:11px;color:var(--mute)}
+.ck .ck-agkop span{margin-left:2px}
+.ck .ck-agkop2{flex:none;display:flex;align-items:center;gap:6px;height:var(--row);padding-left:var(--pad);color:var(--mute)}
+.ck .ck-agkop2 span{margin-left:2px}
+.ck .ck-agblok{margin-top:auto;border-top:1px solid var(--line);padding-bottom:6px}
+.ck .ck-agp{flex:none;width:280px;border-left:1px solid var(--line);overflow:hidden}
+.ck .ck-agregel{flex:none;display:flex;height:26px;border-bottom:1px solid var(--line);overflow:hidden;white-space:nowrap}
+.ck .ck-agchip{flex:none;display:flex;align-items:center;gap:8px;padding:0 14px;border-right:1px solid var(--line)}
+.ck .ck-agchip.is-idle{color:var(--mute)}
+.ck .ck-agchip .ck-t{flex:none}
 @media (prefers-reduced-motion: reduce){.site *{transition:none !important;animation:none !important}}
 </style>
 <style id="optcss"></style>
 <div class="app">
-  <header class="top"><h1>Stijl Cockpit</h1><span class="round">Ronde 2</span><span class="prog" id="prog" role="img"></span></header>
+  <header class="top"><h1>Stijl Cockpit</h1><span class="round">Ronde 4</span><span class="prog" id="prog" role="img"></span></header>
   <nav class="tabs" id="tabs" role="tablist" aria-label="Beslisgebieden"></nav>
   <main class="panel" id="panel" role="tabpanel"></main>
 </div>
@@ -192,9 +213,14 @@ const BASE = {
   '--tgreen-l':'#0A6B4B','--tacc-l':'#8A5A00','--tadd-l':'#DCEEDF','--tdel-l':'#F6DEDE',
   '--mono':'"JetBrains Mono",ui-monospace,Menlo,monospace','--ui':'var(--mono)','--ui2':'var(--mono)','--fs':'12.5px','--tfs':'12.5px',
   '--r':'0px','--inset':'0px','--row':'22px','--pad':'12px',
+  /* De kleuren die Claude Code aan een teamlid geeft. */
+  '--k-blue':'#6EA8FF','--k-green':'#5BC27E','--k-yellow':'#E8C547','--k-purple':'#C08BE0','--k-orange':'#F0975A','--k-pink':'#F28DC0','--k-cyan':'#5CC8D6','--k-red':'#FF7A7A',
+  '--k-blue-l':'#1F5FD0','--k-green-l':'#1F7A3D','--k-yellow-l':'#8A6A00','--k-purple-l':'#8E44AD','--k-orange-l':'#B4531A','--k-pink-l':'#B03A7A','--k-cyan-l':'#0E7A88','--k-red-l':'#C0392B',
 };
-/* Niet-CSS-keuzes van de basis. zicht: welk deel van het venster de uitsnede toont. */
-const BASECTX = { zicht:'sessies', h:420, status:'icoon', rij:'links', schakel:'caps', render:'icoon', git:'schuin' };
+/* Niet-CSS-keuzes van de basis. zicht: welk deel van het venster de uitsnede toont.
+   ag: de sessielijst met agents. De ag-sleutels zijn de neutrale standaard van ronde 3. */
+const BASECTX = { zicht:'sessies', h:420, status:'icoon', rij:'links', schakel:'caps', render:'icoon', git:'schuin',
+  agPlek:'onder', agOpen:'gekozen', agDicht:'telling', agRegel:'naam', agKleur:'geen', agStand:'A', agKlaar:'blijven', agSoort:'een' };
 
 const LBL = {bezig:'bezig',vraag:'wacht op antwoord',mag:'wacht op toestemming',klaar:'net klaar',idle:'idle'};
 const KLEUR = {
@@ -204,6 +230,28 @@ const KLEUR = {
 };
 const SESS = [
   ['webshop/',[['bezig','KPI-kaarten responsive maken',1],['vraag','Bug in csv-export'],['mag','Supabase-migratie leden']]],
+  ['frontend/',[['klaar','Testomgeving opzetten'],['idle','Tabel sorteren']]],
+];
+/* De agents van twee echte sessies in webshop. n = naam (alleen een teamlid), d = omschrijving,
+   m = model, k = kleur van het teamlid, s = stand. De standen zijn een voorbeeld. */
+const AUDIT = [
+  {d:'Review ronde 9 commits',m:'opus',s:'bezig'},
+  {n:'keuzes-a',d:'Keuzes groep A: betalen',m:'opus',k:'blue',s:'bezig'},
+  {n:'keuzes-b',d:'Keuzes groep B: mentoren',m:'opus',k:'yellow',s:'klaar'},
+  {d:"Performance drukste pagina's",m:'opus',s:'klaar'},
+  {n:'keuzes-c',d:'Keuzes groep C: traject',m:'opus',k:'purple',s:'bezig'},
+  {d:'Races bij statusovergangen',m:'opus',s:'stop'},
+  {n:'keuzes-d',d:'Keuzes groep D: rechten en woorden',m:'opus',k:'green',s:'klaar'},
+  {d:'Schermtekst tegen de taalregels',m:'opus',s:'klaar'},
+];
+const NETWERK = [
+  {n:'netwerk-data',d:'Netwerk: welke data hebben we',m:'sonnet',k:'yellow',s:'klaar'},
+  {n:'netwerk-gevoel',d:'Netwerk: tekst en beeld voor het gevoel',m:'opus',k:'purple',s:'bezig'},
+  {n:'netwerk-inspiratie',d:'Netwerk: lessen uit andere netwerken',m:'opus',k:'green',s:'klaar'},
+  {d:'Bouw Netwerk op staging-branch',m:'opus',s:'bezig'},
+];
+const SESS_AG = [
+  ['webshop/',[['bezig','webshop-audit opdracht',1,AUDIT],['bezig','Community netwerkfeature',0,NETWERK],['mag','Supabase-migratie leden']]],
   ['frontend/',[['klaar','Testomgeving opzetten'],['idle','Tabel sorteren']]],
 ];
 const svg = (inner,cls='') => `<svg class="ck-ic ${cls}" width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">${inner}</svg>`;
@@ -220,6 +268,53 @@ function ico(c,kind){
   else if(kind==='klaar') h = svg(VINK(k));
   else h = svg(`<path d="M5 8h6" style="stroke:${k}" stroke-width="2" stroke-linecap="round"/>`);
   return `<span class="ck-st" role="img" aria-label="${LBL[kind]}" title="${LBL[kind]}">${h}</span>`;
+}
+
+/* Agents */
+const AGL = {bezig:'bezig',klaar:'klaar',stop:'gestopt'};
+const STREEP = k => `<path d="M5 8h6" style="stroke:${k}" stroke-width="2" stroke-linecap="round"/>`;
+const PIJL = open => svg(`<path d="${open?'M4 6l4 4 4-4':'M6 4l4 4-4 4'}" style="stroke:var(--mute)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>`);
+function agIco(c,s){
+  if(s==='bezig') return ico(c,'bezig');
+  const st = c.agStand; let h = '';
+  if(st==='A') h = svg(s==='klaar' ? VINK('var(--ok)') : STREEP('var(--mute)'));
+  if(st==='B') h = svg(s==='klaar' ? STREEP('var(--mute)') : KRUIS('var(--bad)'));
+  return `<span class="ck-st" role="img" aria-label="${AGL[s]}" title="${AGL[s]}">${h}</span>`;
+}
+function agTekst(c,a){
+  const kl = a.k && c.agKleur==='naam' ? ` style="color:var(--k-${a.k})"` : '';
+  if(c.agRegel==='omschr') return `<span class="ck-t"${kl}>${a.d}</span>`;
+  if(c.agRegel==='beide' && a.n) return `<span class="ck-t"><span${kl}>${a.n}</span><span class="ck-d">${a.d}</span></span>`;
+  const t = `<span class="ck-t"${kl}>${a.n||a.d}</span>`;
+  return c.agRegel==='model' ? t+`<span class="ck-meta">${a.m}</span>` : t;
+}
+const agStreep = (c,a) => c.agKleur==='streep' ? `<i class="ck-kl" style="background:${a.k?`var(--k-${a.k})`:'transparent'}"></i>` : '';
+const agRij = (c,a,vlak) => `<div class="ck-row ck-ag${vlak?' vlak':''}${a.s!=='bezig'?' is-idle':''}">${agIco(c,a.s)}${agStreep(c,a)}${agTekst(c,a)}</div>`;
+function agOrde(c,ags){
+  let l = [...ags];
+  if(c.agKlaar==='zakken') l = [...l.filter(a=>a.s==='bezig'),...l.filter(a=>a.s!=='bezig')];
+  if(c.agKlaar==='weg') l = l.filter(a=>a.s==='bezig');
+  return l;
+}
+function agLijst(c,ags,vlak){
+  const l = agOrde(c,ags), rij = a => agRij(c,a,vlak), team = l.filter(a=>a.n), sub = l.filter(a=>!a.n);
+  /* Elk groepje klapt apart uit. In het voorbeeld staat team open en subagents dicht. */
+  const kop = (t,n,open) => `<div class="ck-agkop${vlak?' vlak':''}">${PIJL(open)}${t}<span>${n}</span></div>`;
+  if(c.agSoort==='groep') return (team.length?kop('team',team.length,true)+team.map(rij).join(''):'')+(sub.length?kop('subagents',sub.length,false):'');
+  if(c.agSoort==='telling') return team.map(rij).join('')
+    + (sub.length?`<div class="ck-row ck-ag${vlak?' vlak':''} is-idle"><span class="ck-st"></span><span class="ck-t">subagents</span><span class="ck-meta">${sub.length}</span></div>`:'');
+  return l.map(rij).join('');
+}
+function agSom(c,ags){
+  const b = ags.filter(a=>a.s==='bezig').length;
+  if(c.agDicht==='aantal') return `<span class="ck-sum">${ags.length}</span>`;
+  if(c.agDicht==='telling') return `<span class="ck-sum" title="${b} van ${ags.length} agents bezig">${b}/${ags.length}</span>`;
+  if(c.agDicht==='iconen') return `<span class="ck-sum ck-mini">${ags.map(a=>agIco(c,a.s)).join('')}</span>`;
+  return '';
+}
+const agKop = (c,ags,pijl) => `<div class="ck-agkop2">${pijl?PIJL(true):''}agents<span>${ags.length}</span></div>`;
+function agRegel(c,ags){
+  return `<div class="ck-agregel">${agOrde(c,ags).map(a=>`<span class="ck-agchip${a.s!=='bezig'?' is-idle':''}">${agIco(c,a.s)}${agStreep(c,a)}${agTekst(c,a)}</span>`).join('')}</div>`;
 }
 
 function render(c){
@@ -265,14 +360,25 @@ const F = {
       + `<button type="button" class="ck-tab" aria-current="page">webshop <span>5</span></button><button type="button" class="ck-tab">cockpit <span>1</span></button><button type="button" class="ck-tab">notities <span>2</span></button><button type="button" class="ck-tab" aria-label="Map toevoegen">+</button>`
       + `<button type="button" class="ck-comp">poorten <span>4</span>agent-browser <span>1</span></button></div>`;
     const sw = `<div class="ck-sw ck-sw-${c.schakel}">${['Sessies','Bestanden','Eerder'].map((n,i) => `<button type="button" aria-pressed="${i===0}">${n}</button>`).join('')}</div>`;
-    const side = `<div class="ck-side">${sw}${SESS.map(([map,rows]) => `<div class="ck-grp"><b>${map}</b><button type="button" aria-label="Sessie starten in ${map}">+</button></div>`
-      + rows.map(([kind,t,sel]) => `<button type="button" class="ck-row ck-rij-${c.rij}${sel?' is-sel':''}${kind==='idle'?' is-idle':''}">${ico(c,kind)}<span class="ck-t">${t}</span></button>`).join('')).join('')}</div>`;
+    const onder = c.ag && c.agPlek==='onder';
+    const rij = ([kind,t,sel,ags]) => {
+      const open = ags && onder && (c.agOpen==='altijd' || sel);
+      const extra = ags ? (open?'':agSom(c,ags)) + (onder && c.agOpen==='pijl' ? `<span class="ck-pijl">${PIJL(open)}</span>` : '') : '';
+      return `<button type="button" class="ck-row ck-rij-${c.rij}${sel?' is-sel':''}${kind==='idle'?' is-idle':''}">${ico(c,kind)}<span class="ck-t">${t}</span>${extra}</button>`
+        + (open ? agLijst(c,ags,false) : '');
+    };
+    const blok = c.ag && c.agPlek==='blok' ? `<div class="ck-agblok">${agKop(c,AUDIT,true)}${agLijst(c,AUDIT,true)}</div>` : '';
+    const side = `<div class="ck-side">${sw}${(c.ag?SESS_AG:SESS).map(([map,rows]) => `<div class="ck-grp"><b>${map}</b><button type="button" aria-label="Sessie starten in ${map}">+</button></div>`
+      + rows.map(rij).join('')).join('')}${blok}</div>`;
     const term = `<div class="ck-term"><div class="m">&gt; maak de kpi-kaarten responsive op telefoon</div><div class="sp">⏺ Ik pas de grid aan in KpiCards.tsx en bouw daarna.</div>`
       + `<div class="sp"><span class="g">⏺</span> <b>Update</b>(frontend/components/KpiCards.tsx)</div><div class="i2 m">⎿ Updated with 1 addition and 1 removal</div>`
       + `<div class="i5 del">41 - &lt;div className="grid grid-cols-4 gap-4"&gt;</div><div class="i5 add">41 + &lt;div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-4"&gt;</div>`
       + `<div class="sp"><span class="g">⏺</span> <b>Bash</b>(npm run build)</div><div class="i2 m">⎿ Running…</div><div class="sp acc">✻ Bouwen… <span class="m">(38s · esc to interrupt)</span></div>`
       + `<div class="ck-in">&gt;<i></i></div><div class="i2 m">? for shortcuts</div></div>`;
-    const main = c.zicht==='git' ? `${render(c)}<div class="ck-split">${term}${git(c)}</div>` : render(c)+term;
+    const main = c.zicht==='git' ? `${render(c)}<div class="ck-split">${term}${git(c)}</div>`
+      : c.ag && c.agPlek==='paneel' ? `${render(c)}<div class="ck-split">${term}<div class="ck-agp">${agKop(c,AUDIT)}${agLijst(c,AUDIT,true)}</div></div>`
+      : c.ag && c.agPlek==='regel' ? render(c)+agRegel(c,AUDIT)+term
+      : render(c)+term;
     return `<div class="ck" style="height:${c.h}px">${top}<div class="ck-body">${c.zicht==='sessies'?side:''}<div class="ck-main">${main}</div></div></div>`;
   },
   vensterDicht: c => F.venster({...c, zicht:'terminal', h:300}),
@@ -338,14 +444,61 @@ const TABS = [
  {k:'B',name:'Getrapte namen',ctx:{git:'trap'},pages:[{url:'open',frags:['venster']},{url:'dicht',frags:['vensterDicht']}],spec:[['Namen','recht, elke naam op een eigen regel'],['Kop','88 px hoog'],['Paneel bij deze repo','346 px breed'],['Inklappen','knop git in de Render-regel; dicht krijgt de terminal de volle breedte']]},
  {k:'C',name:'Staande namen',ctx:{git:'staand'},spec:[['Namen','90° gedraaid boven de lijn'],['Kop','170 px hoog'],['Paneel bij deze repo','262 px breed']]},
 ]},
+/* Ronde 3: de agents van een sessie. Feiten in research/agents.md. */
+{id:'agplek',name:'Agents, plek',ctx:{ag:true,h:660},frags:['venster'],opts:[
+ {k:'A',name:'Onder de sessie',ctx:{agPlek:'onder'},spec:[['Plek','onder de sessieregel, 23 px ingesprongen, onder de titel'],['Rij','26 px, zoals de sessieregel'],['Andere sessies','zie Uitklappen']]},
+ {k:'B',name:'Blok onderaan de kolom',ctx:{agPlek:'blok'},spec:[['Plek','onderaan de linkerkolom, lijn van 1 px erboven'],['Kop','pijltje, agents en het aantal, zoals het blok oud'],['Toont','de agents van de gekozen sessie']]},
+ {k:'C',name:'Paneel rechts',ctx:{agPlek:'paneel'},spec:[['Plek','rechts van de terminal, 280 px breed'],['Kop','agents en het aantal'],['Toont','de agents van de gekozen sessie'],['Git-paneel','zelfde plek; hoe ze die delen is een open vraag in SPEC.md']]},
+ {k:'D',name:'Regel boven de terminal',ctx:{agPlek:'regel'},spec:[['Plek','onder de Render-regel, 26 px hoog'],['Per agent','icoon en naam, naast elkaar, lijn van 1 px ertussen'],['Toont','de agents van de gekozen sessie'],['Te veel','afgekapt aan de rechterrand']]},
+],parts:[{id:'open',name:'Uitklappen, bij A',frags:['venster'],opts:[
+ {k:'A',name:'Altijd open',ctx:{agOpen:'altijd'},spec:[['Open','elke sessie met agents'],['Klik','geen']]},
+ {k:'B',name:'Pijltje',ctx:{agOpen:'pijl'},spec:[['Open','met het pijltje rechts in de sessieregel'],['Pijltje','dat van een map, in gedempt'],['Begin','de gekozen sessie open']]},
+ {k:'C',name:'Alleen de gekozen sessie',ctx:{agOpen:'gekozen'},spec:[['Open','de gekozen sessie'],['Klik','geen; kiezen opent']]},
+]}]},
+{id:'agdicht',name:'Agents, dicht',ctx:{ag:true,h:560},frags:['venster'],opts:[
+ {k:'A',name:'Niets',ctx:{agDicht:'niets'},spec:[['Dichte sessie','geen teken van agents']]},
+ {k:'B',name:'Aantal',ctx:{agDicht:'aantal'},spec:[['Dichte sessie','het aantal agents rechts in de regel, gedempt'],['Voorbeeld','4']]},
+ {k:'C',name:'Bezig en totaal',ctx:{agDicht:'telling'},spec:[['Dichte sessie','bezig en totaal rechts in de regel, gedempt'],['Voorbeeld','2/4']]},
+ {k:'D',name:'Rijtje iconen',ctx:{agDicht:'iconen'},spec:[['Dichte sessie','een icoon van 10 px per agent, rechts in de regel'],['Veel agents','17 iconen zijn 200 px breed']]},
+]},
+{id:'agregel',name:'Agentregel',ctx:{ag:true,h:560},frags:['venster'],opts:[
+ {k:'A',name:'Naam',ctx:{agRegel:'naam'},spec:[['Teamlid','zijn naam'],['Subagent','zijn omschrijving; een subagent heeft geen naam']]},
+ {k:'B',name:'Omschrijving',ctx:{agRegel:'omschr'},spec:[['Teamlid','zijn omschrijving'],['Subagent','zijn omschrijving']]},
+ {k:'C',name:'Naam en omschrijving',ctx:{agRegel:'beide'},spec:[['Teamlid','naam, daarachter de omschrijving gedempt'],['Subagent','zijn omschrijving'],['Te lang','afgekapt met een beletselteken']]},
+ {k:'D',name:'Naam en model',ctx:{agRegel:'model'},spec:[['Teamlid','naam, rechts het model gedempt'],['Subagent','omschrijving, rechts het model gedempt']]},
+]},
+{id:'agkleur',name:'Kleur teamlid',ctx:{ag:true,h:560},frags:['venster'],opts:[
+ {k:'A',name:'Geen kleur',ctx:{agKleur:'geen'},spec:[['Teamlid','geen kleur'],['Regel in README','kleur is alleen status en git']]},
+ {k:'B',name:'Streepje in zijn kleur',ctx:{agKleur:'streep'},spec:[['Teamlid','streepje van 3 × 12 px na het icoon'],['Subagent','lege plek van 3 px'],['Kleuren','die van Claude Code: blue, green, yellow, purple, orange, pink, cyan, red'],['Let op','groen, geel en rood lijken op de status']],
+  swatches:[['Paars donker','--k-purple'],['Geel donker','--k-yellow'],['Paars licht','--k-purple-l'],['Geel licht','--k-yellow-l']]},
+ {k:'C',name:'Naam in zijn kleur',ctx:{agKleur:'naam'},spec:[['Teamlid','de naam in zijn kleur'],['Subagent','tekstkleur'],['Let op','groen, geel en rood lijken op de status']],
+  pairs:[['Geel op donker','--k-yellow','--bg'],['Paars op donker','--k-purple','--bg'],['Geel op licht','--k-yellow-l','--bg-l'],['Paars op licht','--k-purple-l','--bg-l']]},
+]},
+{id:'agstand',name:'Stand agent',ctx:{ag:true,h:560},frags:['venster'],opts:[
+ {k:'A',name:'Vinkje en streepje',ctx:{agStand:'A'},spec:[['Bezig','groen draaiend boogje'],['Klaar','groen vinkje, naam gedempt'],['Gestopt','grijs streepje, naam gedempt']]},
+ {k:'B',name:'Streepje en kruis',ctx:{agStand:'B'},spec:[['Bezig','groen draaiend boogje'],['Klaar','grijs streepje, naam gedempt'],['Gestopt','rood kruis, naam gedempt']]},
+ {k:'C',name:'Alleen bezig',ctx:{agStand:'C'},spec:[['Bezig','groen draaiend boogje'],['Klaar','geen icoon, naam gedempt'],['Gestopt','geen icoon, naam gedempt']]},
+]},
+{id:'agklaar',name:'Klaar en gestopt',ctx:{ag:true,h:560},frags:['venster'],opts:[
+ {k:'A',name:'Blijven staan',ctx:{agKlaar:'blijven'},spec:[['Volgorde','zoals ze gestart zijn'],['Klaar en gestopt','blijven op hun plek']]},
+ {k:'B',name:'Zakken naar onder',ctx:{agKlaar:'zakken'},spec:[['Volgorde','eerst bezig, dan klaar en gestopt'],['Binnen elk deel','zoals ze gestart zijn']]},
+ {k:'C',name:'Verdwijnen',ctx:{agKlaar:'weg'},spec:[['Lijst','alleen bezig'],['Klaar en gestopt','alleen nog in het totaal bij Dicht']]},
+]},
+{id:'agsoort',name:'Subagent en teamlid',ctx:{ag:true,h:560},frags:['venster'],opts:[
+ {k:'A',name:'Eén lijst',ctx:{agSoort:'een'},spec:[['Volgorde','zoals ze gestart zijn'],['Verschil','een teamlid heeft een naam, een subagent een omschrijving']]},
+ {k:'B',name:'Twee groepjes',ctx:{agSoort:'groep'},spec:[['Kopjes','pijltje, team of subagents en het aantal, 11 px, gedempt'],['Uitklappen','elk groepje apart, met het pijltje'],['Volgorde','team eerst']]},
+ {k:'C',name:'Teamleden, subagents als aantal',ctx:{agSoort:'telling'},spec:[['Teamleden','elk een regel'],['Subagents','één regel: subagents en het aantal']]},
+]},
 ];
 
 /* ================= STAND (per ronde bijwerken) ================= */
-const CHOSEN  = {grond:'A',tab:'A',letter:'A',mono:'A',accent:'A',vorm:'A',dichtheid:'B',statussen:'B',sessieregel:'C',schakelaar:'B',render:'C',git:'B'};
+const CHOSEN  = {grond:'A',tab:'A',letter:'A',mono:'A',accent:'A',vorm:'A',dichtheid:'B',statussen:'B',sessieregel:'C',schakelaar:'B',render:'C',git:'B',
+  agplek:'A',agdicht:'C',agregel:'A',agkleur:'C',agstand:'A',agklaar:'A',agsoort:'B'};
 const PARTIAL = {};
 const LATER   = {};
-const PCHOSEN = {};
+const PCHOSEN = {'agplek.open':'B'};
 const NOTES   = {
+  agsoort:[['Jouw keuze','B, elk groepje apart uitklapbaar'],['Was','kopjes zonder pijltje']],
   statussen:[['Jouw keuze','iconen in groen, geel en rood, zonder woorden'],['Het woord','verschijnt als je het icoon aanwijst']],
   git:[['Vast','de graaf en de kleuren van de lijnen'],['Was','namen rechts, paneel 400 px breed']],
 };

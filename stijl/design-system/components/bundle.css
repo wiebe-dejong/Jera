@@ -64,7 +64,7 @@ button:focus-visible{outline:var(--streep) solid var(--ink);outline-offset:-2px}
 .ck-gitp text{font:400 11px var(--font-mono);fill:var(--mute)}
 .ck-gitp text.bn{font-size:12px;font-weight:600}
 .ck-gitp text.n{font-size:11.5px;font-weight:700}
-.f-box{fill:var(--box)}.f-bg{fill:var(--bg)}.s-bg{stroke:var(--bg)}.s-line{stroke:var(--line)}.s-line2{stroke:var(--line-strong)}
+.f-bg{fill:var(--bg)}.s-bg{stroke:var(--bg)}.s-line{stroke:var(--line)}.s-line2{stroke:var(--line-strong)}
 .s-l1{stroke:var(--lane-1)}.s-l2{stroke:var(--lane-2)}.s-l3{stroke:var(--lane-3)}.s-l4{stroke:var(--lane-4)}
 .ck-gitp .f-l1,.f-l1{fill:var(--lane-1)}.ck-gitp .f-l2,.f-l2{fill:var(--lane-2)}.ck-gitp .f-l3,.f-l3{fill:var(--lane-3)}.ck-gitp .f-l4,.f-l4{fill:var(--lane-4)}
 
@@ -73,6 +73,15 @@ button:focus-visible{outline:var(--streep) solid var(--ink);outline-offset:-2px}
 .ck-boom .d1{padding-left:calc(var(--pad) + var(--inspring))}
 .ck-boom .d2{padding-left:calc(var(--pad) + 2 * var(--inspring))}
 .ck-boom .ck-plus{flex:none;width:32px;margin-right:calc(-1 * var(--pad));height:100%;text-align:center;color:var(--mute)}
+
+/* agents onder een sessie */
+.ck-som{flex:none;color:var(--mute);font-weight:400;font-variant-numeric:tabular-nums}
+.ck-pijl{flex:none;display:flex}
+.ck-ag{font-weight:400;padding-left:calc(var(--pad) + var(--icoon) + var(--gap))}
+.ck-agkop{display:flex;align-items:center;gap:6px;width:100%;height:20px;padding:0 var(--pad) 0 calc(var(--pad) + var(--icoon) + var(--gap));font-size:11px;color:var(--mute)}
+.ck-agkop b{flex:1;font-weight:400}
+.t-blue{color:var(--team-blue)}.t-green{color:var(--team-green)}.t-yellow{color:var(--team-yellow)}.t-purple{color:var(--team-purple)}
+.t-orange{color:var(--team-orange)}.t-pink{color:var(--team-pink)}.t-cyan{color:var(--team-cyan)}.t-red{color:var(--team-red)}
 
 /* paneel met poorten en agent-browser */
 .ck-paneel{width:360px;max-width:100%;border-left:var(--lijn-dikte) solid var(--line)}

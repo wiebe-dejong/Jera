@@ -15,10 +15,5 @@
  "docs": {
   "sections": []
  },
- "lastChange": {
-  "by": "Claude",
-  "at": "2026-11-14T20:30:00Z",
-  "via": "Claude Code",
-  "note": "De zes voorstellen zijn gekozen"
- }
+ "lastChange":{"by":"Claude","at":"2026-11-14T23:36:03Z","via":"Claude Code","note":"Agents: pijltje rechts, aantal helemaal rechts; subagents alleen als aantal"}
 }
