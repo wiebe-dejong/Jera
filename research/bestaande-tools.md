@@ -23,9 +23,9 @@ Legenda: ✓ = goed, ~ = deels, ✗ = niet.
 
 | Product | Terminal | Docs | Git | Servers | Browser | Aanpasbaar | Licentie, stack | Prijs |
 |---|---|---|---|---|---|---|---|---|
-| **Orca** [1–4] | ✓ CC TUI | ~ md, pdf, afbeeldingen, html | ✓ diff, commit, PR | ~ servers zijn terminal-splits | ✓ agents kunnen hem besturen | middel | MIT · Electron, React, Tailwind | gratis |
-| **cmux** [5–9] | ✓ libghostty | ~ md | ~ diff, branch, PR | ~ layout-commando's, poorten in zijbalk | ✓ scriptbaar | **hoog**: `cmux.json`, socket-API | GPL-3.0 · Swift | gratis (+Pro) |
-| **Wave Terminal** [10–15] | ✓ CC TUI | **✓** md, pdf, csv, afbeeldingen, Monaco | ✗ | ~ `cmd`-widgets | ✓ web-widget | **hoog**: `widgets.json`, tegels | Apache-2.0 · Electron, Go, React | gratis |
+| **Orca** [1–4] | ✓ CC TUI | ~ md, pdf, afbeeldingen, html | ✓ diff, commit, PR | ~ servers draaien als terminal | ✓ agents kunnen hem besturen | middel | MIT · Electron, React, Tailwind | gratis |
+| **cmux** [5–9] | ✓ libghostty | ~ md | ~ diff, branch, PR | ~ toont poorten | ✓ scriptbaar | **hoog**: `cmux.json`, socket-API | GPL-3.0 · Swift | gratis (+Pro) |
+| **Wave Terminal** [10–15] | ✓ CC TUI | **✓** md, pdf, csv, afbeeldingen, Monaco | ✗ | ~ `cmd`-widgets | ✓ web-widget | **hoog**: `widgets.json` | Apache-2.0 · Electron, Go, React | gratis |
 | **Paradev** [16–18] | ✓ | ~ md, afbeeldingen | ✓ | ✓~ poortdetectie | ✓ DevTools, CDP | middel | ELv2 · Electron, React | gratis, Pro betaald |
 | **Claude Desktop (Code-tab)** [19–20] | ✓ chat-UI | ~ pdf, html | ✓ diff-commentaar, PR | ✓ `.claude/launch.json` | ✓ | laag | gesloten | Claude-abonnement |
 | **Conductor** [21] | ✓ chat-UI | ? | ✓ | ~ `conductor.json` | ~ | laag | gesloten | gratis |
@@ -49,11 +49,6 @@ Legenda: ✓ = goed, ~ = deels, ✗ = niet.
 
 ### Orca
 
-- **Indeling:**
-  - links een zijbalk met repo's, daaronder worktrees, daaronder sessies met een indicator voor bezig of idle;
-  - in het midden tabs voor terminal, bestanden en browser, die je kunt splitsen;
-  - rechts een bestandsverkenner;
-  - onderaan een statusbalk met het Claude-verbruik.
 - **Sterk in:** de browser die agents kunnen besturen, en viewers voor pdf en md.
 - **Mist:**
   - csv en xlsx;
@@ -63,11 +58,7 @@ Legenda: ✓ = goed, ~ = deels, ✗ = niet.
 
 ### cmux
 
-- **Indeling:**
-  - een native Mac-venster;
-  - een verticale zijbalk met workspaces, die per workspace branch, PR, map, poorten en de laatste melding toont;
-  - elke workspace is een boom van splits, met tabs voor terminal en browser.
-- **Sterk in:** aanpasbaarheid. Per project kan een `.cmux/cmux.json` een complete layout opstarten, bijvoorbeeld backend en frontend naast elkaar met een browser eronder.
+- **Sterk in:** aanpasbaarheid. Per project start een `.cmux/cmux.json` een complete werkruimte op.
 - **Mist:**
   - pdf, csv en afbeeldingen;
   - een commit-UI;
@@ -76,10 +67,6 @@ Legenda: ✓ = goed, ~ = deels, ✗ = niet.
 
 ### Wave Terminal
 
-- **Indeling:**
-  - tabs bovenaan;
-  - elke tab is een boom van tegels die je naar 7 plekken kunt slepen;
-  - rechts de widgets.
 - **Sterk in:** documenten (de beste viewer van deze groep) en widgets die je via config instelt.
 - **Mist:**
   - een git-UI;
@@ -87,21 +74,17 @@ Legenda: ✓ = goed, ~ = deels, ✗ = niet.
   - een gedocumenteerde manier waarop Claude Code de browser kan besturen.
 - **Onderhoud:** geen stabiele release sinds april 2026.
 
-## Basis om op verder te bouwen
+## Licentie en forkbaarheid
 
-1. **Orca:** MIT en dezelfde stack als ik, maar er komt bijna elke dag een release uit, dus een fork blijft achterlopen.
-2. **Wave:** Apache-2.0. Het blok- en widgetsysteem is de nette plek om uit te breiden. Wel half Go.
-3. **Jean:** Apache-2.0, Tauri. Licht, maar klein en met een chat-UI.
-4. **Nimbalyst:** MIT, met een extensie-API.
-5. **cmux:** GPL. Beter via de config en socket-API uitbreiden dan forken.
-
-Ongeschikt om op te bouwen:
-- Paradev (ELv2).
-- Warp (AGPL).
-- GitButler.
-- De gesloten apps.
-
-**Conclusie:** niet forken. Gebruik Orca en Wave als voorbeeldcode.
+- **Orca:** MIT. Electron, React en Tailwind. Er komt bijna elke dag een release uit, dus een fork blijft achterlopen.
+- **Wave:** Apache-2.0. Uitbreiden gaat via het blok- en widgetsysteem. Half Go.
+- **Jean:** Apache-2.0, Tauri. Licht, klein, met een chat-UI.
+- **Nimbalyst:** MIT, met een extensie-API.
+- **cmux:** GPL. Uitbreiden kan via de config en de socket-API.
+- **Paradev:** ELv2.
+- **Warp:** AGPL.
+- **GitButler:** licentie met non-compete.
+- De gesloten apps hebben geen open bron.
 
 ## Wat niemand doet
 

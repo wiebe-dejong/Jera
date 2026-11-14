@@ -1,14 +1,14 @@
 # Zelf bouwen (2026-11-04)
 
-## Welke app-basis
+## App-bases
 
-| Optie | Oordeel |
+| Optie | Feiten |
 |---|---|
-| **Electron** (stabiel: 45.x) | **Advies.** WebContentsView is gewoon Chromium, dus je hebt echte DevTools en CDP, en agent-browser en Playwright kunnen de browser besturen. node-pty en xterm.js zijn bewezen (VS Code, Wave en Superset gebruiken ze). Alles is TypeScript en React, met hot reload. Kost ~150–400 MB, plus ~50–150 MB per browsertab. |
-| Tauri v2 | Nee. Meerdere webviews in één venster is nog experimenteel. Er zijn open macOS-bugs met child-webviews. WKWebView heeft geen CDP. DevTools in release-builds gebruiken een private Apple-API. En je reviewt Rust. |
-| Native Swift | Het zuinigst met geheugen en de beste documentweergave (PDFKit, Quick Look). Maar WKWebView heeft geen CDP, en Swift lees je zelf niet. libghostty heeft nog geen stabiele API. |
-| Lokale webapp | Nee. Sites blokkeren iframes, je kunt in een iframe geen DevTools openen, en de browser vangt ⌘W, ⌘T en ⌘N zelf af. |
-| Wave forken | Apache-2.0, Electron, Go en TypeScript. Een grote codebase die je niet zelf schreef, waarvan de helft Go is, en je moet upstream bijhouden. Gebruik het als voorbeeldcode. |
+| Electron (stabiel: 45.x) | WebContentsView is gewoon Chromium, dus je hebt echte DevTools en CDP, en agent-browser en Playwright kunnen de browser besturen. node-pty en xterm.js zijn bewezen (VS Code, Wave en Superset gebruiken ze). Alles is TypeScript en React, met hot reload. Kost ~150–400 MB, plus ~50–150 MB per browsertab. |
+| Tauri v2 | Meerdere webviews in één venster is nog experimenteel. Er zijn open macOS-bugs met child-webviews. WKWebView heeft geen CDP. DevTools in release-builds gebruiken een private Apple-API. De backend is Rust. |
+| Native Swift | Het zuinigst met geheugen. Documentweergave via PDFKit en Quick Look. WKWebView heeft geen CDP. libghostty: de emulatiekern heeft sinds 6 nov 2026 een stabiele API, zie `native.md`. |
+| Lokale webapp | Sites blokkeren iframes, je kunt in een iframe geen DevTools openen, en de browser vangt ⌘W, ⌘T en ⌘N zelf af. |
+| Wave forken | Apache-2.0, Electron, Go en TypeScript. Een grote codebase, waarvan de helft Go is. Een fork moet upstream bijhouden. |
 
 ## Onderdelen
 
@@ -18,19 +18,24 @@
   - Versie 6 ondersteunt synchronized output (DEC 2026), wat Claude Code nodig heeft om niet te flikkeren.
   - Flikkert het toch, zet dan `CLAUDE_CODE_NO_FLICKER=1` of `CLAUDE_CODE_FORCE_SYNC_OUTPUT=1`.
 - **Shift+Enter** moet `\n` sturen.
-- **WebGL-limiet:** Chromium staat ongeveer 16 WebGL-contexten tegelijk toe. Haal de WebGL-addon weg bij verborgen tabs en vang het verlies van een context op.
-- **Alternatief:** ghostty-web (MIT, van Coder), met dezelfde API.
+- **WebGL-limiet:** Chromium staat ongeveer 16 WebGL-contexten tegelijk toe. Haal de WebGL-addon weg bij terminals die niet zichtbaar zijn en vang het verlies van een context op.
+- **ghostty-web** (MIT, van Coder) heeft dezelfde API als xterm.js.
 - **Zien of Claude op je wacht:**
   - HTTP-hooks;
   - `claude agents --json --all`;
   - OSC 7501 (Claude Code 2.1.295 en nieuwer);
   - `~/.claude/sessions/*.json`.
+- **Gemeten op deze Mac op 2026-11-14** (Claude Code 2.1.325):
+  - `~/.claude/sessions/<pid>.json` bevat per sessie onder meer `cwd`, `name`, `status` en `statusUpdatedAt`. Geziene waarden van `status`: `busy`, `idle`, `shell`;
+  - `claude agents --json --all` geeft per sessie `status` (`busy`, `idle`) of `state` (`blocked`);
+  - het verschil tussen een vraag en een verzoek om toestemming staat in geen van beide;
+  - een oude sessie staat in `~/.claude/projects/<pad>/<sessie-id>.jsonl`. Dat bestand bevat regels van het type `ai-title` met de titel van de sessie. `claude --resume <sessie-id>` start de sessie opnieuw.
 - **Gewone OSC-codes:** 9 en 777 (meldingen), 9;4 (voortgang), 7 (werkmap), 133 (prompt).
-- **Geen tmux voor Claude-tabs:** tmux haalt de synchronized output weg.
+- **tmux** haalt de synchronized output weg.
 
 ### Documenten
 
-| Type | Aanpak |
+| Type | Optie |
 |---|---|
 | PDF | De ingebouwde viewer van Chromium, geen code nodig |
 | Markdown | react-markdown met remark-gfm en shiki |
@@ -40,7 +45,7 @@
 ### Git
 
 - **De git-CLI aanroepen** (`--porcelain=v2 -z`, of via simple-git). Worktrees, hooks en inloggegevens werken dan net als bij Claude.
-- **Niet gebruiken:** isomorphic-git en nodegit.
+- **isomorphic-git** heeft geen SSH. **nodegit** is stilgevallen sinds juli 2020.
 - **Diffs:** @codemirror/merge.
 - **Hunks stagen:** een patch maken en `git apply --cached` draaien.
 
@@ -78,7 +83,7 @@
 
 1. **Hooks** (gedocumenteerd, laag risico):
    - `type: "http"`-hooks voor `Notification`, `Stop` en `SessionStart`;
-   - geef elke PTY een `COCKPIT_PANE_ID` mee en stuur die als header via `allowedEnvVars`, zodat de app weet welke tab aandacht nodig heeft.
+   - geef elke PTY een `COCKPIT_TERMINAL_ID` mee en stuur die als header via `allowedEnvVars`, zodat de app weet welke terminal aandacht nodig heeft.
 2. **Eigen MCP-server** (gedocumenteerd, laag risico):
    - tools als `open_file`, `open_url`, `screenshot_tab`, `console_logs`, `restart_server` en `tail_logs`;
    - aanmelden met `claude mcp add --transport http`.
@@ -87,28 +92,18 @@
    - geeft `openDiff`, `openFile`, `getDiagnostics` en `selection_changed`;
    - de referentie is claudecode.nvim (`PROTOCOL.md`);
    - pas in v3 en het kan breken bij updates.
-4. **Agent SDK: niet doen.** Met een eigen product mag je geen claude.ai-login aanbieden, dus je betaalt API-tarieven. Je bouwt dan ook zelf een chat-UI. De echte CLI in een PTY houdt je abonnement en alle functies.
+4. **Agent SDK:** met een eigen product mag je geen claude.ai-login aanbieden, dus je betaalt API-tarieven. Je bouwt dan ook zelf een chat-UI. De echte CLI in een PTY houdt je abonnement en alle functies.
 
-## IDE nodig?
+## IDE
 
 - **Claude doet al:** bouwen, draaien, tests, lint, type-checks en refactors.
-- **Het knelpunt wordt reviewen.** Bouw:
-  - een diff-weergave;
-  - een bestandsboom;
-  - snel een bestand openen;
-  - zoeken met ripgrep;
-  - een lichte CodeMirror 6-editor.
-- **Aan PyCharm laten:** de debugger, LSP en refactors met de hand. Voeg de actie "open in PyCharm op regel" toe.
-- **Geen LSP in v1.**
+- **PyCharm heeft:** de debugger, LSP en refactors met de hand.
 
 ## Aanpasbaarheid
 
 - **Eén configbestand** (TOML of JSON, gecontroleerd met zod) dat direct herlaadt. Bij een fout in de config een toast, geen crash.
 - **Commando's zijn de API.** Elke actie staat in de command palette, en sneltoetsen koppelen een toets aan een actie-id.
-- **Layouts als data,** per project.
 - **Scriptcommando's** zoals in Raycast: een script met een header in een map leggen en het staat in de palette.
-- **Vermijden:** een extension host zoals in VS Code, en volledige Lua zoals in WezTerm.
-- **Je voordeel:** jij hebt de code. "Claude, voeg een paneel toe" is je plugin-API. Houd één map per paneel, een register en een CLAUDE.md.
 
 ## Wat moeilijk is (groot risico eerst)
 
@@ -120,47 +115,6 @@
 6. **Onderhoud:** Electron brengt elke 8 weken een hoofdversie uit en ondersteunt alleen de laatste 3, en node-pty moet na een upgrade opnieuw gebouwd worden. Zet versies vast.
 7. **Bestanden volgen:** gebruik @parcel/watcher en negeer `node_modules` en `.venv`.
 8. **Ondertekenen hoeft niet** voor eigen gebruik: electron-builder doet ad-hoc ondertekening. Kanttekening: macOS kan na elke build opnieuw om rechten vragen. Een zelf aangemaakt certificaat lost dat op.
-
-## Bouwplan (Claude schrijft de code)
-
-### MVP (~1–2 weken)
-
-- Electron met electron-vite, React en Tailwind.
-- Projectzijbalk.
-- Terminal-tabs en splits.
-- Serverbeheer.
-- Browser met DevTools en CDP.
-- Badges via hooks.
-- Viewers voor pdf, md, csv, afbeeldingen, en xlsx via Quick Look.
-- Config, palette en layout.
-
-### v2 (~1–2 weken)
-
-- Git-paneel.
-- Bestandsboom, zoeken en editor.
-- Eigen MCP-server.
-- Strook voor Render en Supabase.
-- pty-host-proces.
-- xlsx-tabel.
-
-### v3
-
-- IDE-protocol.
-- OSC 7501.
-- Overzicht via `claude agents --json`.
-- Scriptcommando's.
-- Workspaces.
-
-### Niet bouwen
-
-- De kern van de terminal.
-- Een eigen git-implementatie.
-- LSP of een debugger.
-- Een spreadsheet- of PDF-editor.
-- Een databaseclient.
-- Een plugin-systeem.
-- Auto-update en notarisatie.
-- Een chat-UI op de Agent SDK.
 
 ## Bronnen
 

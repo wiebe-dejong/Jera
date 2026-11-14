@@ -1,6 +1,6 @@
 # Cockpit: spec
 
-Spec-fase. Indeling en uiterlijk zijn nog niet besproken. Niets is definitief tenzij de status **besloten** is.
+Spec-fase. Besloten is alleen wat onder "Besloten" staat.
 
 ## Doel
 
@@ -12,9 +12,7 @@ Eén Mac-app voor mijn dagelijkse ontwikkelwerk. Die vervangt:
 
 Geen IDE: voor de debugger blijft PyCharm.
 
-## Uitgangspunt
-
-**Claude voert uit, de cockpit laat zien en laat mij ingrijpen.**
+## Gemeten werkwijze
 
 Uit `research/werkwijze.md`:
 - Claude doet het werk: start zelf de dev-servers, maakt ~77% van de commits, pusht, en regelt deploys en database via MCP.
@@ -22,66 +20,83 @@ Uit `research/werkwijze.md`:
 - Ik controleer in Safari.
 - Servers en poorten raken een rommel: ~25 poorten, honderden keren `kill` en `lsof`.
 
-## Onderdelen
+## Besloten
 
-1. **Claude-sessies**: terminals per project, met status: bezig, wacht op mij of klaar.
-2. **Servers en poorten**: ook servers die Claude zelf startte. Stoppen, herstarten, achtergebleven servers opruimen.
-3. **Browser**: gedeeld met Claude (agent-browser via CDP), met een eigen sessie per project zodat het juiste GitHub-account ingelogd blijft.
-4. **Documenten**: md, pdf, csv, xlsx en afbeeldingen.
-5. **Git**: status, diff, historie.
-6. **Deploys**: deploystatus op Render en health van Supabase, per project.
-
-## Keuzes tot nu toe
-
-| Onderwerp | Keuze | Status |
+| Onderwerp | Keuze | Datum |
 |---|---|---|
-| Zijbalk | Alleen projecten. Per project: sessies, servers, deploystatus | voorlopig, onderdeel van indeling |
-| Hoofdscherm | Vaste zones: zijbalk, terminals, browser of viewer, statusbalk onderaan | voorlopig, indeling nog volledig bespreken |
-| Browser | Gedeeld: Claude opent tabs in de cockpit-browser, gemarkeerd met de sessienaam. Ik kijk mee en kan overnemen | voorlopig |
-| Review na een sessie | Niet in de MVP | voorlopig |
-| Stack | Electron, React, TypeScript, Tailwind | advies uit onderzoek |
-| IDE | Geen. PyCharm blijft voor de debugger, met een actie "open in PyCharm op regel" | advies uit onderzoek |
-| Ontwikkelen | In PyCharm, totdat de cockpit zelf sessies en terminals heeft | besloten |
+| Stack | GPUI met GPUI Kit (Rust) | 2026-11-14 |
+| Terminal, kern | `alacritty_terminal` | 2026-11-14 |
+| Terminal, tekenen in GPUI | Zelf bouwen | 2026-11-14 |
+| Sessie starten | Ik kies een map en start daar een Claude-sessie | 2026-11-14 |
+| Tab | Eén tab per git-repo. Een map zonder git is zijn eigen tab. Een worktree valt onder zijn repo | 2026-11-14 |
+| Groep | Binnen een tab staan de sessies gegroepeerd per map: de hoofdmap of een submap | 2026-11-14 |
+| Sessie | Eén regel per sessie, met de naam die Claude Code eraan geeft en de status | 2026-11-14 |
+| Linkerkolom | Eén kolom met een schakelaar: Sessies, Bestanden of Eerder | 2026-11-14 |
+| Sessies | De lijst toont alle sessies van de tab, ook als hun terminal niet open staat | 2026-11-14 |
+| Bestanden | De mappen en bestanden van het project. Een klik op een bestand opent het in een externe app. Bij elke map kan ik er een sessie starten | 2026-11-14 |
+| Terminals in beeld | Standaard één. Een tweede ernaast door een sessie te slepen of met "open ernaast" | 2026-11-14 |
+| Sessiestatus | Per sessie is te zien: bezig, wacht op antwoord op een vraag, wacht op toestemming, net klaar, of idle (klaar en doet niets) | 2026-11-14 |
+| Net klaar en idle | "Net klaar" wordt "idle" zodra ik de sessie open | 2026-11-14 |
+| Status tijdens Bestanden | De knop Sessies krijgt een stip als een sessie op mij wacht | 2026-11-14 |
+| Herstart | Na een herstart van Cockpit komen mijn tabs en sessies terug | 2026-11-14 |
+| Oude sessies | De stand Eerder toont de oude sessies van de tab, gegroepeerd per map. Daaruit start ik er een opnieuw | 2026-11-14 |
+| Browser | Geen browser in de app. Openen gaat in Safari | 2026-11-14 |
+| agent-browser | Ik zie wanneer er een agent-browser draait, en ik kan die sluiten | 2026-11-14 |
+| Bestand openen | In de standaard-app die macOS voor dat bestandstype heeft | 2026-11-14 |
+| Paden in de terminal | Een pad in de terminal is aan te klikken en opent het bestand | 2026-11-14 |
+| Poorten | Een lijst van alle poorten waarop iets luistert, voor de hele computer. Per poort: stoppen en openen | 2026-11-14 |
+| Paneel voor de hele computer | Poorten en agent-browser staan samen in één paneel, los van de tabs. Een knop rechts in de tabbalk opent het en toont de aantallen | 2026-11-14 |
+| Git | Een duidelijk git-overzicht. De invulling volgt apart | 2026-11-14 |
+| Documenten | Geen viewers in de app. Een klik op een document opent het direct in een externe app, zoals Safari, Preview of GridCraft | 2026-11-14 |
 
-## Nog te bespreken
+De feiten bij de stack en de terminal staan in `research/native.md`.
 
-1. **Indeling, volledig:**
-   - de zones;
-   - tabs en splits;
-   - de statusbalk;
-   - wat waar staat;
-   - het gedrag op een laptopscherm.
-2. **Flows.** Kandidaten:
-   - project openen en de werkruimte herstellen;
-   - nieuwe taak, waarbij de sessie start met mijn startcommando en de taaknaam;
-   - een sessie wacht op mij;
-   - resultaat bekijken: server, browser, document;
-   - deploy volgen na een push;
-   - servers opruimen.
-3. **Klikbaar prototype**: een HTML-pagina met mijn echte projectnamen en poorten.
-4. **Uiterlijk** via `/stijlkeuze`: kleur, dichtheid, lettertype, statusindicatoren.
-5. **MVP-scope** vastzetten.
+### Indeling
 
-## MVP (concept uit het onderzoek, nog niet besloten)
+Schakelaar op Sessies:
 
-- Projectzijbalk.
-- Terminal-tabs voor Claude, met een knop "nieuwe sessie" (startcommando en taaknaam).
-- Sessiestatus via Claude Code-hooks.
-- Servers:
-  - ontdekken via `lsof`;
-  - starten, stoppen, herstarten;
-  - logs en poorten zien.
-- Browser met DevTools en CDP.
-- Viewer voor md, pdf, csv en afbeeldingen. Xlsx via Quick Look.
-- Config die direct herlaadt, een command palette en een layout per project.
+```
+[ webshop  3 ]  [ cockpit  1 ]  [ + map ]     [ Poorten 4  agent-browser 1 ]
+──────────────────────────────────────────────────────────────────────────
+ [ Sessies ]  Bestanden  Eerder    │
+ webshop/          [+]   │
+   ● kpi cards            bezig    │
+   ● bug       wacht op antwoord   │      terminal van de gekozen sessie
+ frontend/                   [+]   │
+   ● testing environment  net klaar│
+```
 
-## Niet bouwen
+Schakelaar op Bestanden:
 
-- De kern van de terminal.
-- Een eigen git-implementatie.
-- LSP of een debugger.
-- Een spreadsheet- of PDF-editor.
-- Een databaseclient.
-- Een plugin-systeem. Wil ik iets uitbreiden, dan vraag ik Claude om een paneel.
-- Auto-update en notarisatie.
-- Een chat-UI op de Agent SDK.
+```
+  Sessies •  [ Bestanden ]  Eerder │
+ ▸ backend/                  [+]   │
+ ▾ frontend/                 [+]   │
+   ▸ components/             [+]   │      terminal van de gekozen sessie
+     package.json                  │
+     README.md                     │
+ ▸ docs/                     [+]   │
+   render.yaml                     │
+```
+
+Schakelaar op Eerder, met het paneel open:
+
+```
+  Sessies •  Bestanden  [ Eerder ]       │            │ agent-browser  1
+ webshop/                      │            │   default          [Sluiten]
+   supabase migratie  gisteren  [Hervat] │            │
+   login flow         11 nov    [Hervat] │  terminal  │ Poorten  4
+ frontend/                               │            │   3000  node    [Openen] [Stoppen]
+   tabel sorteren     9 nov     [Hervat] │            │   8000  python  [Openen] [Stoppen]
+```
+
+De schermen staan ook in het artifact https://claude.ai/artifact/7yXL3y5ykQbPFcZ4GXGXrX (het bord "Gekozen").
+
+## Open
+
+- **Git:** de invulling van het overzicht.
+- **Poorten:** of processen van macOS zelf in de lijst staan.
+- **Startcommando:** waarmee een nieuwe sessie start.
+- **Uiterlijk:** kleuren, lettertypen, dichtheid en hoe de vijf statussen eruitzien.
+- **Meldingen:** later.
+- **Terminal:** `alacritty_terminal` negeert de codes voor werkmap, meldingen en voortgang (OSC 7, 9, 777, 9;4, 133). Niet getest met Claude Code.
