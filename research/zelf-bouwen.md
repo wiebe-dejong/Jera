@@ -41,6 +41,7 @@
   - `Stop` komt als Claude klaar is. `Notification` met `idle_prompt` komt zestig seconden daarna.
 - **Schermen bij de start:** in een nieuwe map vraagt Claude Code eerst of ik de map vertrouw; de standaardkeuze is "No, exit". In een map met een nieuwe MCP-server vraagt het of die gebruikt mag worden. Tijdens het vertrouwensscherm bestaat het sessiebestand nog niet.
   - een oude sessie staat in `~/.claude/projects/<pad>/<sessie-id>.jsonl`. Dat bestand bevat regels van het type `ai-title` met de titel van de sessie. `claude --resume <sessie-id>` start de sessie opnieuw.
+  - volgens `claude --help` (2.1.325) start `--resume` een kopie als de sessie al ergens draait. `--fork-session` geeft bij het hervatten een nieuw sessie-id. Overnemen van een draaiende sessie is niet gemeten.
 - **Gewone OSC-codes:** 9 en 777 (meldingen), 9;4 (voortgang), 7 (werkmap), 133 (prompt).
 - **tmux** haalt de synchronized output weg.
 

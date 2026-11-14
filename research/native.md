@@ -55,12 +55,12 @@ Onderdelen volgens de README (b):
 - Zed gebruikt `alacritty_terminal` ✓, op crates.io 0.26.0 ✓;
 - Zeds eigen terminal-crate is GPL-3.0-or-later ✓.
 
-**Pakketten:** de npm-pakketten uit `viewers.md` en `ui-basis.md` werken niet in GPUI.
+**Pakketten:** npm-pakketten werken niet in GPUI.
 
 ## Native Swift
 
 - **libghostty-vt 1.0** verscheen op 6 nov 2026 met een stabiele C-API (b, uit nieuwsberichten). Dat is de emulatiekern. De volledige API om een terminal in een app in te bouwen is nog niet stabiel (b).
-- **cmux** is zo gebouwd: Swift met libghostty (zie `bestaande-tools.md`).
+- **cmux** is zo gebouwd: Swift met libghostty.
 - De ingebouwde browser is WKWebView, zonder CDP.
 
 ## Rune
@@ -130,7 +130,7 @@ Niets hiervan is gebouwd of getest met Claude Code.
 
 ## Proef: Claude Code in een zelfgetekende terminal (2026-11-14)
 
-De code staat in `proef/terminal`: één bestand van ongeveer 470 regels, met `gpui-kit` 0.9.1 en `alacritty_terminal` 0.26.0.
+De code staat in `proef/terminal`: één bestand van ongeveer 550 regels, met `gpui-kit` 0.9.1 en `alacritty_terminal` 0.26.0.
 
 Gemeten op deze Mac (✓):
 
@@ -141,9 +141,9 @@ Gemeten op deze Mac (✓):
 - **Flikkeren:** in tien opnamen tijdens het werken stond geen half getekend scherm.
 - **Naad:** in het logo van Claude Code loopt een dunne donkere lijn tussen twee rijen blokjes. De bloktekens uit het lettertype vullen de cel niet precies.
 
-Niet gemeten: typen met het toetsenbord, scrollen, plakken en het venster groter of kleiner maken. De code ervoor staat er, maar is alleen gecompileerd. Een schermafdruk maken en toetsen sturen mag een proces zonder toestemming van macOS niet.
+Door mij in het venster geprobeerd op 2026-11-14: het werken in het venster is goed bevonden, en selecteren met de muis en kopiëren met Cmd+C werken. Welke andere onderdelen precies geprobeerd zijn (scrollen, plakken, het venster groter of kleiner maken), is niet vastgelegd.
 
-Niet gebouwd: tekst selecteren en kopiëren, een pad aanklikken, letters met een accent via een dode toets, en de muis doorgeven aan het programma.
+Niet gebouwd: een pad aanklikken, letters met een accent via een dode toets, en de muis doorgeven aan het programma.
 
 Het venster bewaart zichzelf als afbeelding met `cargo run --features schermafdruk` en `COCKPIT_SHOT=<pad>`. Zo zijn de opnamen gemaakt.
 

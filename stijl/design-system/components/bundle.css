@@ -1,0 +1,86 @@
+/* Cockpit: de stijl van alle onderdelen. Elke waarde komt uit tokens.css. */
+body{margin:0;background:var(--bg);color:var(--ink);font:400 12.5px/1.3 var(--font-mono);-webkit-font-smoothing:antialiased}
+*,*::before,*::after{box-sizing:border-box}
+button{font:inherit;letter-spacing:inherit;text-transform:inherit;color:inherit;background:none;border:0;padding:0;margin:0;cursor:pointer;text-align:left}
+button:focus-visible{outline:var(--streep) solid var(--ink);outline-offset:-2px}
+
+/* iconen */
+.ck-ic{flex:none;display:block;width:var(--icoon);height:var(--icoon)}
+.s-ok{stroke:var(--ok)}.s-bad{stroke:var(--bad)}.s-mute{stroke:var(--mute)}.s-ink{stroke:var(--ink)}
+.f-warn{fill:var(--warn)}.f-bad{fill:var(--bad)}
+.ck-q{fill:var(--bg);font:700 11px system-ui,sans-serif}
+@keyframes ck-draai{to{transform:rotate(360deg)}}
+.ck-spin{animation:ck-draai 1.1s linear infinite}
+@media (prefers-reduced-motion:reduce){.ck-spin{animation:none}}
+
+/* titelbalk met tabs */
+.ck-top{display:flex;align-items:stretch;height:var(--h-titelbalk);padding-left:var(--tab-pad);background:var(--bar);border-bottom:var(--lijn-dikte) solid var(--line);white-space:nowrap;overflow:hidden}
+.ck-lights{display:flex;align-items:center;gap:8px;margin-right:16px}
+.ck-lights i{display:block;width:12px;height:12px;border-radius:50%}
+.ck-tab{display:flex;align-items:center;gap:8px;margin-bottom:-1px;padding:0 var(--tab-pad);border-left:var(--lijn-dikte) solid var(--line);border-top:var(--streep) solid transparent;color:var(--mute)}
+.ck-tab[aria-current]{background:var(--bg);color:var(--ink);font-weight:700;border-top-color:var(--accent)}
+.ck-tab span{font-weight:400;color:var(--mute)}
+.ck-comp{display:flex;align-items:center;gap:8px;margin-left:auto;padding:0 var(--tab-pad);border-left:var(--lijn-dikte) solid var(--line)}
+.ck-comp span{color:var(--mute);margin-right:8px}
+
+/* linkerkolom */
+.ck-kolom{width:var(--b-kolom);max-width:100%;display:flex;flex-direction:column;border-right:var(--lijn-dikte) solid var(--line)}
+.ck-sw{display:flex;gap:18px;height:var(--h-schakelaar);padding:0 var(--pad);border-bottom:var(--lijn-dikte) solid var(--line)}
+.ck-sw button{border-top:var(--streep) solid transparent;border-bottom:var(--streep) solid transparent;color:var(--mute)}
+.ck-sw button[aria-pressed="true"]{color:var(--ink);font-weight:700;border-bottom-color:var(--accent)}
+.ck-grp{display:flex;align-items:center;height:calc(var(--h-rij) + 2px);margin-top:8px;padding-left:var(--pad);color:var(--mute)}
+.ck-grp b{flex:1;font-weight:400}
+.ck-grp button{width:32px;height:100%;text-align:center}
+.ck-row{display:flex;align-items:center;gap:var(--gap);width:100%;height:var(--h-rij);padding:0 var(--pad);border-radius:var(--hoek)}
+.ck-row.is-sel{background:var(--sel);font-weight:700;box-shadow:inset var(--streep) 0 var(--accent)}
+.ck-row.is-idle{color:var(--mute)}
+.ck-t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ck-m{flex:none;color:var(--mute)}
+
+/* knop */
+.ck-knop{flex:none;display:inline-flex;align-items:center;height:var(--h-knop);padding:0 8px;border:var(--lijn-dikte) solid var(--line-strong);border-radius:var(--hoek)}
+.ck-knop.is-gevaar{color:var(--bad)}
+.ck-knop.is-hoofd{background:var(--ink);border-color:var(--ink);color:var(--bg);font-weight:700}
+
+/* Render-regel */
+.ck-render{display:flex;align-items:stretch;height:var(--h-render);border-bottom:var(--lijn-dikte) solid var(--line);white-space:nowrap}
+.ck-svcs{flex:1;min-width:0;display:flex;overflow:hidden}
+.ck-svc{flex:none;display:flex;align-items:center;gap:8px;padding:0 var(--tab-pad);border-right:var(--lijn-dikte) solid var(--line);font-weight:700}
+.ck-gitknop{flex:none;padding:0 var(--tab-pad);border-left:var(--lijn-dikte) solid var(--line);border-top:var(--streep) solid transparent;border-bottom:var(--streep) solid transparent;color:var(--mute)}
+.ck-gitknop[aria-pressed="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+
+/* terminal */
+.ck-term{padding:12px var(--tab-pad);font:400 12.5px/1.55 var(--font-mono);white-space:nowrap;overflow:hidden}
+.ck-term b{font-weight:700}
+.ck-term .m{color:var(--mute)}.ck-term .g{color:var(--term-green)}.ck-term .acc{color:var(--term-accent)}
+.ck-term .sp{margin-top:1.55em}.ck-term .i2{padding-left:2ch}.ck-term .i5{padding-left:5ch}
+.ck-term .del{background:var(--term-del)}.ck-term .add{background:var(--term-add)}
+.ck-in{display:flex;align-items:center;gap:1ch;height:var(--h-invoer);margin-top:1.55em;padding:0 10px;border:var(--lijn-dikte) solid var(--line-strong);border-radius:var(--hoek)}
+.ck-in i{display:block;width:.6em;height:1.25em;background:var(--ink)}
+
+/* git-paneel */
+.ck-gitp{width:346px;max-width:100%;border-left:var(--lijn-dikte) solid var(--line);overflow:hidden}
+.ck-gitp svg{display:block}
+.ck-gitp text{font:400 11px var(--font-mono);fill:var(--mute)}
+.ck-gitp text.bn{font-size:12px;font-weight:600}
+.ck-gitp text.n{font-size:11.5px;font-weight:700}
+.f-box{fill:var(--box)}.f-bg{fill:var(--bg)}.s-bg{stroke:var(--bg)}.s-line{stroke:var(--line)}.s-line2{stroke:var(--line-strong)}
+.s-l1{stroke:var(--lane-1)}.s-l2{stroke:var(--lane-2)}.s-l3{stroke:var(--lane-3)}.s-l4{stroke:var(--lane-4)}
+.ck-gitp .f-l1,.f-l1{fill:var(--lane-1)}.ck-gitp .f-l2,.f-l2{fill:var(--lane-2)}.ck-gitp .f-l3,.f-l3{fill:var(--lane-3)}.ck-gitp .f-l4,.f-l4{fill:var(--lane-4)}
+
+/* bestandsboom */
+.ck-boom .ck-row{gap:6px}
+.ck-boom .d1{padding-left:calc(var(--pad) + var(--inspring))}
+.ck-boom .d2{padding-left:calc(var(--pad) + 2 * var(--inspring))}
+.ck-boom .ck-plus{flex:none;width:32px;margin-right:calc(-1 * var(--pad));height:100%;text-align:center;color:var(--mute)}
+
+/* paneel met poorten en agent-browser */
+.ck-paneel{width:360px;max-width:100%;border-left:var(--lijn-dikte) solid var(--line)}
+.ck-poort{flex:none;width:5ch;font-weight:700;font-variant-numeric:tabular-nums}
+
+/* dialoog en leeg scherm */
+.ck-dialoog{width:420px;max-width:100%;border:var(--lijn-dikte) solid var(--line-strong);background:var(--bg)}
+.ck-dialoog h2{margin:0;display:flex;align-items:center;height:var(--h-titelbalk);padding:0 var(--pad);background:var(--bar);border-bottom:var(--lijn-dikte) solid var(--line);font:inherit;font-weight:700}
+.ck-dialoog .ck-voet{display:flex;justify-content:flex-end;gap:8px;padding:var(--pad);border-top:var(--lijn-dikte) solid var(--line)}
+.ck-leeg{display:flex;flex-direction:column;align-items:flex-start;gap:var(--pad);padding:var(--pad);color:var(--mute)}
+.ck-vak{padding:var(--pad)}

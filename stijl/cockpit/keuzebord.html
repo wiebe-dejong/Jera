@@ -1,0 +1,429 @@
+<meta charset="utf-8">
+<title>Stijl Cockpit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400;500&family=JetBrains+Mono:wght@400;600;700&family=IBM+Plex+Mono:wght@400;600;700&display=swap">
+<style>
+/* ================= BORD (niet aanpassen) =================
+   Het bord is de werkbank om de frames heen. Het object zelf leeft in .site met eigen tokens (BASE). */
+:root{
+  --c-bg:#F1F2EE; --c-fg:#18201B; --c-mute:#5F6862; --c-line:#D9DDD5; --c-card:#FFFFFF; --c-acc:#2D6A45; --c-sel:#1D3A2A; --c-on-sel:#FFFFFF;
+  --c-vast:#2D6A45; --c-vast-bg:#E3ECE2; --c-vast-line:#C3D6C4;
+  --c-ui:"Geist",system-ui,-apple-system,sans-serif; --c-mono:"Geist Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--c-bg:#111412;--c-fg:#E7EBE6;--c-mute:#97A099;--c-line:#2A302C;--c-card:#191D1A;--c-acc:#A8D5E5;--c-sel:#E7EBE6;--c-on-sel:#111412;--c-vast:#8FC79F;--c-vast-bg:#18251D;--c-vast-line:#2C4234;color-scheme:dark}}
+:root[data-theme="dark"]{--c-bg:#111412;--c-fg:#E7EBE6;--c-mute:#97A099;--c-line:#2A302C;--c-card:#191D1A;--c-acc:#A8D5E5;--c-sel:#E7EBE6;--c-on-sel:#111412;--c-vast:#8FC79F;--c-vast-bg:#18251D;--c-vast-line:#2C4234;color-scheme:dark}
+body{margin:0;background:var(--c-bg);color:var(--c-fg);font-family:var(--c-ui);padding-inline:24px;padding-block:28px 96px}
+@media (max-width:620px){body{padding-inline:16px}}
+.app{max-width:1480px;margin:0 auto;display:flex;flex-direction:column;gap:28px}
+.top{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 16px}
+.top h1{font-weight:500;font-size:26px;letter-spacing:-.02em;margin:0}
+.round{font-family:var(--c-mono);font-size:12px;padding:3px 8px;border:1px solid var(--c-line);border-radius:3px;color:var(--c-mute)}
+.tabs{display:flex;flex-wrap:wrap;gap:8px 22px;position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--c-bg);padding-block:10px;border-bottom:1px solid var(--c-line)}
+@media (max-width:900px){.tabs{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;margin-inline:-16px;padding-inline:16px}.tg{flex-wrap:nowrap}}
+.tab{flex:none;font:500 13px var(--c-ui);color:var(--c-fg);background:var(--c-card);border:1px solid var(--c-line);border-radius:3px;padding:6px 10px;cursor:pointer;display:flex;gap:6px;align-items:baseline}
+.tab span{font-family:var(--c-mono);font-size:11px;color:var(--c-mute)}
+/* Status: vast, deels, open, later. Overal hetzelfde tegeltje. */
+.tile{display:inline-block;flex:none;box-sizing:border-box;width:9px;height:9px;border:1.5px solid var(--tc);border-radius:1px;align-self:center}
+[data-st]{--tc:var(--c-mute)}
+[data-st="vast"],[data-st="deels"]{--tc:var(--c-vast)}
+[data-st="vast"] .tile,.tile[data-st="vast"]{background:var(--tc)}
+[data-st="deels"] .tile,.tile[data-st="deels"]{background:linear-gradient(135deg,var(--tc) 50%,transparent 50%)}
+[data-st="later"] .tile,.tile[data-st="later"]{background:linear-gradient(var(--tc),var(--tc)) center/100% 1.5px no-repeat}
+.tg{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.tgl{flex:none;font:500 11px var(--c-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--c-mute);padding-right:4px}
+.tgl b{font-weight:500;color:var(--c-fg)}
+.tab[data-st="vast"],.tab[data-st="deels"]{background:var(--c-vast-bg);border-color:var(--c-vast-line)}
+.tab[data-st="deels"]{border-style:dashed;border-color:var(--c-vast)}
+.tk{font:500 11px var(--c-mono);padding:1px 5px;border-radius:2px;background:var(--c-card);color:var(--c-vast);border:1px solid var(--c-vast-line);white-space:nowrap}
+.prog{display:flex;gap:3px;align-items:center;align-self:center;margin-left:auto}
+.prog .tile{width:11px;height:11px}
+.tab:hover{border-color:var(--c-fg)}
+.tab[aria-selected="true"]{background:var(--c-sel);color:var(--c-on-sel);border-color:var(--c-sel);--tc:currentColor}
+.tab[aria-selected="true"] span{color:inherit;opacity:.7}
+.tab[aria-selected="true"] .tk{background:transparent;color:inherit;border-color:currentColor}
+.tab:focus-visible,.replay:focus-visible{outline:2px solid var(--c-acc);outline-offset:2px}
+.panel{display:flex;flex-direction:column;gap:28px}
+.opts{display:flex;flex-direction:column;gap:64px}
+.phd{display:flex;flex-direction:column;gap:12px}
+.phd-t{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px}
+.phd-n{font:500 13px var(--c-mono);color:var(--c-mute)}
+.phd h2{font:500 32px/1.1 var(--c-ui);letter-spacing:-.02em;margin:0}
+.part{display:flex;flex-direction:column;gap:28px}
+.phd.sub{border-top:2px solid var(--c-fg);padding-top:20px}
+.phd.sub h2{font-size:24px}
+@media (max-width:620px){.phd h2{font-size:26px}}
+.stc{display:inline-flex;align-items:center;gap:7px;font:500 12px var(--c-mono);letter-spacing:.04em;text-transform:uppercase;padding:5px 9px;border-radius:3px;border:1px solid var(--c-line);color:var(--c-mute)}
+.stc[data-st="vast"],.stc[data-st="deels"]{background:var(--c-vast-bg);border-color:var(--c-vast-line);color:var(--c-vast)}
+.stc[data-st="deels"]{border-style:dashed;border-color:var(--c-vast)}
+.phd .notes{font-size:13px}
+.phd .notes dd{font-size:12px}
+.opt{display:flex;flex-direction:column;gap:14px}
+.opt-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 14px;border-top:1px solid var(--c-line);padding-top:18px}
+.opt-k{font:600 22px var(--c-ui);width:26px}
+.opt-n{font:400 22px var(--c-ui);margin:0;letter-spacing:-.01em}
+.replay{margin-left:auto;font:500 13px var(--c-ui);background:transparent;color:var(--c-fg);border:1px solid var(--c-line);border-radius:3px;padding:6px 12px;cursor:pointer}
+.replay:hover{border-color:var(--c-fg)}
+.spec{display:flex;flex-wrap:wrap;gap:6px 22px;font-size:12.5px;color:var(--c-mute);margin:0}
+.spec div{display:flex;gap:6px;align-items:center;min-width:0}
+.spec dt{font-weight:500;color:var(--c-fg)}
+.spec dd{margin:0;font-family:var(--c-mono);font-size:11.5px;font-variant-numeric:tabular-nums}
+.sw{display:inline-block;width:12px;height:12px;border-radius:2px;border:1px solid var(--c-line);vertical-align:-1px;margin-right:4px}
+.pass{color:#1F7A44}.fail{color:#C2361F}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .pass{color:#7FD19B}:root:not([data-theme="light"]) .fail{color:#FF8A73}}
+:root[data-theme="dark"] .pass{color:#7FD19B}:root[data-theme="dark"] .fail{color:#FF8A73}
+.stage{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px;align-items:start}
+.stage.duo-m{grid-template-columns:minmax(0,1fr) 340px 340px}
+@media (max-width:1180px){.stage.duo-m{grid-template-columns:minmax(0,1fr) 300px}.stage.duo-m .fr:last-child{grid-column:2}}
+@media (max-width:980px){.stage,.stage.duo-m{grid-template-columns:minmax(0,1fr)}.stage .fr.m,.stage.duo-m .fr:last-child{grid-column:auto;max-width:390px;width:100%}}
+.fr{background:var(--c-card);border:1px solid var(--c-line);border-radius:8px;overflow:hidden;min-width:0}
+.bar{height:28px;display:flex;align-items:center;gap:6px;padding-inline:10px;border-bottom:1px solid var(--c-line);font:11px var(--c-mono);color:var(--c-mute)}
+.bar i{width:8px;height:8px;border-radius:50%;background:var(--c-line);display:block}
+.bar b{font-weight:400;margin-left:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vp{overflow:hidden;position:relative}
+.vp.tall{max-height:960px;overflow-y:auto}
+.fr.m .vp.tall{max-height:720px}
+.fold{position:absolute;left:0;right:0;border-top:2px dashed var(--c-acc);z-index:9;pointer-events:none}
+.fold span{position:absolute;right:8px;top:4px;font:500 11px var(--c-mono);background:var(--c-acc);color:#fff;padding:2px 6px;letter-spacing:.05em;text-transform:uppercase}
+
+/* ================= OBJECT =================
+   Cockpit: een uitsnede van het Mac-venster, links donker en rechts licht.
+   Alles wat een beslisgebied kan veranderen is een token (var(--x)) met zijn basiswaarde in BASE.
+   Het lichte venster neemt de tokens met -l over. */
+.stage{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media (max-width:1100px){.stage{grid-template-columns:minmax(0,1fr)}}
+.site{background:var(--bg);position:relative;overflow:clip;-webkit-font-smoothing:antialiased}
+.site *,.site *::before,.site *::after{box-sizing:border-box}
+.site.licht .ck{--bg:var(--bg-l);--bar:var(--bar-l);--box:var(--box-l);--line:var(--line-l);--line2:var(--line2-l);--ink:var(--ink-l);--mute:var(--mute-l);--sel:var(--sel-l);--acc:var(--acc-l);--ok:var(--ok-l);--warn:var(--warn-l);--bad:var(--bad-l);--l1:var(--l1-l);--l2:var(--l2-l);--l3:var(--l3-l);--l4:var(--l4-l);--tgreen:var(--tgreen-l);--tacc:var(--tacc-l);--tadd:var(--tadd-l);--tdel:var(--tdel-l)}
+.ck{display:flex;flex-direction:column;background:var(--bg);color:var(--ink);font:var(--fs)/1.3 var(--ui)}
+.ck button{font:inherit;letter-spacing:inherit;text-transform:inherit;color:inherit;background:none;border:0;padding:0;margin:0;cursor:pointer;text-align:left}
+.ck a{color:var(--mute);text-decoration:underline;text-underline-offset:2px}
+
+/* titelbalk met tabs */
+.ck .ck-top{flex:none;display:flex;align-items:stretch;height:34px;padding-left:14px;background:var(--bar);border-bottom:1px solid var(--line);font-family:var(--ui2);white-space:nowrap}
+.ck .ck-lights{display:flex;align-items:center;gap:8px;margin-right:16px}
+.ck .ck-lights i{display:block;width:12px;height:12px;border-radius:50%}
+.ck .ck-tab{display:flex;align-items:center;gap:8px;margin-bottom:-1px;padding:0 14px;border-left:1px solid var(--line);border-top:2px solid transparent;color:var(--mute)}
+.ck .ck-tab[aria-current]{background:var(--bg);color:var(--ink);font-weight:700;border-top-color:var(--acc)}
+.ck .ck-tab span{font-weight:400;color:var(--mute)}
+.ck .ck-comp{display:flex;align-items:center;gap:8px;margin-left:auto;padding:0 14px;border-left:1px solid var(--line)}
+.ck .ck-comp span{color:var(--mute);margin-right:8px}
+
+/* linkerkolom */
+.ck .ck-body{flex:1;min-height:0;display:flex}
+.ck .ck-side{flex:none;width:290px;display:flex;flex-direction:column;border-right:1px solid var(--line);overflow:hidden}
+.ck .ck-sw{flex:none;display:flex}
+.ck .ck-sw-caps,.ck .ck-sw-klein{gap:18px;height:30px;padding:0 var(--pad);border-bottom:1px solid var(--line)}
+.ck .ck-sw-caps{font-size:11px;letter-spacing:.08em;text-transform:uppercase}
+.ck .ck-sw-caps button,.ck .ck-sw-klein button{border-top:2px solid transparent;border-bottom:2px solid transparent;color:var(--mute)}
+.ck .ck-sw-caps button[aria-pressed="true"],.ck .ck-sw-klein button[aria-pressed="true"]{color:var(--ink);font-weight:700;border-bottom-color:var(--acc)}
+.ck .ck-sw-seg{gap:2px;margin:8px var(--pad) 0;padding:2px;background:var(--line);border-radius:calc(var(--r) + 2px)}
+.ck .ck-sw-seg button{flex:1;height:22px;text-align:center;border-radius:var(--r);color:var(--mute)}
+.ck .ck-sw-seg button[aria-pressed="true"]{background:var(--bg);color:var(--ink);font-weight:700}
+.ck .ck-grp{flex:none;display:flex;align-items:center;height:calc(var(--row) + 2px);margin-top:8px;padding-left:var(--pad);color:var(--mute);font-family:var(--ui2)}
+.ck .ck-grp b{flex:1;font-weight:400}
+.ck .ck-grp button{width:32px;height:100%;text-align:center}
+.ck .ck-row{flex:none;display:flex;align-items:center;gap:9px;height:var(--row);margin:0 var(--inset);padding:0 calc(var(--pad) - var(--inset));border-radius:var(--r)}
+.ck .ck-row.is-sel{background:var(--sel);font-weight:700}
+.ck .ck-row.is-idle{color:var(--mute)}
+.ck .ck-rij-rechts{flex-direction:row-reverse}
+.ck .ck-rij-streep.is-sel{box-shadow:inset 2px 0 var(--acc)}
+.ck .ck-t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* statusiconen */
+.ck .ck-st{flex:none;display:flex;align-items:center;justify-content:center;width:14px;height:14px}
+.ck .ck-ic{flex:none;display:block}
+.ck .ck-dot{width:10px;height:10px;border-radius:50%}
+@keyframes ck-draai{to{transform:rotate(360deg)}}
+@keyframes ck-puls{50%{opacity:.35}}
+.ck .ck-spin{animation:ck-draai 1.1s linear infinite}
+.ck .ck-puls{animation:ck-puls 1.4s ease-in-out infinite}
+
+/* Render-regel en terminal */
+.ck .ck-main{flex:1;min-width:0;display:flex;flex-direction:column}
+.ck .ck-render{flex:none;display:flex;align-items:stretch;height:26px;border-bottom:1px solid var(--line);white-space:nowrap;overflow:hidden}
+.ck .ck-svcs{flex:1;min-width:0;display:flex;overflow:hidden}
+.ck .ck-svc{flex:none;display:flex;align-items:center;gap:8px;padding:0 14px;border-right:1px solid var(--line)}
+.ck .ck-svc b{font-weight:700}
+.ck .ck-gitknop{flex:none;padding:0 14px;border-left:1px solid var(--line);border-top:2px solid transparent;border-bottom:2px solid transparent;font-family:var(--ui2);color:var(--mute)}
+.ck .ck-gitknop[aria-pressed="true"]{color:var(--ink);border-bottom-color:var(--acc)}
+.ck .ck-split{flex:1;min-height:0;display:flex}
+.ck .ck-term{flex:1;min-width:0;min-height:0;padding:12px 14px;font:var(--tfs)/1.55 var(--mono);white-space:nowrap;overflow:hidden}
+.ck .ck-term b{font-weight:700}
+.ck .ck-term .m{color:var(--mute)}
+.ck .ck-term .g{color:var(--tgreen)}
+.ck .ck-term .acc{color:var(--tacc)}
+.ck .ck-term .sp{margin-top:1.55em}
+.ck .ck-term .i2{padding-left:2ch}
+.ck .ck-term .i5{padding-left:5ch}
+.ck .ck-term .del{background:var(--tdel)}
+.ck .ck-term .add{background:var(--tadd)}
+.ck .ck-in{display:flex;align-items:center;gap:1ch;height:32px;margin-top:1.55em;padding:0 10px;border:1px solid var(--line2);border-radius:var(--r)}
+.ck .ck-in i{display:block;width:.6em;height:1.25em;background:var(--ink)}
+
+/* git-paneel */
+.ck .ck-gitp{flex:none;border-left:1px solid var(--line);overflow:hidden}
+.ck .ck-gitp svg{display:block}
+.ck .ck-gitp text{font-family:var(--ui);font-size:11px;fill:var(--mute)}
+.ck .ck-gitp text.bn{font:600 12px var(--mono)}
+.ck .ck-gitp text.n{font-size:11.5px;font-weight:700}
+@media (prefers-reduced-motion: reduce){.site *{transition:none !important;animation:none !important}}
+</style>
+<style id="optcss"></style>
+<div class="app">
+  <header class="top"><h1>Stijl Cockpit</h1><span class="round">Ronde 2</span><span class="prog" id="prog" role="img"></span></header>
+  <nav class="tabs" id="tabs" role="tablist" aria-label="Beslisgebieden"></nav>
+  <main class="panel" id="panel" role="tabpanel"></main>
+</div>
+<script>
+/* ================= OBJECT: data ================= */
+const IMG = {};
+
+const SYS = '-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif';
+
+/* De basis: de grond en de tab van richting B. Tokens met -l zijn het lichte thema. */
+const BASE = {
+  '--bg':'#0E1013','--bar':'#14171B','--box':'#14171B','--line':'#23272E','--line2':'#333944','--ink':'#D5D9E0','--mute':'#8A93A2','--sel':'#1C2129',
+  '--bg-l':'#F6F6F2','--bar-l':'#ECECE6','--box-l':'#ECECE6','--line-l':'#D9D9D0','--line2-l':'#C2C2B8','--ink-l':'#1E2227','--mute-l':'#5A616B','--sel-l':'#E2E2DA',
+  '--acc':'#5FD7A7','--acc-l':'#0A6B4B',
+  '--ok':'#4FCB7C','--warn':'#F2CC60','--bad':'#FF6B6B','--ok-l':'#1A7F3C','--warn-l':'#AD8200','--bad-l':'#C9302C',
+  '--l1':'#6E9EFF','--l2':'#E8935A','--l3':'#5BC27E','--l4':'#C08BE0','--l1-l':'#2F6FEB','--l2-l':'#B4531A','--l3-l':'#1F7A3D','--l4-l':'#8E44AD',
+  '--tgreen':'#5FD7A7','--tacc':'#F2CC60','--tadd':'rgba(95,215,167,.16)','--tdel':'rgba(255,143,143,.16)',
+  '--tgreen-l':'#0A6B4B','--tacc-l':'#8A5A00','--tadd-l':'#DCEEDF','--tdel-l':'#F6DEDE',
+  '--mono':'"JetBrains Mono",ui-monospace,Menlo,monospace','--ui':'var(--mono)','--ui2':'var(--mono)','--fs':'12.5px','--tfs':'12.5px',
+  '--r':'0px','--inset':'0px','--row':'22px','--pad':'12px',
+};
+/* Niet-CSS-keuzes van de basis. zicht: welk deel van het venster de uitsnede toont. */
+const BASECTX = { zicht:'sessies', h:420, status:'icoon', rij:'links', schakel:'caps', render:'icoon', git:'schuin' };
+
+const LBL = {bezig:'bezig',vraag:'wacht op antwoord',mag:'wacht op toestemming',klaar:'net klaar',idle:'idle'};
+const KLEUR = {
+  stip: {bezig:'ok',vraag:'warn',mag:'bad',klaar:'ok',idle:'mute'},
+  icoon:{bezig:'ok',vraag:'warn',mag:'bad',klaar:'ok',idle:'mute'},
+  rood: {bezig:'warn',vraag:'bad',mag:'bad',klaar:'ok',idle:'mute'},
+};
+const SESS = [
+  ['webshop/',[['bezig','KPI-kaarten responsive maken',1],['vraag','Bug in csv-export'],['mag','Supabase-migratie leden']]],
+  ['frontend/',[['klaar','Testomgeving opzetten'],['idle','Tabel sorteren']]],
+];
+const svg = (inner,cls='') => `<svg class="ck-ic ${cls}" width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">${inner}</svg>`;
+const VINK = k => `<path d="M3 8.5l3.2 3.2L13 4.8" style="stroke:${k}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>`;
+const KRUIS = k => `<path d="M4 4l8 8M12 4l-8 8" style="stroke:${k}" stroke-width="2.2" stroke-linecap="round"/>`;
+
+function ico(c,kind){
+  const k = `var(--${KLEUR[c.status][kind]})`; let h;
+  if(c.status==='stip'){ const hol = kind==='klaar'||kind==='idle';
+    h = `<i class="ck-ic ck-dot${kind==='bezig'?' ck-puls':''}" style="${hol?`border:2px solid ${k}`:`background:${k}`}"></i>`; }
+  else if(kind==='bezig') h = svg(`<circle cx="8" cy="8" r="6" style="stroke:${k};opacity:.3" stroke-width="2"/><path d="M8 2a6 6 0 0 1 6 6" style="stroke:${k}" stroke-width="2" stroke-linecap="round"/>`,'ck-spin');
+  else if(kind==='vraag') h = svg(`<circle cx="8" cy="8" r="7.5" style="fill:${k}"/><text x="8" y="12" text-anchor="middle" style="fill:var(--bg);font:700 11px system-ui,sans-serif">?</text>`);
+  else if(kind==='mag') h = svg(`<rect x="2.5" y="7" width="11" height="8" rx="1.5" style="fill:${k}"/><path d="M5 7V5a3 3 0 0 1 6 0v2" style="stroke:${k}" stroke-width="1.8"/>`);
+  else if(kind==='klaar') h = svg(VINK(k));
+  else h = svg(`<path d="M5 8h6" style="stroke:${k}" stroke-width="2" stroke-linecap="round"/>`);
+  return `<span class="ck-st" role="img" aria-label="${LBL[kind]}" title="${LBL[kind]}">${h}</span>`;
+}
+
+function render(c){
+  const een = ([n,ok,url]) => {
+    const link = `<a>${url}</a>`;
+    if(c.render==='woord') return `<span class="ck-svc"><b>${n}</b><span style="color:var(--${ok?'ok':'bad'})${ok?'':';font-weight:700'}">${ok?'live':'mislukt'}</span>${link}</span>`;
+    return `<span class="ck-svc" title="${ok?'live':'deploy mislukt'}">${svg(ok?VINK('var(--ok)'):KRUIS('var(--bad)'))}<b>${n}</b>${c.render==='icoon'?link:''}</span>`;
+  };
+  return `<div class="ck-render"><div class="ck-svcs">${[['api',1,'webshop-api.onrender.com'],['web',0,'webshop-web.onrender.com']].map(een).join('')}</div><button type="button" class="ck-gitknop" aria-pressed="${c.zicht==='git'}">git</button></div>`;
+}
+
+/* Het git-paneel: dezelfde graaf als in git-graaf/, met de branchnamen boven de lijnen. */
+function git(c){
+  const m = c.git, H0 = {schuin:118,trap:88,staand:170}[m], PW = {schuin:304,trap:346,staand:262}[m], H = c.h-60;
+  const X = [92,135,178,221], N = ['main','staging','betalen','acceptatie'], Y = y => y+H0, T = [70,24,150,104].map(Y), k = i => `var(--l${i+1})`;
+  const dot = (i,y,r=3.6) => `<circle cx="${X[i]}" cy="${Y(y)}" r="${r}" style="fill:${k(i)}"/>`;
+  const open = (i,y) => `<circle cx="${X[i]}" cy="${Y(y)}" r="4" stroke-width="1.8" style="stroke:${k(i)};fill:var(--bg)"/>`;
+  const grp = (i,y,n) => dot(i,y,5.5)+`<text class="n" x="${X[i]+10}" y="${Y(y)+4}" style="fill:${k(i)}">${n}</text>`;
+  const pijl = (a,b,y,dik) => { const d = X[a]>X[b]?1:-1, yy = Y(y);
+    return `<g${dik?'':' opacity=".65"'}><path d="M${X[a]} ${yy}H${X[b]+d*(dik?20:14)}" stroke-width="${dik?2.5:1.8}" style="stroke:${k(a)}"/><path d="M${X[b]+d*(dik?12:8)} ${yy}l${d*(dik?9:7)} ${dik?-5.5:-4.5}v${dik?11:9}z" style="fill:${k(a)}"/><circle cx="${X[a]}" cy="${yy}" r="${dik?3.2:2.6}" style="fill:${k(a)}"/></g>`; };
+  const naam = i => {
+    if(m==='trap'){ const y = 20+i*18; return `<path d="M${X[i]} ${y-8}V${T[i]-11}" style="stroke:${k(i)}" opacity=".4"/><text class="bn" x="${X[i]+7}" y="${y}" style="fill:${k(i)}">${N[i]}</text>`; }
+    return `<path d="M${X[i]} ${H0-6}V${T[i]-11}" style="stroke:${k(i)}" opacity=".4"/><text class="bn" transform="translate(${X[i]+(m==='staand'?4:1)} ${H0-10}) rotate(${m==='staand'?-90:-40})" style="fill:${k(i)}">${N[i]}</text>`; };
+  const tak = `M141 ${Y(215)}H169Q178 ${Y(215)} 178 ${Y(206)}V${T[2]}`;
+  return `<div class="ck-gitp" style="width:${PW}px"><svg width="${PW}" height="${H}" viewBox="0 0 ${PW} ${H}" fill="none" role="img" aria-label="Branches van webshop">`
+    + `<rect y="${H0}" width="70" height="${H}" style="fill:var(--box)"/><path d="M70.5 ${H0}V${H}M0 ${H0+.5}H${PW}" style="stroke:var(--line2)"/>`
+    + `<path d="M0 ${Y(190)+.5}H${PW}M0 ${Y(330)+.5}H${PW}" style="stroke:var(--line)"/><path d="M0 ${Y(47)+.5}H${PW}" stroke-dasharray="3 4" style="stroke:var(--line2)"/>`
+    + `<text x="8" y="${Y(16)}">vandaag</text><text x="8" y="${Y(42)}">opgehaald</text><text x="8" y="${Y(61)}">14:02</text><text x="8" y="${Y(206)}">gisteren</text><text x="8" y="${Y(346)}">do 12 nov</text>`
+    + [0,1,3].map(i => `<path d="M${X[i]} ${H}V${T[i]}" stroke-width="2.5" style="stroke:${k(i)}"/>`).join('')
+    + `<path d="${tak}" stroke-width="5" style="stroke:${k(2)}"/><path d="${tak}" stroke-width="2" style="stroke:var(--bg)"/>`
+    + pijl(1,0,70,1)+pijl(0,1,300)+pijl(1,3,270)
+    + dot(1,110)+dot(1,165)+dot(1,215)+grp(1,245,6)+open(1,300)+dot(1,360)+grp(1,420,14)
+    + open(0,230)+open(0,370)+dot(2,183)+grp(3,160,9)+dot(3,215)+open(3,270)+grp(3,400,31)
+    + [1,2,3].map(i => `<circle cx="${X[i]}" cy="${T[i]}" r="7.5" stroke-width="2.5" style="stroke:${k(i)};fill:var(--bg)"/>`).join('')
+    + `<circle cx="${X[0]}" cy="${T[0]}" r="10" style="fill:${k(0)}"/><circle cx="${X[0]}" cy="${T[0]}" r="3.2" style="fill:var(--bg)"/>`
+    + [0,1,2,3].map(naam).join('') + `</svg></div>`;
+}
+
+/* Fragmenten. c = ctx, c.vars = de tokens. */
+const F = {
+  venster: c => {
+    const top = `<div class="ck-top"><span class="ck-lights" aria-hidden="true"><i style="background:#FF5F57"></i><i style="background:#FEBC2E"></i><i style="background:#28C840"></i></span>`
+      + `<button type="button" class="ck-tab" aria-current="page">webshop <span>5</span></button><button type="button" class="ck-tab">cockpit <span>1</span></button><button type="button" class="ck-tab">notities <span>2</span></button><button type="button" class="ck-tab" aria-label="Map toevoegen">+</button>`
+      + `<button type="button" class="ck-comp">poorten <span>4</span>agent-browser <span>1</span></button></div>`;
+    const sw = `<div class="ck-sw ck-sw-${c.schakel}">${['Sessies','Bestanden','Eerder'].map((n,i) => `<button type="button" aria-pressed="${i===0}">${n}</button>`).join('')}</div>`;
+    const side = `<div class="ck-side">${sw}${SESS.map(([map,rows]) => `<div class="ck-grp"><b>${map}</b><button type="button" aria-label="Sessie starten in ${map}">+</button></div>`
+      + rows.map(([kind,t,sel]) => `<button type="button" class="ck-row ck-rij-${c.rij}${sel?' is-sel':''}${kind==='idle'?' is-idle':''}">${ico(c,kind)}<span class="ck-t">${t}</span></button>`).join('')).join('')}</div>`;
+    const term = `<div class="ck-term"><div class="m">&gt; maak de kpi-kaarten responsive op telefoon</div><div class="sp">⏺ Ik pas de grid aan in KpiCards.tsx en bouw daarna.</div>`
+      + `<div class="sp"><span class="g">⏺</span> <b>Update</b>(frontend/components/KpiCards.tsx)</div><div class="i2 m">⎿ Updated with 1 addition and 1 removal</div>`
+      + `<div class="i5 del">41 - &lt;div className="grid grid-cols-4 gap-4"&gt;</div><div class="i5 add">41 + &lt;div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-4"&gt;</div>`
+      + `<div class="sp"><span class="g">⏺</span> <b>Bash</b>(npm run build)</div><div class="i2 m">⎿ Running…</div><div class="sp acc">✻ Bouwen… <span class="m">(38s · esc to interrupt)</span></div>`
+      + `<div class="ck-in">&gt;<i></i></div><div class="i2 m">? for shortcuts</div></div>`;
+    const main = c.zicht==='git' ? `${render(c)}<div class="ck-split">${term}${git(c)}</div>` : render(c)+term;
+    return `<div class="ck" style="height:${c.h}px">${top}<div class="ck-body">${c.zicht==='sessies'?side:''}<div class="ck-main">${main}</div></div></div>`;
+  },
+  vensterDicht: c => F.venster({...c, zicht:'terminal', h:300}),
+};
+
+/* Beslisgebieden, in de volgorde van kiezen. */
+const TABS = [
+{id:'grond',name:'Grond',frags:['venster'],opts:[
+ {k:'A',name:'Bijna zwart, één vlak',vars:{},spec:[['Panelen','één vlak, lijn van 1 px ertussen'],['Terminal','dezelfde grond als de app']],
+  swatches:[['Grond donker','--bg'],['Balk donker','--bar'],['Grond licht','--bg-l'],['Balk licht','--bar-l']],
+  pairs:[['Tekst donker','--ink','--bg'],['Gedempt donker','--mute','--bg'],['Tekst licht','--ink-l','--bg-l'],['Gedempt licht','--mute-l','--bg-l']]},
+]},
+{id:'tab',name:'Tab',frags:['venster'],opts:[
+ {k:'A',name:'Vlak met streep erboven',vars:{},spec:[['Plek','in de titelbalk, 34 px hoog'],['Actief','grond van het venster, vet, streep 2 px in accent'],['Niet actief','gedempt, lijn van 1 px ertussen'],['Teller','aantal sessies, gedempt']]},
+]},
+{id:'letter',name:'Letter van de app',frags:['venster'],opts:[
+ {k:'A',name:'Mono overal',vars:{},spec:[['Titels en knoppen','mono 12.5 px'],['Tabs, mappen, tellers','mono 12.5 px'],['Terminal en branchnamen','mono']]},
+ {k:'B',name:'Systeemletter',vars:{'--ui':SYS,'--ui2':SYS,'--fs':'13px'},spec:[['Titels en knoppen','SF van macOS 13 px'],['Tabs, mappen, tellers','SF van macOS 13 px'],['Terminal en branchnamen','mono']]},
+ {k:'C',name:'Systeemletter met mono namen',vars:{'--ui':SYS,'--fs':'13px'},spec:[['Titels en knoppen','SF van macOS 13 px'],['Tabs, mappen, tellers','mono 13 px'],['Terminal en branchnamen','mono']]},
+]},
+{id:'mono',name:'Mono-letter',ctx:{zicht:'terminal'},frags:['venster'],opts:[
+ {k:'A',name:'JetBrains Mono',vars:{},spec:[['Maat','12.5 px'],['Regelhoogte','1.55'],['Herkomst','meegeleverd in de app']]},
+ {k:'B',name:'Menlo',vars:{'--mono':'Menlo,Monaco,monospace'},spec:[['Maat','12.5 px'],['Regelhoogte','1.55'],['Herkomst','staat op elke Mac']]},
+ {k:'C',name:'IBM Plex Mono',vars:{'--mono':'"IBM Plex Mono",ui-monospace,Menlo,monospace','--tfs':'13px'},spec:[['Maat','13 px'],['Regelhoogte','1.55'],['Herkomst','meegeleverd in de app']]},
+]},
+{id:'accent',name:'Accent',frags:['venster'],opts:[
+ {k:'A',name:'Groen',vars:{},spec:[['Gebruik','streep op de actieve tab en de schakelaar'],['Naast status','lijkt op het groen van de status']],swatches:[['Donker','--acc'],['Licht','--acc-l']],pairs:[['Op donker','--acc','--bg'],['Op licht','--acc-l','--bg-l']]},
+ {k:'B',name:'Blauw',vars:{'--acc':'#6E9EFF','--acc-l':'#1D5FBF'},spec:[['Gebruik','streep op de actieve tab en de schakelaar'],['Naast status','geen statuskleur']],swatches:[['Donker','--acc'],['Licht','--acc-l']],pairs:[['Op donker','--acc','--bg'],['Op licht','--acc-l','--bg-l']]},
+ {k:'C',name:'Geen kleur',vars:{'--acc':'#D5D9E0','--acc-l':'#1E2227'},spec:[['Gebruik','streep in de tekstkleur'],['Naast status','kleur is alleen status']],swatches:[['Donker','--acc'],['Licht','--acc-l']],pairs:[['Op donker','--acc','--bg'],['Op licht','--acc-l','--bg-l']]},
+]},
+{id:'vorm',name:'Vorm',frags:['venster'],opts:[
+ {k:'A',name:'Recht',vars:{},spec:[['Gekozen rij','0, van rand tot rand'],['Invoerveld','0']]},
+ {k:'B',name:'Hoek van 4 px',vars:{'--r':'4px','--inset':'6px'},spec:[['Gekozen rij','4 px, 6 px van de rand'],['Invoerveld','4 px']]},
+ {k:'C',name:'Hoek van 7 px',vars:{'--r':'7px','--inset':'6px'},spec:[['Gekozen rij','7 px, 6 px van de rand'],['Invoerveld','7 px']]},
+]},
+{id:'dichtheid',name:'Dichtheid',frags:['venster'],opts:[
+ {k:'A',name:'Rij van 22 px',vars:{},spec:[['Rij','22 px'],['Marge links','12 px']]},
+ {k:'B',name:'Rij van 26 px',vars:{'--row':'26px'},spec:[['Rij','26 px'],['Marge links','12 px']]},
+ {k:'C',name:'Rij van 30 px',vars:{'--row':'30px','--pad':'14px'},spec:[['Rij','30 px'],['Marge links','14 px']]},
+]},
+{id:'statussen',name:'Statussen',frags:['venster'],opts:[
+ {k:'A',name:'Stippen',ctx:{status:'stip'},spec:[['Bezig','groene stip, pulseert'],['Wacht op antwoord','gele stip'],['Wacht op toestemming','rode stip'],['Net klaar','groene ring'],['Idle','grijze ring'],['Verschil','alleen kleur, en vol of hol']]},
+ {k:'B',name:'Icoon per status',ctx:{status:'icoon'},spec:[['Bezig','groen draaiend boogje'],['Wacht op antwoord','geel vraagteken'],['Wacht op toestemming','rood slot'],['Net klaar','groen vinkje'],['Idle','grijs streepje'],['Verschil','kleur en vorm']]},
+ {k:'C',name:'Rood wacht op mij',ctx:{status:'rood'},spec:[['Bezig','geel draaiend boogje'],['Wacht op antwoord','rood vraagteken'],['Wacht op toestemming','rood slot'],['Net klaar','groen vinkje'],['Idle','grijs streepje'],['Verschil','kleur en vorm']]},
+]},
+{id:'sessieregel',name:'Sessieregel',frags:['venster'],opts:[
+ {k:'A',name:'Icoon links',ctx:{rij:'links'},spec:[['Icoon','voor de titel'],['Gekozen','vlak, vet'],['Idle','titel gedempt']]},
+ {k:'B',name:'Icoon rechts',ctx:{rij:'rechts'},spec:[['Icoon','aan de rechterrand, titels lijnen links uit'],['Gekozen','vlak, vet'],['Idle','titel gedempt']]},
+ {k:'C',name:'Streep in accent',ctx:{rij:'streep'},spec:[['Icoon','voor de titel'],['Gekozen','vlak, vet, streep van 2 px links'],['Idle','titel gedempt']]},
+]},
+{id:'schakelaar',name:'Schakelaar',frags:['venster'],opts:[
+ {k:'A',name:'Hoofdletters met streep',ctx:{schakel:'caps'},spec:[['Tekst','11 px, hoofdletters, spatiëring 8%'],['Actief','vet, streep 2 px in accent'],['Hoogte','30 px']]},
+ {k:'B',name:'Kleine letters met streep',ctx:{schakel:'klein'},spec:[['Tekst','gewone maat'],['Actief','vet, streep 2 px in accent'],['Hoogte','30 px']]},
+ {k:'C',name:'Segmentknop',ctx:{schakel:'seg'},spec:[['Tekst','gewone maat'],['Actief','vlak in de grondkleur, vet'],['Hoogte','26 px, in een bak']]},
+]},
+{id:'render',name:'Render-regel',ctx:{zicht:'terminal'},frags:['venster'],opts:[
+ {k:'A',name:'Woorden',ctx:{render:'woord'},spec:[['Status','live in groen, mislukt in rood en vet'],['Link','altijd zichtbaar']]},
+ {k:'B',name:'Icoon, naam en link',ctx:{render:'icoon'},spec:[['Status','groen vinkje of rood kruis'],['Link','altijd zichtbaar']]},
+ {k:'C',name:'Icoon en naam',ctx:{render:'kort'},spec:[['Status','groen vinkje of rood kruis'],['Link','een klik op de naam']]},
+]},
+{id:'git',name:'Git-paneel',ctx:{zicht:'git',h:580},frags:['venster'],opts:[
+ {k:'A',name:'Schuine namen',ctx:{git:'schuin'},spec:[['Namen','40° schuin boven de lijn'],['Kop','118 px hoog'],['Paneel bij deze repo','304 px breed']]},
+ {k:'B',name:'Getrapte namen',ctx:{git:'trap'},pages:[{url:'open',frags:['venster']},{url:'dicht',frags:['vensterDicht']}],spec:[['Namen','recht, elke naam op een eigen regel'],['Kop','88 px hoog'],['Paneel bij deze repo','346 px breed'],['Inklappen','knop git in de Render-regel; dicht krijgt de terminal de volle breedte']]},
+ {k:'C',name:'Staande namen',ctx:{git:'staand'},spec:[['Namen','90° gedraaid boven de lijn'],['Kop','170 px hoog'],['Paneel bij deze repo','262 px breed']]},
+]},
+];
+
+/* ================= STAND (per ronde bijwerken) ================= */
+const CHOSEN  = {grond:'A',tab:'A',letter:'A',mono:'A',accent:'A',vorm:'A',dichtheid:'B',statussen:'B',sessieregel:'C',schakelaar:'B',render:'C',git:'B'};
+const PARTIAL = {};
+const LATER   = {};
+const PCHOSEN = {};
+const NOTES   = {
+  statussen:[['Jouw keuze','iconen in groen, geel en rood, zonder woorden'],['Het woord','verschijnt als je het icoon aanwijst']],
+  git:[['Vast','de graaf en de kleuren van de lijnen'],['Was','namen rechts, paneel 400 px breed']],
+};
+
+/* ================= ENGINE (niet aanpassen) ================= */
+const state = id => LATER[id]?'later':PARTIAL[id]?'deels':CHOSEN[id]?'vast':'open';
+const STATE_L = {vast:'Vast',deels:'Deels',open:'Open',later:'Later'};
+const pick = id => CHOSEN[id]+(PARTIAL[id]?' · '+PARTIAL[id]:'');
+const lum = h => {const n=parseInt(h.slice(1),16);const f=x=>{x/=255;return x<=.03928?x/12.92:Math.pow((x+.055)/1.055,2.4)};return .2126*f(n>>16&255)+.7152*f(n>>8&255)+.0722*f(n&255)};
+const ratio = (a,b) => {const x=lum(a),y=lum(b);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05)};
+const grade = r => r>=7?'AAA':r>=4.5?'AA':r>=3?'alleen groot':'nee';
+const sw = h => `<span class="sw" style="background:${h}"></span>${h}`;
+const pair = (v,a,b) => {const r=ratio(v[a],v[b]);return `${r.toFixed(1)}:1 <span class="${r>=4.5?'pass':r>=3?'':'fail'}">${grade(r)}</span>`};
+let UID=0; const STY=[];
+function styleOf(v){return Object.entries(v).map(([k,x])=>`${k}:${x}`).join(';')}
+function site(frags,ctx,vars,cls,w,extra=''){
+  const c={...ctx,vars};
+  return `<div class="site ${cls}" data-w="${w}" style="${(`width:${w}px;${styleOf(vars)}`).replace(/"/g,'&quot;')}">${frags.map(f=>F[f](c)).join('')}${extra}</div>`;
+}
+function baseFor(tabId){
+  let v={...BASE},c={...BASECTX},cls='',css=[];
+  for(const [t,k] of Object.entries(CHOSEN)){if(t===tabId)continue;const o=TABS.find(x=>x.id===t).opts.find(x=>x.k===k);if(!o)continue;Object.assign(v,o.vars||{});Object.assign(c,o.ctx||{});cls+=' '+(o.cls||'');if(o.css)css.push(o.css)}
+  for(const [key,k] of Object.entries(PCHOSEN)){const [t,p]=key.split('.');const o=TABS.find(x=>x.id===t).parts.find(x=>x.id===p).opts.find(x=>x.k===k);Object.assign(v,o.vars||{});Object.assign(c,o.ctx||{})}
+  return {v,c,cls,css};
+}
+const NUM = Object.fromEntries(TABS.map((t,i)=>[t.id,String(i+1).padStart(2,'0')]));
+function panelHead(tab){
+  const s=state(tab.id);
+  const notes=NOTES[tab.id]?`<dl class="spec notes">${NOTES[tab.id].map(([a,b])=>`<div><dt>${a}</dt><dd>${b}</dd></div>`).join('')}</dl>`:'';
+  return `<header class="phd"><div class="phd-t"><span class="phd-n">${NUM[tab.id]}</span><h2>${tab.name}</h2><span class="stc" data-st="${s}"><i class="tile"></i>${STATE_L[s]}${CHOSEN[tab.id]?' · '+CHOSEN[tab.id]:''}</span></div>${notes}</header>`;
+}
+function renderTab(tab){
+  if(LATER[tab.id])return panelHead(tab);
+  const B=baseFor(tab.id);const bid='b'+(++UID);B.css.forEach(x=>STY.push(x.replaceAll('&','.'+bid)));
+  const opts = CHOSEN[tab.id]?tab.opts.filter(o=>o.k===CHOSEN[tab.id]):tab.opts;
+  const parts=(tab.parts||[]).map(p=>{const ch=PCHOSEN[tab.id+'.'+p.id],s=ch?'vast':'open';
+    return `<div class="part"><header class="phd sub"><div class="phd-t"><h2>${p.name}</h2><span class="stc" data-st="${s}"><i class="tile"></i>${STATE_L[s]}${ch?' · '+ch:''}</span></div></header><div class="opts">${(ch?p.opts.filter(o=>o.k===ch):p.opts).map(o=>renderOpt(tab,o,B,bid,p.frags,p.url)).join('')}</div></div>`}).join('');
+  return panelHead(tab)+'<div class="opts">'+opts.map(o=>renderOpt(tab,o,B,bid,tab.frags)).join('')+parts+'</div>';
+}
+function renderOpt(tab,o,B,bid,frags,url='Cockpit'){
+  const id='o'+(++UID);const ctx={...B.c,...(tab.ctx||{}),...(o.ctx||{})};const cls=`${B.cls} ${bid} ${o.cls||''} ${id}`;
+  if(o.css)STY.push(o.css.replaceAll('&','.'+id));
+  const pages=o.pages||[{url,frags:o.frags||frags}];
+  let spec=[...(o.spec||[])];
+  if(o.swatches||o.pairs){const v={...B.v,...(o.vars||{})};
+    for(const [n,k] of (o.swatches||[]))spec.push([n,sw(v[k])]);
+    for(const [n,f,b] of (o.pairs||[]))spec.push([n,pair(v,f,b)]);}
+  const frames=pages.map(p=>{const vars={...B.v,...(o.vars||{}),...(p.vars||{})};
+    const foldD=p.fold?'<div class="fold" style="top:800px"><span>Eerste scherm · 1280 × 800</span></div>':'';
+    const foldM=p.fold?'<div class="fold" style="top:740px"><span>390 × 740</span></div>':'';
+    const fr=(m,frags,fold)=>`<div class="fr"><div class="bar"><i></i><i></i><i></i><b>${m?'Licht':'Donker'}</b></div><div class="vp ${p.tall?'tall':''}">${site(frags,ctx,vars,cls+(m?' licht':''),760,fold)}</div></div>`;
+    return `<div class="stage ${p.mExtra?'duo-m':''}">${fr(0,p.frags,foldD)}${fr(1,p.frags,foldM)}${p.mExtra?fr(1,p.mExtra,''):''}</div>`}).join('');
+  return `<section class="opt" data-opt="${o.k}"><div class="opt-head"><span class="opt-k">${o.k}</span><h2 class="opt-n">${o.name}</h2>${tab.replay?'<button class="replay" type="button">Speel af</button>':''}</div>
+    <dl class="spec">${spec.map(([a,b])=>`<div><dt>${a}</dt><dd>${b}</dd></div>`).join('')}</dl>${frames}</section>`;
+}
+function fit(root=document){root.querySelectorAll('.vp').forEach(vp=>{const s=vp.firstElementChild;if(!s)return;const z=Math.min(1,vp.clientWidth/+s.dataset.w);s.style.zoom=z})}
+function play(opt){opt.querySelectorAll('.site').forEach(s=>{s.classList.remove('play');void s.offsetWidth;s.classList.add('play')})}
+for(const k in IMG){try{const [h,b]=IMG[k].split(',');const bin=atob(b);const u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);IMG[k]=URL.createObjectURL(new Blob([u],{type:h.slice(5,h.indexOf(';'))}))}catch(e){}}
+const tabsEl=document.getElementById('tabs'),panel=document.getElementById('panel');
+const tabBtn=t=>`<button class="tab" role="tab" type="button" id="t-${t.id}" aria-controls="panel" aria-selected="false" data-tab="${t.id}" data-st="${state(t.id)}"><i class="tile"></i><span>${NUM[t.id]}</span>${t.name}${CHOSEN[t.id]?`<b class="tk">${pick(t.id)}</b>`:''}</button>`;
+tabsEl.innerHTML=['open','deels','later','vast'].map(g=>{const ts=TABS.filter(t=>state(t.id)===g);return ts.length?`<div class="tg" role="presentation"><span class="tgl">${STATE_L[g]} <b>${ts.length}</b></span>${ts.map(tabBtn).join('')}</div>`:''}).join('');
+const prog=document.getElementById('prog');
+prog.innerHTML=TABS.map(t=>`<i class="tile" data-st="${state(t.id)}" title="${NUM[t.id]} ${t.name}"></i>`).join('');
+prog.setAttribute('aria-label',['vast','deels','open','later'].map(g=>`${TABS.filter(t=>state(t.id)===g).length} ${g}`).join(', '));
+const styleEl=document.getElementById('optcss');
+const STORE='stijl-tab-cockpit';
+function show(id,push){
+  const tab=TABS.find(t=>t.id===id)||TABS[0];
+  STY.length=0;panel.innerHTML=renderTab(tab);styleEl.textContent=STY.join('\n');
+  tabsEl.querySelectorAll('.tab').forEach(b=>b.setAttribute('aria-selected',b.dataset.tab===tab.id));
+  fit(panel);setTimeout(()=>{fit(panel);panel.querySelectorAll('.opt').forEach(play)},60);
+  if(push){try{history.replaceState(null,'','#'+tab.id)}catch(e){}try{localStorage.setItem(STORE,tab.id)}catch(e){}}
+}
+tabsEl.addEventListener('click',e=>{const b=e.target.closest('.tab');if(!b)return;show(b.dataset.tab,true);b.scrollIntoView({block:'nearest',inline:'nearest'});window.scrollTo({top:0})});
+tabsEl.addEventListener('keydown',e=>{if(!['ArrowRight','ArrowLeft'].includes(e.key))return;const bs=[...tabsEl.querySelectorAll('.tab')];const i=bs.indexOf(document.activeElement);if(i<0)return;const n=bs[(i+(e.key==='ArrowRight'?1:-1)+bs.length)%bs.length];n.focus();n.click()});
+panel.addEventListener('click',e=>{const r=e.target.closest('.replay');if(r)play(r.closest('.opt'))});
+new ResizeObserver(()=>fit(panel)).observe(panel);
+let start=(location.hash||'').slice(1);if(!TABS.some(t=>t.id===start)){try{start=localStorage.getItem(STORE)||''}catch(e){start=''}}
+show(start||TABS[0].id,false);
+document.fonts&&document.fonts.ready.then(()=>fit(panel));
+</script>

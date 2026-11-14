@@ -4,12 +4,19 @@
 //! Gebruik: cargo run -- [map] [commando]
 //! Met --features schermafdruk bewaart het venster zichzelf als afbeelding, zie `proef_hulp`.
 
-use std::{borrow::Cow, collections::HashMap, path::PathBuf, sync::Arc};
+use std::{
+    borrow::Cow,
+    collections::HashMap,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
 
 use alacritty_terminal::{
     event::{Event as TermEvent, EventListener, WindowSize},
     event_loop::{EventLoop, EventLoopSender, Msg},
     grid::{Dimensions, Scroll},
+    index::{Column, Line, Point as CellPoint, Side},
+    selection::{Selection, SelectionType},
     sync::FairMutex,
     term::{Config, Term, TermMode, cell::Flags, color::Colors},
     tty,
@@ -22,6 +29,7 @@ const FONT_SIZE: f32 = 13.0;
 const PADDING: f32 = 8.0;
 const FOREGROUND: u32 = 0xe6e6e6;
 const BACKGROUND: u32 = 0x16181d;
+const SELECTION: u32 = 0x33507a;
 const ANSI: [u32; 16] = [
     0x1d1f21, 0xcc6666, 0xb5bd68, 0xf0c674, 0x81a2be, 0xb294bb, 0x8abeb7, 0xc5c8c6, 0x666666,
     0xd54e53, 0xb9ca4a, 0xe7c547, 0x7aa6da, 0xc397d8, 0x70c0b1, 0xeaeaea,
@@ -54,7 +62,16 @@ impl Dimensions for Grid {
     }
 }
 
+/// Waar het raster staat en hoe groot een cel is. Gezet bij het tekenen.
+#[derive(Clone, Copy, Default)]
+struct Metrics {
+    origin: Point<Pixels>,
+    cell_w: Pixels,
+    cell_h: Pixels,
+}
+
 struct TerminalView {
+    metrics: Arc<Mutex<Metrics>>,
     term: Arc<FairMutex<Term<Proxy>>>,
     pty: EventLoopSender,
     focus: FocusHandle,
@@ -100,7 +117,14 @@ impl TerminalView {
 
         let focus = cx.focus_handle();
         window.focus(&focus, cx);
-        Self { term, pty, focus, title: "Cockpit: terminalproef".into(), scroll_rest: 0.0 }
+        Self {
+            metrics: Arc::default(),
+            term,
+            pty,
+            focus,
+            title: "Cockpit: terminalproef".into(),
+            scroll_rest: 0.0,
+        }
     }
 
     fn write(&self, bytes: Vec<u8>) {
@@ -131,6 +155,12 @@ impl TerminalView {
         let key = &event.keystroke;
         let mode = *self.term.lock().mode();
         let bytes = if key.modifiers.platform {
+            if key.key == "c" {
+                if let Some(text) = self.term.lock().selection_to_string() {
+                    cx.write_to_clipboard(ClipboardItem::new_string(text));
+                }
+                return;
+            }
             if key.key != "v" {
                 return;
             }
@@ -148,9 +178,57 @@ impl TerminalView {
             };
             bytes
         };
-        self.term.lock().scroll_display(Scroll::Bottom);
+        {
+            let mut term = self.term.lock();
+            term.scroll_display(Scroll::Bottom);
+            term.selection = None;
+        }
         self.write(bytes);
         cx.stop_propagation();
+    }
+
+    /// De cel onder de muis, en of de muis links of rechts in die cel staat.
+    fn cell_at(&self, position: Point<Pixels>) -> Option<(CellPoint, Side)> {
+        let metrics = *self.metrics.lock().unwrap();
+        if metrics.cell_w <= px(0.0) {
+            return None;
+        }
+        let term = self.term.lock();
+        let x = f32::from(position.x - metrics.origin.x) / f32::from(metrics.cell_w);
+        let y = f32::from(position.y - metrics.origin.y) / f32::from(metrics.cell_h);
+        let col = (x.max(0.0) as usize).min(term.columns() - 1);
+        let row = (y.max(0.0) as usize).min(term.screen_lines() - 1);
+        let line = Line(row as i32 - term.grid().display_offset() as i32);
+        let side = if x.fract() < 0.5 { Side::Left } else { Side::Right };
+        Some((CellPoint::new(line, Column(col)), side))
+    }
+
+    fn on_mouse_down(&mut self, event: &MouseDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+        window.focus(&self.focus, cx);
+        let Some((point, side)) = self.cell_at(event.position) else {
+            return;
+        };
+        // Eén klik: per teken. Twee: per woord. Drie: per regel.
+        let kind = match event.click_count {
+            2 => SelectionType::Semantic,
+            3 => SelectionType::Lines,
+            _ => SelectionType::Simple,
+        };
+        self.term.lock().selection = Some(Selection::new(kind, point, side));
+        cx.notify();
+    }
+
+    fn on_mouse_move(&mut self, event: &MouseMoveEvent, _: &mut Window, cx: &mut Context<Self>) {
+        if event.pressed_button != Some(MouseButton::Left) {
+            return;
+        }
+        let Some((point, side)) = self.cell_at(event.position) else {
+            return;
+        };
+        if let Some(selection) = self.term.lock().selection.as_mut() {
+            selection.update(point, side);
+        }
+        cx.notify();
     }
 
     fn on_scroll(&mut self, event: &ScrollEvent, _: &mut Window, cx: &mut Context<Self>) {
@@ -170,16 +248,19 @@ impl Render for TerminalView {
         window.set_window_title(&self.title);
         let term = self.term.clone();
         let pty = self.pty.clone();
+        let metrics = self.metrics.clone();
         div()
             .size_full()
             .bg(rgb(BACKGROUND))
             .track_focus(&self.focus)
             .on_key_down(cx.listener(Self::on_key))
             .on_scroll(cx.listener(Self::on_scroll))
+            .on_mouse_down(MouseButton::Left, cx.listener(Self::on_mouse_down))
+            .on_mouse_move(cx.listener(Self::on_mouse_move))
             .child(
                 canvas(
                     |_, _, _| (),
-                    move |bounds, _, window, cx| paint(bounds, &term, &pty, window, cx),
+                    move |bounds, _, window, cx| paint(bounds, &term, &pty, &metrics, window, cx),
                 )
                 .size_full(),
             )
@@ -258,6 +339,7 @@ fn paint(
     bounds: Bounds<Pixels>,
     term: &FairMutex<Term<Proxy>>,
     pty: &EventLoopSender,
+    metrics: &Mutex<Metrics>,
     window: &mut Window,
     cx: &mut App,
 ) {
@@ -278,6 +360,12 @@ fn paint(
     let cols = (f32::from(bounds.size.width - padding * 2.0) / f32::from(cell_w)) as usize;
     let rows = (f32::from(bounds.size.height - padding * 2.0) / f32::from(cell_h)) as usize;
     let (cols, rows) = (cols.max(2), rows.max(1));
+
+    *metrics.lock().unwrap() = Metrics {
+        origin: point(bounds.origin.x + padding, bounds.origin.y + padding),
+        cell_w,
+        cell_h,
+    };
 
     let mut term = term.lock();
     if cols != term.columns() || rows != term.screen_lines() {
@@ -320,7 +408,11 @@ fn paint(
         if flags.contains(Flags::DIM) {
             fg.a = 0.6;
         }
-        if inverse || cell.bg != Color::Named(NamedColor::Background) {
+        let selected = content.selection.is_some_and(|range| range.contains(indexed.point));
+        if selected {
+            bg = rgb(SELECTION);
+        }
+        if selected || inverse || cell.bg != Color::Named(NamedColor::Background) {
             let size = size(cell_w * width as f32, cell_h);
             window.paint_quad(fill(Bounds::new(cell_origin(row, col), size), bg));
         }
