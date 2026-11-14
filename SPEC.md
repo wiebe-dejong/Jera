@@ -30,12 +30,13 @@ Uit `research/werkwijze.md`:
 | Sessie starten | Ik kies een map en start daar een Claude-sessie | 2026-11-14 |
 | Tab | Eén tab per git-repo. Een map zonder git is zijn eigen tab. Een worktree valt onder zijn repo | 2026-11-14 |
 | Groep | Binnen een tab staan de sessies gegroepeerd per map: de hoofdmap of een submap | 2026-11-14 |
-| Sessie | Eén regel per sessie, met de naam die Claude Code eraan geeft en de status | 2026-11-14 |
+| Sessie | Eén regel per sessie, met de titel die Claude Code eraan geeft en de status. Zolang er nog geen titel is, staat er de naam die Claude Code van de map afleidt | 2026-11-14 |
 | Linkerkolom | Eén kolom met een schakelaar: Sessies, Bestanden of Eerder | 2026-11-14 |
 | Sessies | De lijst toont alle sessies van de tab, ook als hun terminal niet open staat | 2026-11-14 |
 | Bestanden | De mappen en bestanden van het project. Een klik op een bestand opent het in een externe app. Bij elke map kan ik er een sessie starten | 2026-11-14 |
 | Terminals in beeld | Standaard één. Een tweede ernaast door een sessie te slepen of met "open ernaast" | 2026-11-14 |
 | Sessiestatus | Per sessie is te zien: bezig, wacht op antwoord op een vraag, wacht op toestemming, net klaar, of idle (klaar en doet niets) | 2026-11-14 |
+| Schermen bij de start | Vraagt Claude Code bij de start of ik de map vertrouw of een MCP-server wil gebruiken, dan toont de sessie "wacht op toestemming" | 2026-11-14 |
 | Net klaar en idle | "Net klaar" wordt "idle" zodra ik de sessie open | 2026-11-14 |
 | Status tijdens Bestanden | De knop Sessies krijgt een stip als een sessie op mij wacht | 2026-11-14 |
 | Herstart | Na een herstart van Cockpit komen mijn tabs en sessies terug | 2026-11-14 |
@@ -51,7 +52,7 @@ Uit `research/werkwijze.md`:
 | Git | Een duidelijk git-overzicht. De invulling volgt apart | 2026-11-14 |
 | Documenten | Geen viewers in de app. Een klik op een document opent het direct in een externe app, zoals Safari, Preview of GridCraft | 2026-11-14 |
 
-De feiten bij de stack en de terminal staan in `research/native.md`.
+De feiten bij de stack en de terminal staan in `research/native.md`. De sessiestatus leest Cockpit uit het sessiebestand van Claude Code; de meting staat in `research/zelf-bouwen.md`.
 
 ### Indeling
 
@@ -99,4 +100,4 @@ De schermen staan ook in het artifact https://claude.ai/artifact/7yXL3y5ykQbPFcZ
 - **Git:** de invulling van het overzicht.
 - **Uiterlijk:** kleuren, lettertypen, dichtheid en hoe de vijf statussen eruitzien. Dit wordt een aparte ronde.
 - **Meldingen:** later.
-- **Terminal:** `alacritty_terminal` negeert de codes voor werkmap, meldingen en voortgang (OSC 7, 9, 777, 9;4, 133). Niet getest met Claude Code.
+- **Terminal:** de proef in `proef/terminal` tekent Claude Code goed (zie `research/native.md`). Typen, scrollen, plakken en het venster verslepen zijn nog niet door mij geprobeerd. Nog te bouwen: selecteren en kopiëren, een pad aanklikken, letters met een accent, en bloktekens zonder naad.

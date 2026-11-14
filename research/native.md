@@ -128,6 +128,25 @@ GPUI Kit 0.9.1 pint `gpui-pre` =0.3.12 ✓. Alleen `gpui_xterm` staat op dezelfd
 
 Niets hiervan is gebouwd of getest met Claude Code.
 
+## Proef: Claude Code in een zelfgetekende terminal (2026-11-14)
+
+De code staat in `proef/terminal`: één bestand van ongeveer 470 regels, met `gpui-kit` 0.9.1 en `alacritty_terminal` 0.26.0.
+
+Gemeten op deze Mac (✓):
+
+- **Bouwen:** lukt met Rust 1.100 en alleen de Command Line Tools van Apple. De volledige Xcode is niet nodig. De map `target` is daarna 4,3 GB.
+- **Versies:** `gpui-kit` met de optie `test-support` geeft een versieconflict (`taffy`). Dezelfde optie rechtstreeks op `gpui-pre` en `gpui-pre-platform` werkt.
+- **Starten:** het venster start `zsh -ilc claude` in de gekozen map.
+- **Tekenen:** het startscherm, de keuzeschermen, vet, cursief, gedimd, kleuren, een tabel met lijnen, een codeblok met kleuren, de draaiende regel tijdens het werken en de statusregel komen goed door.
+- **Flikkeren:** in tien opnamen tijdens het werken stond geen half getekend scherm.
+- **Naad:** in het logo van Claude Code loopt een dunne donkere lijn tussen twee rijen blokjes. De bloktekens uit het lettertype vullen de cel niet precies.
+
+Niet gemeten: typen met het toetsenbord, scrollen, plakken en het venster groter of kleiner maken. De code ervoor staat er, maar is alleen gecompileerd. Een schermafdruk maken en toetsen sturen mag een proces zonder toestemming van macOS niet.
+
+Niet gebouwd: tekst selecteren en kopiëren, een pad aanklikken, letters met een accent via een dode toets, en de muis doorgeven aan het programma.
+
+Het venster bewaart zichzelf als afbeelding met `cargo run --features schermafdruk` en `COCKPIT_SHOT=<pad>`. Zo zijn de opnamen gemaakt.
+
 ## Bronnen
 
 - **Terminal:** https://crates.io/crates/alacritty_terminal · https://github.com/alacritty/vte/blob/master/src/ansi.rs · https://github.com/Uzaaft/libghostty-rs · https://crates.io/crates/ghostty-vt · https://github.com/Modolet/gpui_xterm · https://github.com/behzade/gpui-libghostty · https://github.com/zortax/gpui-terminal · https://crates.io/crates/ely-terminal · https://crates.io/crates/bezel-terminal

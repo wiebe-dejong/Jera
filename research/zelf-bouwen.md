@@ -25,10 +25,21 @@
   - `claude agents --json --all`;
   - OSC 7501 (Claude Code 2.1.295 en nieuwer);
   - `~/.claude/sessions/*.json`.
-- **Gemeten op deze Mac op 2026-11-14** (Claude Code 2.1.325):
-  - `~/.claude/sessions/<pid>.json` bevat per sessie onder meer `cwd`, `name`, `status` en `statusUpdatedAt`. Geziene waarden van `status`: `busy`, `idle`, `shell`;
-  - `claude agents --json --all` geeft per sessie `status` (`busy`, `idle`) of `state` (`blocked`);
-  - het verschil tussen een vraag en een verzoek om toestemming staat in geen van beide;
+- **Gemeten op deze Mac op 2026-11-14** (Claude Code 2.1.325), met een proefsessie die een vraag stelde en om toestemming vroeg:
+  - `~/.claude/sessions/<pid>.json` bevat per sessie onder meer `cwd`, `name`, `status` en `statusUpdatedAt`;
+  - `status` is `busy` terwijl Claude werkt en `idle` als Claude klaar is. Ook gezien: `shell`;
+  - bij een vraag (de tool `AskUserQuestion`) staat er `status: "waiting"` met `waitingFor: "input needed"`;
+  - bij een verzoek om toestemming staat er `status: "waiting"` met `waitingFor: "permission prompt"`;
+  - het bestand verandert binnen een seconde na de gebeurtenis;
+  - `claude agents --json --all` geeft in beide gevallen `status: "waiting"`. Of de reden erbij staat, is niet nagekeken;
+  - `name` in het sessiebestand is afgeleid van de map, bijvoorbeeld `cockpit-70`. De titel in het sessiebestand van de transcriptie (`ai-title`) is een andere naam, bijvoorbeeld "Rust native app maken";
+  - het formaat van dit bestand staat niet in de documentatie van Claude Code.
+- **Hooks, gemeten in dezelfde proef:**
+  - `PreToolUse` met `tool_name: "AskUserQuestion"` komt direct bij een vraag;
+  - `PermissionRequest` komt direct bij een verzoek om toestemming, en ook bij een vraag. `tool_name` maakt het verschil;
+  - `Notification` met `permission_prompt` komt ongeveer zes seconden later, bij allebei, met dezelfde tekst;
+  - `Stop` komt als Claude klaar is. `Notification` met `idle_prompt` komt zestig seconden daarna.
+- **Schermen bij de start:** in een nieuwe map vraagt Claude Code eerst of ik de map vertrouw; de standaardkeuze is "No, exit". In een map met een nieuwe MCP-server vraagt het of die gebruikt mag worden. Tijdens het vertrouwensscherm bestaat het sessiebestand nog niet.
   - een oude sessie staat in `~/.claude/projects/<pad>/<sessie-id>.jsonl`. Dat bestand bevat regels van het type `ai-title` met de titel van de sessie. `claude --resume <sessie-id>` start de sessie opnieuw.
 - **Gewone OSC-codes:** 9 en 777 (meldingen), 9;4 (voortgang), 7 (werkmap), 133 (prompt).
 - **tmux** haalt de synchronized output weg.

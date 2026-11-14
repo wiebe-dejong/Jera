@@ -4,7 +4,7 @@ Eigen Mac-app voor mijn ontwikkelwerk: Claude-terminals, servers, browser, docum
 
 ## Status
 
-Spec-fase. Er is geen app-code. Wat besloten is, staat in `SPEC.md`.
+Spec-fase. De enige code is de proef in `proef/terminal`. Wat besloten is, staat in `SPEC.md`.
 
 ## Stack
 
@@ -17,6 +17,8 @@ Besloten op 2026-11-14, zie `SPEC.md`. De feiten staan in `research/native.md`.
 
 - `SPEC.md`: het doel, de gemeten werkwijze en wat besloten is.
 - `indeling/editor.html`: de editor waarin ik de indeling teken (https://claude.ai/artifact/8eNKyZX3XSg83T7d9ejG8J). De varianten staan in de opslag van dat artifact, collectie `varianten`; lees ze met ArtifactData.
+- `git-graaf/`: ontwerp van het git-paneel als werkend HTML-voorbeeld (https://claude.ai/artifact/BT7Ues1JGeMQKJj5Be5AWQ). `paneel.html` is het paneel zelf. `python3 git-graaf/lees_repo.py <pad naar repo>` leest de branches van een repo naar `data/`; `python3 git-graaf/bouw.py` maakt daarvan `graaf.html` (voor het artifact) en `test-graaf.html` (lokaal te openen).
+- `proef/terminal`: proef die Claude Code draait in een zelfgetekende terminal (GPUI Kit en `alacritty_terminal`). Starten: `~/.cargo/bin/cargo run --manifest-path proef/terminal/Cargo.toml`. De uitkomst staat in `research/native.md`.
 - `research/` bevat het onderzoek met bronnen:
   - `native.md` (2026-11-14): GPUI met GPUI Kit, Swift, Rune en andere native app-bases, en de terminalpakketten voor GPUI.
   - `werkwijze.md` (2026-11-04): hoe ik nu werk, gemeten.
