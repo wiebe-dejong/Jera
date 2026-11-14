@@ -13,4 +13,4 @@ Geef per sessie haar agents: van een teamlid de naam, de kleur die Claude Code h
 - Voor de naam staat het statusicoon: bezig is het boogje in `ok`, klaar het vinkje in `ok`, gestopt het streepje in `mute`.
 - De volgorde is die van het starten. Klaar en gestopt blijven op hun plek.
 - Een te lange naam wordt afgekapt met een beletselteken.
-- Wat een klik op een agent doet, is nog niet gekozen.
+- Een klik op een teamlid kiest zijn sessie, net als een klik op de sessieregel.

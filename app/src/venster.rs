@@ -73,12 +73,14 @@ struct Tab {
     oud_open: bool,
     oud_dicht: HashSet<String>,
     git: Entity<GitPaneel>,
+    /// De mappen waarin nu geplakt wordt, een keer per keer plakken.
+    plakken: Vec<PathBuf>,
 }
 
 impl Tab {
     fn new(root: PathBuf, git: Entity<GitPaneel>) -> Self {
         let open = HashMap::from([(root.clone(), lees_map(&root))]);
-        Self { root, sessies: Vec::new(), gekozen: 0, open, bestand: None, oud: Vec::new(), oud_open: false, oud_dicht: HashSet::new(), git }
+        Self { root, sessies: Vec::new(), gekozen: 0, open, bestand: None, oud: Vec::new(), oud_open: false, oud_dicht: HashSet::new(), git, plakken: Vec::new() }
     }
 
     /// Leest de open mappen opnieuw. Een map die er niet meer is, gaat dicht.
@@ -667,19 +669,22 @@ impl Cockpit {
                                 )
                             })
                         })
-                        .on_click(cx.listener(move |this, _, window, cx| {
-                            if let Some(tab) = this.tabs.get_mut(this.actief) {
-                                tab.gekozen = index;
-                            }
-                            this.focus(window, cx);
-                            cx.notify();
-                        }));
-                    div().child(regel).when(open, |d| d.children(agent_rijen(sessie, th, cx)))
+                        .on_click(cx.listener(move |this, _, window, cx| this.kies_sessie(index, window, cx)));
+                    div().child(regel).when(open, |d| d.children(agent_rijen(sessie, index, th, cx)))
                 },
             );
             div().child(kop).children(rijen)
         });
         div().children(groepen)
+    }
+
+    /// Kiest sessie `index` van de tab.
+    fn kies_sessie(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(tab) = self.tabs.get_mut(self.actief) {
+            tab.gekozen = index;
+        }
+        self.focus(window, cx);
+        cx.notify();
     }
 
     /// Klapt de agents van sessie `id` open of dicht.
@@ -825,11 +830,16 @@ impl Cockpit {
             // Een grote map kopiëren duurt even; het venster wacht er niet op.
             Keuze::Plak => {
                 tab.open.entry(map.clone()).or_insert_with(|| lees_map(&map));
+                tab.plakken.push(map.clone());
                 let root = tab.root.clone();
                 cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
-                    cx.background_executor().spawn(async move { bewerk::plak(&plakbaar, &map) }).await;
+                    let m = map.clone();
+                    cx.background_executor().spawn(async move { bewerk::plak(&plakbaar, &m) }).await;
                     let _ = this.update(cx, |this, cx| {
                         if let Some(tab) = this.tabs.iter_mut().find(|tab| tab.root == root) {
+                            if let Some(i) = tab.plakken.iter().position(|p| *p == map) {
+                                tab.plakken.remove(i);
+                            }
                             tab.ververs();
                             cx.notify();
                         }
@@ -1146,6 +1156,21 @@ impl Cockpit {
             .child(pijl)
             .child(icoon)
             .child(tekst)
+            // Het boogje van bezig zolang er in deze map geplakt wordt.
+            .when(tab.plakken.contains(&item.pad), |d| {
+                d.child(
+                    svg()
+                        .data(BOOG)
+                        .flex_none()
+                        .size(px(t::ICOON))
+                        .text_color(rgb(th.ok))
+                        .with_animation(
+                            SharedString::from(format!("plakt-{}", item.pad.display())),
+                            Animation::new(Duration::from_millis(1100)).repeat(),
+                            |s, d| s.with_transformation(Transformation::rotate(percentage(d))),
+                        ),
+                )
+            })
             .when(item.map, |d| {
                 let map = pad.clone();
                 d.child(
@@ -1356,8 +1381,9 @@ fn icoon(status: Status, id: impl Into<ElementId>, th: &Thema) -> AnyElement {
 }
 
 /// De agents onder een sessieregel: het team onder een kopje dat dichtklapt, met elk teamlid,
-/// en daaronder een kopje met alleen het aantal subagents.
-fn agent_rijen(sessie: &Sessie, th: &Thema, cx: &mut Context<Cockpit>) -> Vec<AnyElement> {
+/// en daaronder een kopje met alleen het aantal subagents. Een klik op een teamlid kiest de sessie,
+/// die op plek `plek` van de tab staat.
+fn agent_rijen(sessie: &Sessie, plek: usize, th: &Thema, cx: &mut Context<Cockpit>) -> Vec<AnyElement> {
     let id = sessie.id;
     let inspring = px(t::PAD + t::ICOON + t::GAP);
     let kopje = |label: &'static str| {
@@ -1388,6 +1414,7 @@ fn agent_rijen(sessie: &Sessie, th: &Thema, cx: &mut Context<Cockpit>) -> Vec<An
             for (index, agent) in team {
                 rijen.push(
                     div()
+                        .id(SharedString::from(format!("teamlid-{id}-{index}")))
                         .flex()
                         .items_center()
                         .gap(px(t::GAP))
@@ -1403,6 +1430,7 @@ fn agent_rijen(sessie: &Sessie, th: &Thema, cx: &mut Context<Cockpit>) -> Vec<An
                                 .text_color(rgb(th.team[agent.kleur.unwrap_or(0)]))
                                 .child(agent.tekst.clone()),
                         )
+                        .on_click(cx.listener(move |this, _, window, cx| this.kies_sessie(plek, window, cx)))
                         .into_any_element(),
                 );
             }

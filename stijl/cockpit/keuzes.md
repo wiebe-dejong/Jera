@@ -187,7 +187,9 @@ Aangepast op 15 november 2026, bij het bouwen: "ik wil de dropdown pijl rechts, 
 
 Aangepast op 15 november 2026: "doe subagents maar alleen een getal, teammembers wel de dropdowns zoals nu". Subagents zijn één kopje met alleen het aantal, zonder pijltje en zonder lijst. Het team klapt open en dicht zoals hierboven.
 
-Buiten het bord gebleven: wat een klik op een agent doet, en een agent die op mij wacht (nog niet gemeten).
+Buiten het bord gebleven: een agent die op mij wacht (nog niet gemeten).
+
+Gekozen op 15 november 2026, zonder bord: een klik op een teamlid kiest zijn sessie, net als een klik op de sessieregel.
 
 ## Onderdelen buiten het bord
 
