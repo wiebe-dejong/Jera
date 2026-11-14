@@ -45,6 +45,8 @@ Uit `research/werkwijze.md`:
 | Bestand openen | In de standaard-app die macOS voor dat bestandstype heeft | 2026-11-14 |
 | Paden in de terminal | Een pad in de terminal is aan te klikken en opent het bestand | 2026-11-14 |
 | Poorten | Een lijst van alle poorten waarop iets luistert, voor de hele computer. Per poort: stoppen en openen | 2026-11-14 |
+| Poorten, welke | Standaard alleen de poorten van een proces dat vanuit een map in mijn thuismap is gestart, ook als Claude het startte. De eigen poorten van Claude Code staan er niet bij. Een knop Alles toont de rest. Het getal op de knop in de tabbalk telt alleen de standaardlijst | 2026-11-14 |
+| Startcommando | Cockpit start elke sessie via mijn eigen shell met `claude`. Het is één vast commando, op één plek aan te passen | 2026-11-14 |
 | Paneel voor de hele computer | Poorten en agent-browser staan samen in één paneel, los van de tabs. Een knop rechts in de tabbalk opent het en toont de aantallen | 2026-11-14 |
 | Git | Een duidelijk git-overzicht. De invulling volgt apart | 2026-11-14 |
 | Documenten | Geen viewers in de app. Een klik op een document opent het direct in een externe app, zoals Safari, Preview of GridCraft | 2026-11-14 |
@@ -95,8 +97,6 @@ De schermen staan ook in het artifact https://claude.ai/artifact/7yXL3y5ykQbPFcZ
 ## Open
 
 - **Git:** de invulling van het overzicht.
-- **Poorten:** of processen van macOS zelf in de lijst staan.
-- **Startcommando:** waarmee een nieuwe sessie start.
-- **Uiterlijk:** kleuren, lettertypen, dichtheid en hoe de vijf statussen eruitzien.
+- **Uiterlijk:** kleuren, lettertypen, dichtheid en hoe de vijf statussen eruitzien. Dit wordt een aparte ronde.
 - **Meldingen:** later.
 - **Terminal:** `alacritty_terminal` negeert de codes voor werkmap, meldingen en voortgang (OSC 7, 9, 777, 9;4, 133). Niet getest met Claude Code.

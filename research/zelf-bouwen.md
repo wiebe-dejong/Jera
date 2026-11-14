@@ -58,6 +58,14 @@
   2. Na een time-out SIGKILL.
   3. Ook de procesboom aflopen, want `npm`, `uvicorn --reload` en turbo starten eigen groepen.
 - **Poorten:** `lsof -nP -iTCP -sTCP:LISTEN`, plus de werkmap van elk proces om het aan een project te koppelen.
+- **Gemeten op deze Mac op 2026-11-14:** er luisteren 25 poorten. Per proces, met de werkmap:
+  - 1 dev-server: `node` op 3055, werkmap in een projectmap;
+  - 4 van Claude Code zelf, werkmap in een projectmap;
+  - 5 van agent-browser en 5 van zijn Chrome, werkmap in een tijdelijke map onder `/private/tmp`;
+  - 5 van PyCharm en 1 van `cef_server` van PyCharm, werkmap `/` of in `/Applications`;
+  - 3 van macOS (ControlCenter op 5000 en 7000, `rapportd`), werkmap `/`;
+  - 1 van Raycast (`node` op 7265), werkmap `/`.
+- **Startcommando, gemeten op 2026-11-14:** `claude` is in `~/.zshrc` een functie die eerst `.env.local` uit de huidige map laadt en daarna Claude Code start. Het programma `claude` rechtstreeks starten slaat die stap over.
 - **Bewaken:**
   - health via HTTP;
   - bij een crash herstarten met backoff;
