@@ -141,6 +141,9 @@ impl Jera {
     }
 
     /// De sessies van de tab, per map: de hoofdmap eerst, dan de submappen.
+    /// Een bestand uit Finder neergezet op een map komt in die map, en ernaast in de hoofdmap.
+    /// Daarna staat Bestanden open met het nieuwe bestand gekozen, en het pad vanaf de hoofdmap
+    /// op het klembord.
     pub(super) fn sessielijst(&self, tab: &Tab, th: &Thema, cx: &mut Context<Self>) -> impl IntoElement {
         let mut mappen: Vec<&Path> = tab.sessies.iter().map(|s| s.map.as_path()).collect();
         mappen.sort_by_key(|map| (*map != tab.root, map.to_path_buf()));
@@ -252,9 +255,26 @@ impl Jera {
                     div().child(regel).when(open, |d| d.children(agent_rijen(sessie, index, th, cx)))
                 },
             );
-            div().child(kop).children(rijen)
+            let (sel, map_buf) = (th.sel, map.to_path_buf());
+            div()
+                .id(SharedString::from(format!("groep-{}", map.display())))
+                .child(kop)
+                .children(rijen)
+                .drag_over::<ExternalPaths>(move |d, _, _, _| d.bg(rgb(sel)))
+                .on_drop::<ExternalPaths>(cx.listener(move |this, paden: &ExternalPaths, _, cx| {
+                    this.stand = Stand::Bestanden;
+                    this.plak_in(paden.paths().to_vec(), map_buf.clone(), true, cx)
+                }))
         });
-        div().children(groepen)
+        let root = tab.root.clone();
+        div()
+            .id("sessielijst")
+            .min_h_full()
+            .children(groepen)
+            .on_drop::<ExternalPaths>(cx.listener(move |this, paden: &ExternalPaths, _, cx| {
+                this.stand = Stand::Bestanden;
+                this.plak_in(paden.paths().to_vec(), root.clone(), true, cx)
+            }))
     }
 
     /// Kiest sessie `index` van de tab.

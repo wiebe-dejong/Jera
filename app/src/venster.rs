@@ -19,9 +19,9 @@ mod onderdelen;
 mod poortenpaneel;
 mod sessielijst;
 
-use bestandsboom::{Item, Menu, kort_pad, lees_map};
+use bestandsboom::{Gesleept, Item, Menu, kort_pad, lees_map};
 #[cfg(feature = "schermafdruk")]
-use bestandsboom::Keuze;
+use bestandsboom::{Keuze, Sub};
 use naamveld::{Doel, NaamVeld};
 pub(crate) use onderdelen::knop_vak;
 use onderdelen::*;
@@ -382,7 +382,7 @@ impl Jera {
     /// de iconen zoals het menu, "nl" en "en" de taal, "oud" klapt het blok oud open of dicht,
     /// "dag D" klapt die dag in het blok oud open of dicht, "hervat N" hervat de oude sessie op plek N en "git" klapt het
     /// git-paneel open of dicht. "menu pad" opent het menu van dat pad, "keuze woord" kiest
-    /// daarin, "naam tekst" typt die naam in het veld en drukt op Enter. "openen" opent het scherm
+    /// daarin ("pad" opent de lijst naast pad kopiëren, "vanaf" en "volledig" kiezen daaruit), "naam tekst" typt die naam in het veld en drukt op Enter. "openen" opent het scherm
     /// Openen, "nieuw" opent het met het naamveld, "zoek tekst" typt in het veld, "github" toont de
     /// repo's van GitHub. "agents" klapt
     /// de agents van de gekozen sessie open of dicht. "sessiemenu" opent
@@ -434,10 +434,16 @@ impl Jera {
                     "nieuw" => Keuze::Nieuw(Some(".md")),
                     "map" => Keuze::Nieuw(None),
                     "soorten" => {
-                        self.zet_nieuw_open(true, cx);
+                        self.zet_sub(Some(Sub::Nieuw), cx);
+                        return;
+                    }
+                    "pad" => {
+                        self.zet_sub(Some(Sub::Pad), cx);
                         return;
                     }
                     "kopieer" => Keuze::Kopieer,
+                    "volledig" => Keuze::Pad { vanaf_root: false },
+                    "vanaf" => Keuze::Pad { vanaf_root: true },
                     "plak" => Keuze::Plak,
                     "hernoem" => Keuze::Hernoem,
                     _ => Keuze::Prullenmand,
@@ -701,7 +707,20 @@ impl Jera {
                 let hoofdmap = Item { pad: tab.root.clone(), map: true };
                 let mut rijen = vec![self.boom_rij(tab, &hoofdmap, 0, Some(kort_pad(&tab.root)), th, cx)];
                 self.boom(tab, &tab.root, 1, th, cx, &mut rijen);
-                div().children(rijen).into_any_element()
+                // Neerzetten onder de regels gaat in de hoofdmap.
+                let root = tab.root.clone();
+                div()
+                    .id("boom")
+                    .min_h_full()
+                    .children(rijen)
+                    .on_drop::<Gesleept>({
+                        let root = root.clone();
+                        cx.listener(move |this, gesleept: &Gesleept, _, cx| this.zet_neer(&gesleept.0, &root, root.clone(), cx))
+                    })
+                    .on_drop::<ExternalPaths>(
+                        cx.listener(move |this, paden: &ExternalPaths, _, cx| this.plak_in(paden.paths().to_vec(), root.clone(), true, cx)),
+                    )
+                    .into_any_element()
             }
             (Stand::Sessies | Stand::Bestanden, None) => lege_staat(
                 th,
@@ -721,7 +740,16 @@ impl Jera {
             .border_r(px(t::LIJN))
             .border_color(rgb(th.line))
             .child(schakelaar)
-            .child(div().id("kolom").flex_1().overflow_y_scroll().child(inhoud))
+            .child(
+                div()
+                    .relative()
+                    .flex()
+                    .flex_col()
+                    .flex_1()
+                    .min_h_0()
+                    .child(div().id("kolom").flex_1().overflow_y_scroll().child(inhoud))
+                    .when(self.stand == Stand::Sessies && !self.tabs.is_empty(), |d| d.child(toevoegen_vlak(th))),
+            )
             .when_some(self.tabs.get(self.actief).filter(|_| self.stand == Stand::Sessies), |d, tab| {
                 d.child(self.oud_blok(tab, th, cx))
             })
@@ -947,6 +975,33 @@ impl Jera {
 }
 
 /// Wat er staat als er niets is: één regel in `mute` en de knop die het laat verschijnen.
+/// Over de sessielijst zolang ik een bestand uit Finder erboven sleep. Het vlak vangt de drop
+/// niet zelf: die gaat naar de map eronder.
+fn toevoegen_vlak(th: &Thema) -> impl IntoElement {
+    let rand = px(8.0);
+    div()
+        .id("toevoegen")
+        .absolute()
+        .top(rand)
+        .bottom(rand)
+        .left(rand)
+        .right(rand)
+        .flex()
+        .flex_col()
+        .items_center()
+        .justify_center()
+        .gap(px(t::GAP))
+        .bg(rgba((th.bg << 8) | 0xE6))
+        .border(px(t::LIJN))
+        .border_dashed()
+        .border_color(rgb(th.accent))
+        .text_color(rgb(th.ink))
+        .invisible()
+        .drag_over::<ExternalPaths>(|d, _, _, _| d.visible())
+        .child(svg().data(NIEUW).size(px(t::ICOON)).text_color(rgb(th.accent)))
+        .child(t("bestand toevoegen", "add file"))
+}
+
 fn lege_staat(th: &Thema, regel: &'static str, knop: impl IntoElement) -> impl IntoElement {
     div()
         .flex()

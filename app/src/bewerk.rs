@@ -21,7 +21,9 @@ const KOPIEER: &str = r#"function run(argv) {
 }"#;
 
 /// Kopieert `bronnen` naar `map`. Een naam die er al is, krijgt "kopie" erachter, zoals in Finder.
-pub fn plak(bronnen: &[PathBuf], map: &Path) {
+/// Geeft de nieuwe paden.
+pub fn plak(bronnen: &[PathBuf], map: &Path) -> Vec<PathBuf> {
+    let mut nieuw = Vec::new();
     for bron in bronnen {
         // Een map in zichzelf kopiëren houdt niet op.
         if map.starts_with(bron) && bron.is_dir() {
@@ -29,7 +31,29 @@ pub fn plak(bronnen: &[PathBuf], map: &Path) {
         }
         let Some(naam) = bron.file_name() else { continue };
         let doel = vrije_naam(map, &naam.to_string_lossy());
-        let _ = Command::new("cp").arg("-Rp").arg(bron).arg(doel).status();
+        if Command::new("cp").arg("-Rp").arg(bron).arg(&doel).status().is_ok_and(|s| s.success()) {
+            nieuw.push(doel);
+        }
+    }
+    nieuw
+}
+
+/// Verplaatst `bron` naar `map`. Een naam die er al is, krijgt "kopie" erachter. Geeft het nieuwe pad.
+pub fn verplaats(bron: &Path, map: &Path) -> Option<PathBuf> {
+    // Al in die map, of een map in zichzelf.
+    if bron.parent() == Some(map) || map.starts_with(bron) {
+        return None;
+    }
+    let doel = vrije_naam(map, &bron.file_name()?.to_string_lossy());
+    std::fs::rename(bron, &doel).ok().map(|_| doel)
+}
+
+/// `pad` vanaf `root`, de hoofdmap van het project. De hoofdmap zelf is `.`.
+pub fn vanaf(pad: &Path, root: &Path) -> String {
+    match pad.strip_prefix(root) {
+        Ok(rest) if rest.as_os_str().is_empty() => ".".to_string(),
+        Ok(rest) => rest.display().to_string(),
+        Err(_) => pad.display().to_string(),
     }
 }
 

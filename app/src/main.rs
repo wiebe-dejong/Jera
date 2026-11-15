@@ -127,7 +127,9 @@ fn dock_icoon(window: &Window) {
 /// JERA_TYPE=stap|stap typt de stappen een voor een in de gekozen sessie, vanaf acht seconden.
 /// In een stap staat \\r voor Enter en \\e voor Escape. Een stap met @ ervoor gaat naar
 /// `Jera::test_stap`. "muis x y" zet de muis op die plek, "klik x y" klikt daar en "toets x"
-/// drukt die toets in zoals het toetsenbord.
+/// drukt die toets in zoals het toetsenbord. "sleep x y x y" sleept van de ene plek naar de
+/// andere, "drop x y pad" zet dat bestand daar neer zoals vanuit Finder, "boven x y pad" sleept het
+/// daarheen zonder los te laten.
 #[cfg(feature = "schermafdruk")]
 fn testhulp(window: &mut Window, cx: &mut Context<Jera>) {
     use std::time::Duration;
@@ -190,6 +192,41 @@ fn testhulp(window: &mut Window, cx: &mut Context<Jera>) {
                             window.dispatch_event(PlatformInput::MouseDown(neer), cx);
                             let op = MouseUpEvent { button: MouseButton::Left, position, modifiers: Modifiers::default(), click_count: 1 };
                             window.dispatch_event(PlatformInput::MouseUp(op), cx);
+                        });
+                    }
+                    None
+                }
+                Some(stap) if stap.starts_with("sleep ") => {
+                    let p: Vec<f32> = stap[6..].split(' ').filter_map(|n| n.parse().ok()).collect();
+                    if let [x1, y1, x2, y2] = p[..] {
+                        let _ = cx.update(|window, cx| {
+                            let (van, naar) = (point(px(x1), px(y1)), point(px(x2), px(y2)));
+                            let neer = MouseDownEvent { button: MouseButton::Left, position: van, modifiers: Modifiers::default(), click_count: 1, first_mouse: false };
+                            window.dispatch_event(PlatformInput::MouseDown(neer), cx);
+                            for position in [van + point(px(10.0), px(10.0)), naar] {
+                                let event = MouseMoveEvent { position, pressed_button: Some(MouseButton::Left), modifiers: Modifiers::default() };
+                                window.dispatch_event(PlatformInput::MouseMove(event), cx);
+                            }
+                            let op = MouseUpEvent { button: MouseButton::Left, position: naar, modifiers: Modifiers::default(), click_count: 1 };
+                            window.dispatch_event(PlatformInput::MouseUp(op), cx);
+                        });
+                    }
+                    None
+                }
+                Some(stap) if stap.starts_with("drop ") || stap.starts_with("boven ") => {
+                    let los = stap.starts_with("drop ");
+                    let mut delen = stap.splitn(4, ' ').skip(1);
+                    if let (Some(Ok(x)), Some(Ok(y)), Some(pad)) =
+                        (delen.next().map(str::parse), delen.next().map(str::parse), delen.next())
+                    {
+                        let _ = cx.update(|window, cx| {
+                            let position = point(px(x), px(y));
+                            let paths = ExternalPaths([PathBuf::from(pad)].into_iter().collect());
+                            window.dispatch_event(PlatformInput::FileDrop(FileDropEvent::Entered { position, paths }), cx);
+                            window.dispatch_event(PlatformInput::FileDrop(FileDropEvent::Pending { position }), cx);
+                            if los {
+                                window.dispatch_event(PlatformInput::FileDrop(FileDropEvent::Submit { position }), cx);
+                            }
                         });
                     }
                     None

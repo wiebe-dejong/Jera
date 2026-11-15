@@ -14,8 +14,42 @@ pub(super) struct Menu {
     plek: Point<Pixels>,
     /// Wat er op het klembord van macOS staat om te plakken.
     plakbaar: Vec<PathBuf>,
-    /// De lijst met soorten naast nieuw staat open.
-    nieuw_open: bool,
+    /// De lijst naast nieuw of naast pad kopiëren staat open.
+    sub: Option<Sub>,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+pub(super) enum Sub {
+    Nieuw,
+    Pad,
+}
+
+/// Een bestand of map die ik uit de bestandsboom sleep.
+#[derive(Clone)]
+pub(super) struct Gesleept(pub(super) PathBuf);
+
+impl Render for Gesleept {
+    fn render(&mut self, window: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        let th = t::thema(window);
+        let icoon = match self.0.is_dir() {
+            true => bestandsicoon::map(false, th),
+            false => bestandsicoon::bestand(&self.0, th),
+        };
+        div()
+            .flex()
+            .items_center()
+            .gap(px(GAP_KLEIN))
+            .h(px(t::H_RIJ))
+            .px(px(t::PAD))
+            .bg(rgb(th.bg))
+            .border(px(t::LIJN))
+            .border_color(rgb(th.line_strong))
+            .text_color(rgb(th.ink))
+            .font_family(t::LETTER)
+            .text_size(px(t::TEKST))
+            .child(icoon)
+            .child(naam(&self.0))
+    }
 }
 
 /// Wat ik onder nieuw kan maken, na de map: het woord en de extensie.
@@ -39,6 +73,8 @@ pub(super) const SOORTEN: [(&str, &str); 13] = [
 pub(super) enum Keuze {
     Nieuw(Option<&'static str>),
     Kopieer,
+    /// Het pad als tekst: vanaf de hoofdmap van het project, of helemaal.
+    Pad { vanaf_root: bool },
     Plak,
     Hernoem,
     Prullenmand,
@@ -97,7 +133,7 @@ impl Jera {
                 })
             })
             .unwrap_or_default();
-        self.menu = Some(Menu { pad, plek, plakbaar, nieuw_open: false });
+        self.menu = Some(Menu { pad, plek, plakbaar, sub: None });
         cx.notify();
     }
 
@@ -121,26 +157,14 @@ impl Jera {
                 self.start_naam(Doel::Hernoem(pad), &naam, 0..stam, window, cx);
             }
             Keuze::Kopieer => cx.background_executor().spawn(async move { bewerk::kopieer(&pad) }).detach(),
-            // Een grote map kopiëren duurt even; het venster wacht er niet op.
-            Keuze::Plak => {
-                tab.open.entry(map.clone()).or_insert_with(|| lees_map(&map));
-                tab.plakken.push(map.clone());
-                let root = tab.root.clone();
-                cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
-                    let m = map.clone();
-                    cx.background_executor().spawn(async move { bewerk::plak(&plakbaar, &m) }).await;
-                    let _ = this.update(cx, |this, cx| {
-                        if let Some(tab) = this.tabs.iter_mut().find(|tab| tab.root == root) {
-                            if let Some(i) = tab.plakken.iter().position(|p| *p == map) {
-                                tab.plakken.remove(i);
-                            }
-                            tab.ververs();
-                            cx.notify();
-                        }
-                    });
-                })
-                .detach();
+            Keuze::Pad { vanaf_root } => {
+                let tekst = match vanaf_root {
+                    true => bewerk::vanaf(&pad, &tab.root),
+                    false => pad.display().to_string(),
+                };
+                cx.write_to_clipboard(ClipboardItem::new_string(tekst));
             }
+            Keuze::Plak => self.plak_in(plakbaar, map, false, cx),
             Keuze::Prullenmand => {
                 bewerk::prullenmand(&pad);
                 if tab.bestand.as_ref().is_some_and(|b| b.starts_with(&pad)) {
@@ -152,14 +176,64 @@ impl Jera {
         cx.notify();
     }
 
-    pub(super) fn zet_nieuw_open(&mut self, open: bool, cx: &mut Context<Self>) {
-        if let Some(menu) = self.menu.as_mut().filter(|m| m.nieuw_open != open) {
-            menu.nieuw_open = open;
+    /// Kopieert `bronnen` naar `map` in de actieve tab, en zet de mappen tot `map` open.
+    /// Met `pad_kopieren` (uit Finder) is het eerste nieuwe bestand daarna gekozen en staan de
+    /// nieuwe paden vanaf de hoofdmap op het klembord. Een grote map kopiëren duurt even; het
+    /// venster wacht er niet op.
+    pub(super) fn plak_in(&mut self, bronnen: Vec<PathBuf>, map: PathBuf, pad_kopieren: bool, cx: &mut Context<Self>) {
+        let Some(tab) = self.tabs.get_mut(self.actief) else { return };
+        for m in map.ancestors().take_while(|m| m.starts_with(&tab.root)) {
+            tab.open.entry(m.to_path_buf()).or_insert_with(|| lees_map(m));
+        }
+        tab.plakken.push(map.clone());
+        let root = tab.root.clone();
+        cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
+            let m = map.clone();
+            let nieuw = cx.background_executor().spawn(async move { bewerk::plak(&bronnen, &m) }).await;
+            let _ = this.update(cx, |this, cx| {
+                if pad_kopieren && !nieuw.is_empty() {
+                    let paden: Vec<String> = nieuw.iter().map(|p| bewerk::vanaf(p, &root)).collect();
+                    cx.write_to_clipboard(ClipboardItem::new_string(paden.join(" ")));
+                }
+                if let Some(tab) = this.tabs.iter_mut().find(|tab| tab.root == root) {
+                    if let Some(i) = tab.plakken.iter().position(|p| *p == map) {
+                        tab.plakken.remove(i);
+                    }
+                    if pad_kopieren && !nieuw.is_empty() {
+                        tab.bestand = nieuw.first().cloned();
+                    }
+                    tab.ververs();
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
+    }
+
+    /// Een regel uit de bestandsboom is neergezet op `map`. Op zijn eigen regel is het een klik.
+    pub(super) fn zet_neer(&mut self, bron: &Path, doel: &Path, map: PathBuf, cx: &mut Context<Self>) {
+        if bron == doel {
+            return self.klik_boom(bron, cx);
+        }
+        let Some(tab) = self.tabs.get_mut(self.actief) else { return };
+        let Some(nieuw) = bewerk::verplaats(bron, &map) else { return };
+        if let Some(rest) = tab.bestand.as_ref().and_then(|b| b.strip_prefix(bron).ok()) {
+            tab.bestand = Some(nieuw.join(rest));
+        }
+        tab.open.entry(map.clone()).or_insert_with(|| lees_map(&map));
+        tab.ververs();
+        cx.notify();
+    }
+
+    pub(super) fn zet_sub(&mut self, sub: Option<Sub>, cx: &mut Context<Self>) {
+        if let Some(menu) = self.menu.as_mut().filter(|m| m.sub != sub) {
+            menu.sub = sub;
             cx.notify();
         }
     }
 
-    /// Het menu op de plek van de klik. Onder de muis gaat naast nieuw de lijst met soorten open.
+    /// Het menu op de plek van de klik. Onder de muis gaat naast nieuw de lijst met soorten open,
+    /// naast pad kopiëren het volledige pad en het pad vanaf de hoofdmap.
     pub(super) fn menu_vak(&self, menu: &Menu, th: &Thema, cx: &mut Context<Self>) -> impl IntoElement {
         let hoofdmap = self.tabs.get(self.actief).is_some_and(|tab| tab.root == menu.pad);
         // Een regel: icoon, woord en rechts eventueel iets in `mute`.
@@ -179,7 +253,7 @@ impl Jera {
             regel(label, actie_icoon(icoon, th), label, None)
                 .on_hover(cx.listener(|this, hover: &bool, _, cx| {
                     if *hover {
-                        this.zet_nieuw_open(false, cx);
+                        this.zet_sub(None, cx);
                     }
                 }))
                 .when(kan, |d| {
@@ -188,17 +262,39 @@ impl Jera {
                 })
                 .when(!kan, |d| d.text_color(rgb(th.mute)))
         };
-        let nieuw = regel("nieuw", actie_icoon(NIEUW, th), t("nieuw", "new"), Some(pijl(PIJL_DICHT, th).into_any_element()))
-            .when(menu.nieuw_open, |d| d.bg(rgb(th.sel)))
-            .on_hover(cx.listener(|this, hover: &bool, _, cx| {
-                if *hover {
-                    this.zet_nieuw_open(true, cx);
-                }
-            }))
-            .on_click(cx.listener(|this, _, _, cx| this.zet_nieuw_open(true, cx)));
+        // Een regel met een lijst ernaast, die onder de muis opengaat.
+        let met_lijst = |id: &'static str, icoon: &'static [u8], label: &'static str, sub: Sub| {
+            regel(id, actie_icoon(icoon, th), label, Some(pijl(PIJL_DICHT, th).into_any_element()))
+                .when(menu.sub == Some(sub), |d| d.bg(rgb(th.sel)))
+                .on_hover(cx.listener(move |this, hover: &bool, _, cx| {
+                    if *hover {
+                        this.zet_sub(Some(sub), cx);
+                    }
+                }))
+                .on_click(cx.listener(move |this, _, _, cx| this.zet_sub(Some(sub), cx)))
+        };
         let scheiding = || scheiding(th);
         let vak = || menuvak(th).min_w(px(180.0));
-        let soorten = menu.nieuw_open.then(|| {
+        let root = self.tabs.get(self.actief).map(|tab| tab.root.clone()).unwrap_or_default();
+        let paden = (menu.sub == Some(Sub::Pad)).then(|| {
+            // Afgekapt aan het begin: het eind van een pad zegt het meest.
+            let waarde = |tekst: String| {
+                div().max_w(px(240.0)).overflow_hidden().whitespace_nowrap().text_ellipsis_start().text_color(rgb(th.mute)).child(tekst).into_any_element()
+            };
+            let pad = |id: &'static str, label: &'static str, vanaf_root: bool, tekst: String| {
+                regel(id, actie_icoon(KOPIEER, th), label, Some(waarde(tekst)))
+                    .gap(px(16.0))
+                    .hover(|d| d.bg(rgb(th.sel)))
+                    .on_click(cx.listener(move |this, _, window, cx| this.kies(Keuze::Pad { vanaf_root }, window, cx)))
+            };
+            vak()
+                .ml(px(-t::LIJN))
+                // Naast de regel pad kopiëren, niet bovenaan het menu.
+                .mt(px(t::H_RIJ * 3.0 + 9.0))
+                .child(pad("pad-root", t("vanaf projectmap", "from project root"), true, bewerk::vanaf(&menu.pad, &root)))
+                .child(pad("pad-volledig", t("volledig pad", "full path"), false, menu.pad.display().to_string()))
+        });
+        let soorten = (menu.sub == Some(Sub::Nieuw)).then(|| {
             let soort = |id: &'static str, icoon: AnyElement, label: &'static str, ext: Option<&'static str>| {
                 let rechts = ext.filter(|e| !e.is_empty()).map(|e| div().text_color(rgb(th.mute)).child(e).into_any_element());
                 regel(id, icoon, label, rechts)
@@ -232,17 +328,19 @@ impl Jera {
                     }))
                     .child(
                         vak()
-                            .child(nieuw)
+                            .child(met_lijst("nieuw", NIEUW, t("nieuw", "new"), Sub::Nieuw))
                             .child(scheiding())
                             .child(actie(Keuze::Kopieer, KOPIEER, t("kopiëren", "copy"), true))
                             .child(actie(Keuze::Plak, PLAK, t("plakken", "paste"), !menu.plakbaar.is_empty()))
+                            .child(met_lijst("pad", KOPIEER, t("pad kopiëren", "copy path"), Sub::Pad))
                             .when(!hoofdmap, |d| {
                                 d.child(scheiding())
                                     .child(actie(Keuze::Hernoem, HERNOEM, t("naam wijzigen", "rename"), true))
                                     .child(actie(Keuze::Prullenmand, PRULLENMAND, t("naar prullenmand", "move to trash"), true))
                             }),
                     )
-                    .children(soorten),
+                    .children(soorten)
+                    .children(paden),
             ),
         )
         .with_priority(1)
@@ -306,6 +404,11 @@ impl Jera {
             None => tab.bestand.as_ref() == Some(&item.pad),
         };
         let pad = item.pad.clone();
+        let map = match item.map {
+            true => pad.clone(),
+            false => pad.parent().map(Path::to_path_buf).unwrap_or_default(),
+        };
+        let (sel, accent) = (th.sel, th.accent);
         let mut naam = naam(&item.pad);
         if item.map {
             naam.push('/');
@@ -387,6 +490,25 @@ impl Jera {
             .on_mouse_down(MouseButton::Right, {
                 let pad = pad.clone();
                 cx.listener(move |this, e: &MouseDownEvent, _, cx| this.open_menu(pad.clone(), e.position, cx))
+            })
+            // Slepen verplaatst binnen het project; buiten het venster is het een gewoon bestand,
+            // voor Finder of een andere app. De hoofdmap blijft staan.
+            .when(diepte > 0, |d| {
+                d.on_drag(Gesleept(pad.clone()), |gesleept, _, _, cx| cx.new(|_| gesleept.clone()))
+                    .external_drag_payload::<Gesleept>(|gesleept, _, _| {
+                        Some(ExternalDragPayload::Files(FileDragPaths::new([(gesleept.0.clone(), gesleept.0.is_dir())])))
+                    })
+            })
+            // Neerzetten gaat in de map zelf, of in de map waar het bestand in staat.
+            .drag_over::<Gesleept>(move |d, _, _, _| d.bg(rgb(sel)).border_color(rgb(accent)))
+            .drag_over::<ExternalPaths>(move |d, _, _, _| d.bg(rgb(sel)).border_color(rgb(accent)))
+            .on_drop::<Gesleept>({
+                let (pad, map) = (pad.clone(), map.clone());
+                cx.listener(move |this, gesleept: &Gesleept, _, cx| this.zet_neer(&gesleept.0, &pad, map.clone(), cx))
+            })
+            .on_drop::<ExternalPaths>({
+                let map = map.clone();
+                cx.listener(move |this, paden: &ExternalPaths, _, cx| this.plak_in(paden.paths().to_vec(), map.clone(), true, cx))
             })
             .on_click(cx.listener(move |this, _, _, cx| this.klik_boom(&pad, cx)))
             .into_any_element()
