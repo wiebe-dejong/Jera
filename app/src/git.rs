@@ -344,10 +344,45 @@ fn doe(map: &Path, args: &[&str]) -> Result<(), String> {
     Err(tekst.lines().map(str::trim).find(|l| !l.is_empty() && !l.starts_with("hint:")).unwrap_or("mislukt").to_string())
 }
 
-/// Commit alles wat in de map gewijzigd is, ook nieuwe bestanden.
-pub fn commit(map: &Path, bericht: &str) -> Result<(), String> {
-    doe(map, &["add", "-A"])?;
-    doe(map, &["commit", "-q", "-m", bericht])
+/// Een bestand dat nog niet gecommit is.
+pub struct Wijziging {
+    /// M gewijzigd, A nieuw, D verwijderd, R hernoemd.
+    pub soort: char,
+    /// Het pad vanaf de map.
+    pub pad: String,
+    /// Bij een hernoemd bestand: hoe het heette.
+    pub oud: Option<String>,
+}
+
+/// Wat in de map nog niet gecommit is, nieuwe bestanden meegeteld.
+pub fn wijzigingen(map: &Path) -> Vec<Wijziging> {
+    // niet via `git()`: die knipt de spatie weg waarmee de eerste regel kan beginnen
+    let uit = Command::new("git").env("GIT_OPTIONAL_LOCKS", "0").arg("-C").arg(map).args(["status", "--porcelain", "-uall", "-z"]).output();
+    let uit = uit.map(|u| String::from_utf8_lossy(&u.stdout).into_owned()).unwrap_or_default();
+    let mut delen = uit.split('\0');
+    let mut lijst = Vec::new();
+    while let Some(deel) = delen.next() {
+        let (Some(xy), Some(pad)) = (deel.get(..2), deel.get(3..)) else { continue };
+        let soort = match xy {
+            "??" => 'A',
+            _ if xy.contains('D') => 'D',
+            _ => xy.chars().find(|c| *c != ' ').unwrap_or('M'),
+        };
+        // na een hernoemd bestand volgt hoe het heette
+        let oud = if xy.contains(['R', 'C']) { delen.next().map(str::to_string) } else { None };
+        lijst.push(Wijziging { soort, pad: pad.to_string(), oud });
+    }
+    lijst
+}
+
+/// Commit deze bestanden, ook nieuwe en verwijderde. Wat er niet bij staat, blijft zoals het was.
+pub fn commit(map: &Path, bericht: &str, paden: &[String]) -> Result<(), String> {
+    // letterlijk: `app/[id]/page.tsx` is een pad, geen patroon
+    let paden = paden.iter().map(String::as_str);
+    let add: Vec<&str> = ["--literal-pathspecs", "add", "-A", "--"].into_iter().chain(paden.clone()).collect();
+    doe(map, &add)?;
+    let commit: Vec<&str> = ["--literal-pathspecs", "commit", "-q", "-m", bericht, "--"].into_iter().chain(paden).collect();
+    doe(map, &commit)
 }
 
 /// Pusht een branch; een branch die nog niet op GitHub staat krijgt daar een upstream.
@@ -406,12 +441,16 @@ pub fn verwijder(map: &Path, branch: &str, lokaal: bool, op_github: bool) -> Res
     Ok(())
 }
 
-/// Een commitbericht van één regel voor de wijzigingen, geschreven door Claude (`claude -p`).
+/// Een commitbericht van één regel voor de wijzigingen in deze bestanden, geschreven door Claude (`claude -p`).
 /// Claude draait buiten de repo, zodat er geen sessie bij dit project bijkomt.
-pub fn bericht(map: &Path) -> Option<String> {
-    let mut diff = git(map, &["diff", "HEAD"]);
+pub fn bericht(map: &Path, paden: &[String]) -> Option<String> {
+    let over = |args: &[&'static str]| {
+        let args: Vec<&str> = ["--literal-pathspecs"].into_iter().chain(args.iter().copied()).chain(["--"]).chain(paden.iter().map(String::as_str)).collect();
+        git(map, &args)
+    };
+    let mut diff = over(&["diff", "HEAD"]);
     if diff.is_empty() {
-        diff = git(map, &["diff"]);
+        diff = over(&["diff"]);
     }
     if diff.len() > 40_000 {
         let mut eind = 40_000;
@@ -424,7 +463,7 @@ pub fn bericht(map: &Path) -> Option<String> {
         "Schrijf het commitbericht voor deze wijzigingen: één regel, in dezelfde taal en stijl als de eerdere berichten. \
          Geef alleen het bericht, zonder aanhalingstekens.\n\nEerdere berichten:\n{}\n\nGewijzigd:\n{}\n\nDiff:\n{diff}",
         git(map, &["log", "-8", "--format=%s"]),
-        git(map, &["status", "--short", "-uall"]),
+        over(&["status", "--short", "-uall"]),
     );
     let eigen = std::env::home_dir().map(|h| h.join(".local/bin/claude")).filter(|p| p.exists());
     let mut cmd = match eigen {
@@ -467,7 +506,7 @@ mod tests {
             doe(&map, args).unwrap();
         }
         std::fs::write(map.join("a.txt"), "a\n").unwrap();
-        commit(&map, "eerste").unwrap();
+        commit(&map, "eerste", &["a.txt".into()]).unwrap();
         map
     }
 
@@ -499,11 +538,30 @@ mod tests {
     }
 
     #[test]
+    fn commit_neemt_alleen_de_gekozen_bestanden_mee() {
+        let map = repo("gekozen");
+        std::fs::write(map.join("b.txt"), "b\n").unwrap();
+        commit(&map, "b", &["b.txt".into()]).unwrap();
+        std::fs::write(map.join("a.txt"), "a\nwip\n").unwrap();
+        std::fs::remove_file(map.join("b.txt")).unwrap();
+        std::fs::create_dir_all(map.join("app/[id]")).unwrap();
+        std::fs::write(map.join("app/[id]/nieuw.txt"), "n\n").unwrap();
+        std::fs::write(map.join("blijft.txt"), "x\n").unwrap();
+        let staat = |map: &Path| wijzigingen(map).into_iter().map(|w| format!("{} {}", w.soort, w.pad)).collect::<Vec<_>>();
+        assert_eq!(staat(&map), ["M a.txt", "D b.txt", "A app/[id]/nieuw.txt", "A blijft.txt"]);
+
+        commit(&map, "deel", &["a.txt".into(), "b.txt".into(), "app/[id]/nieuw.txt".into()]).unwrap();
+        assert_eq!(staat(&map), ["A blijft.txt"]);
+        assert_eq!(git(&map, &["show", "--name-status", "--format=", "HEAD"]), "M\ta.txt\nA\tapp/[id]/nieuw.txt\nD\tb.txt");
+        let _ = std::fs::remove_dir_all(&map);
+    }
+
+    #[test]
     fn verwijder_haalt_een_gemergde_branch_weg() {
         let map = repo("verwijder");
         doe(&map, &["switch", "-q", "-c", "feat/y"]).unwrap();
         std::fs::write(map.join("y.txt"), "y\n").unwrap();
-        commit(&map, "y").unwrap();
+        commit(&map, "y", &["y.txt".into()]).unwrap();
         doe(&map, &["switch", "-q", "main"]).unwrap();
         doe(&map, &["merge", "-q", "--no-ff", "-m", "Merge branch 'feat/y'", "feat/y"]).unwrap();
         assert!(branch(&lees(&map).unwrap(), "feat/y").merged_into.is_some());

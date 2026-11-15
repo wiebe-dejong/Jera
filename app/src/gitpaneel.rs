@@ -1,5 +1,6 @@
 //! Het git-paneel: de branches van de repo als graaf, rechts naast de terminal. Een klik op een branch
 //! opent zijn menu: commit, push, update, checkout en verwijderen; bij de hoofdbranch ook opruimen.
+//! Commit opent de commit view op de plek van de graaf, zie `commit.rs`.
 //! De stijl komt uit `stijl/design-system/components/GitPaneel`:
 //! recht, de namen getrapt boven de lijnen, de dagen rechts op hun lijn.
 
@@ -13,16 +14,14 @@ use std::{
 };
 
 use chrono::{Datelike, Local, TimeZone, Timelike};
-use gpui_kit::{
-    base::input::{Input, InputEvent, InputState},
-    prelude::FluentBuilder,
-    *,
-};
+use gpui_kit::{prelude::FluentBuilder, *};
 
 use crate::git::{self, Branch, Commit, Repo};
 use crate::openen::{GitHub, gh};
 use crate::taal;
 use crate::thema::{self as t, Thema};
+
+mod commit;
 
 /// Zo oud mogen de gelezen branches zijn als het paneel open is.
 const VERVERS: Duration = Duration::from_secs(20);
@@ -65,23 +64,17 @@ pub struct GitPaneel {
     claude_bezig: bool,
     /// Het menu van een branch: de naam en waar ik klikte.
     menu: Option<(String, Point<Pixels>)>,
-    /// Het veld voor het commitbericht, zolang het open is.
-    veld: Option<Veld>,
+    /// De commit view, zolang hij open is: dan staat hij op de plek van de graaf.
+    commit: Option<commit::CommitView>,
     /// Wat Jera nu doet, zoals "pushen feat/x".
     bezig: Option<String>,
     fout: Option<String>,
 }
 
-struct Veld {
-    branch: String,
-    map: PathBuf,
-    invoer: Entity<InputState>,
-    _volg: Subscription,
-}
-
 #[derive(Clone, Copy, PartialEq)]
 enum Actie {
-    Commit,
+    /// In het menu opent dit de commit view; daarin commit het, en pusht het daarna als `push`.
+    Commit { push: bool },
     Push { nieuw: bool },
     Update,
     Checkout,
@@ -117,7 +110,7 @@ impl GitPaneel {
             haalt_op: false,
             claude_bezig: false,
             menu: None,
-            veld: None,
+            commit: None,
             bezig: None,
             fout: None,
         }
@@ -132,7 +125,6 @@ impl GitPaneel {
 
     fn sluit_menu(&mut self, cx: &mut Context<Self>) {
         self.menu = None;
-        self.veld = None;
         cx.notify();
     }
 
@@ -145,14 +137,17 @@ impl GitPaneel {
         }
         let root = self.root.clone();
         let map = b.map.clone();
+        let tak = naam.clone();
+        // commit en push: de push volgt op een gelukte commit
+        let daarna = (actie == Actie::Commit { push: true }).then_some(Actie::Push { nieuw: b.origin.is_none() });
         let taak: Box<dyn FnOnce() -> Result<(), String> + Send> = match actie {
-            Actie::Commit => {
-                let bericht = self.veld.as_ref().map(|v| v.invoer.read(cx).value().trim().to_string()).unwrap_or_default();
-                let Some(map) = self.veld.as_ref().map(|v| v.map.clone()) else { return };
-                if bericht.is_empty() {
+            Actie::Commit { .. } => {
+                let Some(view) = &self.commit else { return };
+                let (bericht, paden, map) = (view.invoer.read(cx).value().trim().to_string(), view.gekozen(), view.map.clone());
+                if bericht.is_empty() || paden.is_empty() {
                     return;
                 }
-                Box::new(move || git::commit(&map, &bericht))
+                Box::new(move || git::commit(&map, &bericht, &paden))
             }
             Actie::Push { nieuw } => Box::new(move || git::push(&root, &naam, nieuw)),
             Actie::Update => Box::new(move || git::update(&root, &naam, map.as_deref())),
@@ -168,7 +163,7 @@ impl GitPaneel {
             }
         };
         let woord = match actie {
-            Actie::Commit => taal::t("committen", "committing"),
+            Actie::Commit { .. } => taal::t("committen", "committing"),
             Actie::Push { .. } => taal::t("pushen", "pushing"),
             Actie::Update => taal::t("updaten", "updating"),
             Actie::Checkout => taal::t("checkout", "checking out"),
@@ -183,45 +178,19 @@ impl GitPaneel {
             let uitkomst = cx.background_executor().spawn(async move { taak() }).await;
             let _ = this.update(cx, |p, cx| {
                 p.bezig = None;
+                let gelukt = uitkomst.is_ok();
                 match uitkomst {
-                    Ok(()) => p.veld = None,
+                    Ok(()) => p.commit = None,
                     Err(fout) => p.fout = Some(fout),
                 }
-                p.gelezen = None;
-                p.ververs(cx);
-                cx.notify();
-            });
-        })
-        .detach();
-    }
-
-    /// Opent het veld voor het commitbericht in het menu. Claude schrijft een voorstel; wat ik intussen typ blijft staan.
-    fn open_veld(&mut self, naam: String, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(map) = self.repo.as_ref().and_then(|r| r.branches.iter().find(|b| b.naam == naam)).and_then(|b| b.map.clone()) else { return };
-        let invoer = cx.new(|cx| {
-            let mut veld = InputState::new(window, cx);
-            veld.set_placeholder("…", window, cx);
-            veld
-        });
-        invoer.update(cx, |veld, cx| veld.focus(window, cx));
-        let tak = naam.clone();
-        let volg = cx.subscribe_in(&invoer, window, move |this, _, event, _, cx| {
-            if let InputEvent::PressEnter { .. } = event {
-                this.doe(Actie::Commit, tak.clone(), cx);
-            }
-        });
-        self.veld = Some(Veld { branch: naam, map: map.clone(), invoer: invoer.clone(), _volg: volg });
-        cx.notify();
-        cx.spawn_in(window, async move |this, cx| {
-            let bericht = cx.background_executor().spawn(async move { git::bericht(&map) }).await;
-            let _ = this.update_in(cx, |p, window, cx| {
-                // alleen als dit veld nog open is en leeg
-                if p.veld.as_ref().is_some_and(|v| v.invoer == invoer) && invoer.read(cx).value().is_empty() {
-                    invoer.update(cx, |veld, cx| match bericht {
-                        Some(bericht) => veld.set_value(bericht, window, cx),
-                        None => veld.set_placeholder(taal::t("bericht", "message"), window, cx),
-                    });
+                match daarna.filter(|_| gelukt) {
+                    Some(push) => p.doe(push, tak, cx),
+                    None => {
+                        p.gelezen = None;
+                        p.ververs(cx);
+                    }
                 }
+                cx.notify();
             });
         })
         .detach();
@@ -238,70 +207,41 @@ impl GitPaneel {
                 p.sluit_menu(cx);
             }
         }));
-        if let Some(veld) = self.veld.as_ref().filter(|v| v.branch == naam) {
-            let rechts = if self.bezig.is_some() {
-                div().flex_none().text_color(rgb(th.mute)).child(taal::t("committen", "committing")).into_any_element()
-            } else {
-                let tak = naam.clone();
-                crate::venster::knop_vak(th)
-                    .id("commit-ok")
-                    .child("commit")
-                    .on_click(cx.listener(move |p, _, _, cx| p.doe(Actie::Commit, tak.clone(), cx)))
-                    .into_any_element()
+        let lijst = acties(&repo, b, self.remote == Some(true));
+        if lijst.is_empty() {
+            vak = vak.child(regel("niets").text_color(rgb(th.mute)).child(taal::t("niets te doen", "nothing to do")));
+        }
+        let mut vorige_gevaarlijk = true;
+        for (actie, rechts) in lijst {
+            let gevaarlijk = matches!(actie, Actie::Verwijder | Actie::Opruimen);
+            if gevaarlijk && !vorige_gevaarlijk {
+                vak = vak.child(crate::venster::scheiding(th));
+            }
+            vorige_gevaarlijk = gevaarlijk;
+            let (id, woord): (&'static str, &'static str) = match actie {
+                Actie::Commit { .. } => ("commit", "commit"),
+                Actie::Push { .. } => ("push", "push"),
+                Actie::Update => ("update", "update"),
+                Actie::Checkout => ("checkout", "checkout"),
+                Actie::Verwijder => ("verwijder", taal::t("verwijder", "delete")),
+                Actie::Opruimen => ("opruimen", taal::t("opruimen", "clean up")),
             };
-            vak = vak.w(px(340.0)).child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(t::GAP))
-                    .px(px(t::PAD))
-                    .py(px(4.0))
-                    .child(div().flex_1().min_w_0().px(px(4.0)).border(px(t::LIJN)).border_color(rgb(th.line_strong)).child(Input::new(&veld.invoer)))
-                    .child(rechts)
-                    .capture_key_down(cx.listener(|p, e: &KeyDownEvent, _, cx| {
-                        if e.keystroke.key == "escape" && p.bezig.is_none() {
-                            cx.stop_propagation();
-                            p.sluit_menu(cx);
-                        }
-                    })),
+            // geen checkout zolang Claude bezig is
+            let kan = !(actie == Actie::Checkout && self.claude_bezig);
+            let rechts = if kan { rechts } else { taal::t("Claude bezig", "Claude working").to_string() };
+            let tak = naam.clone();
+            vak = vak.child(
+                regel(id)
+                    .text_color(rgb(if !kan { th.mute } else if gevaarlijk { th.bad } else { th.ink }))
+                    .child(div().flex_1().child(woord))
+                    .child(div().text_color(rgb(th.mute)).child(rechts))
+                    .when(kan, |d| {
+                        d.hover(|d| d.bg(rgb(th.sel))).on_click(cx.listener(move |p, _, window, cx| match actie {
+                            Actie::Commit { .. } => p.open_commit(tak.clone(), window, cx),
+                            _ => p.doe(actie, tak.clone(), cx),
+                        }))
+                    }),
             );
-        } else {
-            let lijst = acties(&repo, b, self.remote == Some(true));
-            if lijst.is_empty() {
-                vak = vak.child(regel("niets").text_color(rgb(th.mute)).child(taal::t("niets te doen", "nothing to do")));
-            }
-            let mut vorige_gevaarlijk = true;
-            for (actie, rechts) in lijst {
-                let gevaarlijk = matches!(actie, Actie::Verwijder | Actie::Opruimen);
-                if gevaarlijk && !vorige_gevaarlijk {
-                    vak = vak.child(crate::venster::scheiding(th));
-                }
-                vorige_gevaarlijk = gevaarlijk;
-                let (id, woord): (&'static str, &'static str) = match actie {
-                    Actie::Commit => ("commit", "commit"),
-                    Actie::Push { .. } => ("push", "push"),
-                    Actie::Update => ("update", "update"),
-                    Actie::Checkout => ("checkout", "checkout"),
-                    Actie::Verwijder => ("verwijder", taal::t("verwijder", "delete")),
-                    Actie::Opruimen => ("opruimen", taal::t("opruimen", "clean up")),
-                };
-                // geen checkout zolang Claude bezig is
-                let kan = !(actie == Actie::Checkout && self.claude_bezig);
-                let rechts = if kan { rechts } else { taal::t("Claude bezig", "Claude working").to_string() };
-                let tak = naam.clone();
-                vak = vak.child(
-                    regel(id)
-                        .text_color(rgb(if !kan { th.mute } else if gevaarlijk { th.bad } else { th.ink }))
-                        .child(div().flex_1().child(woord))
-                        .child(div().text_color(rgb(th.mute)).child(rechts))
-                        .when(kan, |d| {
-                            d.hover(|d| d.bg(rgb(th.sel))).on_click(cx.listener(move |p, _, window, cx| match actie {
-                                Actie::Commit => p.open_veld(tak.clone(), window, cx),
-                                _ => p.doe(actie, tak.clone(), cx),
-                            }))
-                        }),
-                );
-            }
         }
         Some(deferred(anchored().position(plek).snap_to_window_with_margin(px(8.0)).child(vak)).with_priority(1).into_any_element())
     }
@@ -499,13 +439,17 @@ impl GitPaneel {
 impl Render for GitPaneel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let th = t::thema(window);
+        let inhoud = match self.commit_vak(th, cx) {
+            Some(vak) => vak,
+            None => self.graaf(window, cx),
+        };
         div()
             .flex()
             .flex_col()
             .h_full()
             .when(self.remote == Some(false), |d| d.min_w(px(270.0)).child(self.op_github_rij(th, cx)))
             .children(self.melding_rij(th))
-            .child(self.graaf(window, cx))
+            .child(inhoud)
             .children(self.menu_vak(th, cx))
     }
 }
@@ -553,15 +497,9 @@ impl GitPaneel {
                             }
                         }
                         Klik::Agents => this.agents = !this.agents,
-                        Klik::Branch(naam) => {
-                            this.veld = None;
-                            this.menu = Some((naam, e.position));
-                        }
-                        // een klik op het open bolletje opent meteen het commitveld
-                        Klik::Commit(naam) => {
-                            this.menu = Some((naam.clone(), e.position));
-                            this.open_veld(naam, window, cx);
-                        }
+                        Klik::Branch(naam) => this.menu = Some((naam, e.position)),
+                        // een klik op het open bolletje opent meteen de commit view
+                        Klik::Commit(naam) => this.open_commit(naam, window, cx),
                     }
                     cx.notify();
                 }),
@@ -593,7 +531,7 @@ enum Klik {
     Agents,
     /// Het menu van een branch.
     Branch(String),
-    /// Het commitveld van een branch.
+    /// De commit view van een branch.
     Commit(String),
 }
 
@@ -875,7 +813,7 @@ fn acties(repo: &Repo, b: &Branch, remote: bool) -> Vec<(Actie, String)> {
     let mut v = Vec::new();
     if b.map.is_some() && b.wijzigingen > 0 {
         let n = b.wijzigingen;
-        v.push((Actie::Commit, format!("{n} {}", if n == 1 { taal::t("bestand", "file") } else { taal::t("bestanden", "files") })));
+        v.push((Actie::Commit { push: false }, format!("{n} {}", if n == 1 { taal::t("bestand", "file") } else { taal::t("bestanden", "files") })));
     }
     if remote && !b.alleen_origin {
         match &b.origin {

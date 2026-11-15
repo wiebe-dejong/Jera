@@ -25,7 +25,7 @@ pub(super) const BOOG: &[u8] = include_bytes!("../../iconen/bezig.svg");
 
 pub(super) const SLOT: &[u8] = include_bytes!("../../iconen/toestemming.svg");
 
-pub(super) const VINK: &[u8] = include_bytes!("../../iconen/klaar.svg");
+pub(crate) const VINK: &[u8] = include_bytes!("../../iconen/klaar.svg");
 
 pub(super) const STREEPJE: &[u8] = include_bytes!("../../iconen/idle.svg");
 
@@ -99,16 +99,12 @@ pub(crate) fn lijn(th: &Thema) -> Div {
 
 /// Een gewone knop uit het design system: een woord met een rand.
 pub(crate) fn knop_vak(th: &Thema) -> Div {
-    div()
-        .flex()
-        .flex_none()
-        .items_center()
-        .h(px(t::H_KNOP))
-        .px(px(8.0))
-        .border(px(t::LIJN))
-        .border_color(rgb(th.line_strong))
-        .text_color(rgb(th.ink))
-        .hover(|d| d.bg(rgb(th.sel)))
+    knop_uit(th).text_color(rgb(th.ink)).hover(|d| d.bg(rgb(th.sel)))
+}
+
+/// Een knop die nu niets doet: het woord in `mute`, en niets onder de muis.
+pub(crate) fn knop_uit(th: &Thema) -> Div {
+    div().flex().flex_none().items_center().h(px(t::H_KNOP)).px(px(8.0)).border(px(t::LIJN)).border_color(rgb(th.line_strong)).text_color(rgb(th.mute))
 }
 
 /// Het vak van een menu, met een rand in `line_strong`. De muis gaat er niet doorheen naar wat eronder ligt.

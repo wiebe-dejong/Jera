@@ -80,5 +80,6 @@ Alle onderdelen zijn gekozen: Tab, Schakelaar, Sessieregel, Agents (de agents on
 - Voorstel: Openen, het scherm waarin ik een project kies of een nieuw maak. Al gebouwd in de app.
 - Voorstel: Statusbalk, de rij onderaan rechts van de linkerkolom: `h-rij` hoog, op `bg`, met een lijn erboven, op één lijn met de kop `oud`. Rechts de teller: `poorten`, `browsers` en `artifacts` met hun aantal; een soort met 0 staat er niet. Een klik opent het Poortenpaneel als lade boven de teller, over de terminal, rechts tegen de rand. Gekozen op het bord in `stijl/server/`. Al gebouwd in de app.
 - Voorstel: Documenten, het venster dat markdown, tabellen, json, afbeeldingen en pdf toont. Al gebouwd in de app.
+- Voorstel: CommitView, wat er in het git-paneel staat zolang ik commit: de bestanden met een vinkje, het bericht en `commit` en `commit en push`. Al gebouwd in de app.
 - Verander niets aan een onderdeel zonder nieuwe keuze.
 - Bouw een nieuw scherm uit bestaande onderdelen. Is er een nieuw onderdeel nodig, voeg het dan eerst hier toe als voorstel.

@@ -23,7 +23,7 @@ use bestandsboom::{Gesleept, Item, Menu, kort_pad, lees_map};
 #[cfg(feature = "schermafdruk")]
 use bestandsboom::{Keuze, Sub};
 use naamveld::{Doel, NaamVeld};
-pub(crate) use onderdelen::{PIJL_DICHT, PIJL_OPEN, knop_vak, lijn, menuvak, pijl, scheiding, tab_vak};
+pub(crate) use onderdelen::{PIJL_DICHT, PIJL_OPEN, VINK, knop_uit, knop_vak, lijn, menuvak, pijl, scheiding, tab_vak};
 use onderdelen::*;
 use sessielijst::titel;
 
@@ -389,7 +389,7 @@ impl Jera {
     /// "klik pad" klikt in de bestandsboom op dat pad, vanaf de hoofdmap, "zed" en "kleur" kiezen
     /// de iconen zoals het menu, "nl" en "en" de taal, "oud" klapt het blok oud open of dicht,
     /// "dag D" klapt die dag in het blok oud open of dicht, "hervat N" hervat de oude sessie op plek N en "git" klapt het
-    /// git-paneel open of dicht. "menu pad" opent het menu van dat pad, "keuze woord" kiest
+    /// git-paneel open of dicht, "commit" opent daarin de commit view. "menu pad" opent het menu van dat pad, "keuze woord" kiest
     /// daarin ("pad" opent de lijst naast pad kopiëren, "vanaf" en "volledig" kiezen daaruit), "naam tekst" typt die naam in het veld en drukt op Enter. "openen" opent het scherm
     /// Openen, "nieuw" opent het met het naamveld, "zoek tekst" typt in het veld, "github" toont de
     /// repo's van GitHub. "agents" klapt
@@ -401,6 +401,11 @@ impl Jera {
             "sessies" => self.stand = Stand::Sessies,
             "bestanden" => self.stand = Stand::Bestanden,
             "git" => self.git_open = !self.git_open,
+            "commit" => {
+                if let Some(tab) = self.tabs.get(self.actief) {
+                    tab.git.update(cx, |git, cx| git.test_commit(window, cx));
+                }
+            }
             "poorten" => self.poorten_open = !self.poorten_open,
             "oud" => self.wissel_oud(cx),
             "agents" => {
