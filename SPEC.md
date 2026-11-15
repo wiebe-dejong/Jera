@@ -90,7 +90,7 @@ Gemeten op 2026-11-04:
 | Naam | Jera, naar de rune ᛃ voor oogst: een knipoog naar Hidden Harvest. Het teken is het icoon van de app | 2026-11-15 |
 | Icoon | Het teken ᛃ met rechte uiteinden. Donker: wit `#F4F5F0` op het groen van Hidden Harvest `#1D3A2A`. Licht: omgekeerd. Staat in `stijl/icoon/`. In het Dock wisselt het mee met macOS; rechtsboven in de titelbalk staat het teken in `ink` | 2026-11-15 |
 
-Het design system staat in `stijl/design-system/` en op https://claude.ai/artifact/QKTtDToW7LYRivNM1vYG88: de tokens en een voorbeeld per onderdeel. Het keuzebord staat op https://claude.ai/artifact/6M7pWS1JLMd6jWtFqZkoj3. De feiten bij de stack en de terminal staan in `research/native.md`. De sessiestatus leest Jera uit het sessiebestand van Claude Code; de meting staat in `research/sessies.md`.
+Het design system staat in `stijl/design-system/` en op https://claude.ai/artifact/QKTtDToW7LYRivNM1vYG88: de tokens en een voorbeeld per onderdeel. De feiten bij de stack en de terminal staan in `research/native.md`. De sessiestatus leest Jera uit het sessiebestand van Claude Code; de meting staat in `research/sessies.md`.
 
 ### Indeling
 
