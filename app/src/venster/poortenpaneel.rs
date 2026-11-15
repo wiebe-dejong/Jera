@@ -25,7 +25,7 @@ impl Jera {
             sessie.as_ref().and_then(|id| self.poorten.sessies.get(id)).is_some_and(|(ouder, _)| *ouder == shell)
         };
         let poorten = self.poorten.poorten.iter().filter(|p| van(&p.sessie)).map(|p| format!("{}  {}", p.nummer, p.commando));
-        let browsers = self.poorten.browsers.iter().filter(|b| van(&b.sessie)).map(|b| format!("agent-browser  {}", b.naam));
+        let browsers = self.poorten.browsers.iter().filter(|b| van(&b.sessie)).map(|b| format!("browser  {}", b.naam));
         poorten.chain(browsers).map(Into::into).collect()
     }
 
@@ -47,7 +47,7 @@ impl Jera {
             .when(!self.poorten_open, |d| d.hover(|d| d.text_color(rgb(th.ink))))
             .child(t("poorten", "ports"))
             .child(aantal(self.poorten.standaard().count()))
-            .child("agent-browser")
+            .child("browsers")
             .child(aantal(self.poorten.browsers.len()))
             .on_click(cx.listener(|this, _, _, cx| {
                 this.poorten_open = !this.poorten_open;
@@ -222,7 +222,7 @@ impl Jera {
                     .flex_1()
                     .min_w_0()
                     .gap(px(8.0))
-                    .child("agent-browser")
+                    .child("browser")
                     .child(div().min_w_0().truncate().text_color(rgb(th.mute)).child(naam.clone())),
             )
             .child(
