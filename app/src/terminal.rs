@@ -4,7 +4,7 @@
 use std::{
     borrow::Cow,
     collections::HashMap,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
@@ -23,7 +23,7 @@ use alacritty_terminal::{
         ansi::{Color, CursorShape, NamedColor, Processor, Rgb},
     },
 };
-use gpui_kit::*;
+use gpui_kit::{prelude::FluentBuilder, *};
 
 use crate::thema::{self, Thema};
 
@@ -81,7 +81,28 @@ pub enum TerminalEvent {
     Gestopt,
 }
 
+/// Iets in de terminal dat met ⌘-klik opent.
+#[derive(Clone, PartialEq, Debug)]
+enum Doel {
+    Url(String),
+    Pad(PathBuf),
+}
+
+#[derive(Clone, PartialEq)]
+struct Link {
+    start: CellPoint,
+    end: CellPoint,
+    doel: Doel,
+}
+
 pub struct TerminalView {
+    /// De map van de sessie: daar horen relatieve paden bij.
+    dir: PathBuf,
+    /// De link onder de muis terwijl ⌘ is ingedrukt. Gezet bij het tekenen.
+    link: Option<Link>,
+    /// Alles is gekozen met ⌘A. Tekent het programma een regel opnieuw, dan wist de kern
+    /// de selectie; zolang dit aan staat, komt ze bij elk tekenen terug.
+    alles: bool,
     metrics: Arc<Mutex<Metrics>>,
     term: Arc<FairMutex<Term<Proxy>>>,
     /// Leeg als de terminal niet is gestart.
@@ -113,7 +134,7 @@ impl TerminalView {
         // Via de eigen shell, zodat `claude` hetzelfde doet als in de terminal.
         let options = tty::Options {
             shell: Some(tty::Shell::new("/bin/zsh".into(), vec!["-ilc".into(), command.into()])),
-            working_directory: Some(dir),
+            working_directory: Some(dir.clone()),
             drain_on_exit: false,
             env: HashMap::from([
                 ("TERM".into(), "xterm-256color".into()),
@@ -141,6 +162,9 @@ impl TerminalView {
         .detach();
 
         Self {
+            dir,
+            link: None,
+            alles: false,
             metrics: Arc::default(),
             term,
             pty,
@@ -217,9 +241,31 @@ impl TerminalView {
         let mode = *self.term.lock().mode();
         let bytes = if key.modifiers.platform {
             if key.key == "c" {
+                self.kies_alles();
                 if let Some(text) = self.term.lock().selection_to_string() {
                     cx.write_to_clipboard(ClipboardItem::new_string(text));
                 }
+                cx.stop_propagation();
+                return;
+            }
+            if key.key == "a" {
+                self.alles = true;
+                self.kies_alles();
+                cx.notify();
+                cx.stop_propagation();
+                return;
+            }
+            if key.key == "k" {
+                // De geschiedenis gaat weg; het scherm maakt het programma zelf leeg met Ctrl+L,
+                // zodat het zich daarna opnieuw tekent.
+                {
+                    let mut term = self.term.lock();
+                    term.grid_mut().clear_history();
+                    term.selection = None;
+                }
+                self.alles = false;
+                self.write(vec![0x0c]);
+                cx.notify();
                 cx.stop_propagation();
                 return;
             }
@@ -245,11 +291,24 @@ impl TerminalView {
             term.scroll_display(Scroll::Bottom);
             term.selection = None;
         }
+        self.alles = false;
         self.write(bytes);
         // Tijdens het typen blijft de cursor aan.
         self.knipper(cx);
         cx.notify();
         cx.stop_propagation();
+    }
+
+    /// Kiest alles, ook wat weggescrold is, als dat met ⌘A gevraagd is.
+    fn kies_alles(&self) {
+        if !self.alles {
+            return;
+        }
+        let mut term = self.term.lock();
+        let (start, end) = (term.topmost_line(), term.bottommost_line());
+        let mut selection = Selection::new(SelectionType::Simple, CellPoint::new(start, Column(0)), Side::Left);
+        selection.update(CellPoint::new(end, term.last_column()), Side::Right);
+        term.selection = Some(selection);
     }
 
     /// De cel onder de muis, en of de muis links of rechts in die cel staat.
@@ -268,11 +327,35 @@ impl TerminalView {
         Some((CellPoint::new(line, Column(col)), side))
     }
 
+    /// De link onder de muis, als de muis boven het raster staat.
+    fn link_onder(&self, position: Point<Pixels>) -> Option<Link> {
+        let (point, _) = self.cell_at(position)?;
+        let m = *self.metrics.lock().unwrap();
+        let term = self.term.lock();
+        let binnen = position.x >= m.origin.x
+            && position.y >= m.origin.y
+            && position.x < m.origin.x + m.cell_w * term.columns() as f32
+            && position.y < m.origin.y + m.cell_h * term.screen_lines() as f32;
+        if !binnen {
+            return None;
+        }
+        link_at(&term, point, &self.dir)
+    }
+
     fn on_mouse_down(&mut self, event: &MouseDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         window.focus(&self.focus, cx);
+        if event.modifiers.platform {
+            match self.link_onder(event.position).map(|link| link.doel) {
+                Some(Doel::Url(url)) => cx.open_url(&url),
+                Some(Doel::Pad(pad)) => cx.open_with_system(&pad),
+                None => {}
+            }
+            return;
+        }
         let Some((point, side)) = self.cell_at(event.position) else {
             return;
         };
+        self.alles = false;
         // Eén klik: per teken. Twee: per woord. Drie: per regel.
         let kind = match event.click_count {
             2 => SelectionType::Semantic,
@@ -284,6 +367,10 @@ impl TerminalView {
     }
 
     fn on_mouse_move(&mut self, event: &MouseMoveEvent, _: &mut Window, cx: &mut Context<Self>) {
+        // Met ⌘ ingedrukt toont het tekenen de link onder de muis.
+        if event.modifiers.platform || self.link.is_some() {
+            cx.notify();
+        }
         if event.pressed_button != Some(MouseButton::Left) {
             return;
         }
@@ -318,6 +405,9 @@ impl Render for TerminalView {
             self.knipper(cx);
         }
         let cursor_aan = self.cursor_aan;
+        self.kies_alles();
+        self.link = if window.modifiers().platform { self.link_onder(window.mouse_position()) } else { None };
+        let link = self.link.as_ref().map(|link| (link.start, link.end));
         let term = self.term.clone();
         let pty = self.pty.clone();
         let metrics = self.metrics.clone();
@@ -330,11 +420,13 @@ impl Render for TerminalView {
             .on_scroll(cx.listener(Self::on_scroll))
             .on_mouse_down(MouseButton::Left, cx.listener(Self::on_mouse_down))
             .on_mouse_move(cx.listener(Self::on_mouse_move))
+            .on_modifiers_changed(cx.listener(|_, _, _, cx| cx.notify()))
+            .when(self.link.is_some(), |div| div.cursor_pointer())
             .child(
                 canvas(
                     |_, _, _| (),
                     move |bounds, _, window, cx| {
-                        paint(bounds, &term, pty.as_ref(), &metrics, thema, cursor_aan, window, cx)
+                        paint(bounds, &term, pty.as_ref(), &metrics, thema, cursor_aan, link, window, cx)
                     },
                 )
                 .size_full(),
@@ -396,6 +488,7 @@ fn paint(
     metrics: &Mutex<Metrics>,
     thema: &'static Thema,
     cursor_aan: bool,
+    link: Option<(CellPoint, CellPoint)>,
     window: &mut Window,
     cx: &mut App,
 ) {
@@ -497,7 +590,8 @@ fn paint(
 
             let bold = flags.contains(Flags::BOLD);
             let italic = flags.contains(Flags::ITALIC);
-            let underline = flags.intersects(Flags::ALL_UNDERLINES);
+            let underline = flags.intersects(Flags::ALL_UNDERLINES)
+                || link.is_some_and(|(start, end)| start <= indexed.point && indexed.point <= end);
             match batches.last_mut() {
                 Some(last)
                     if !wide
@@ -538,6 +632,70 @@ fn paint(
             window.paint_quad(fill(Bounds::new(origin, size(cell_w, cell_h)), color));
         }
     });
+}
+
+/// De link op een plek: een url, of een pad dat bestaat. Een pad of url kan over
+/// meer regels doorlopen.
+fn link_at(term: &Term<Proxy>, point: CellPoint, dir: &Path) -> Option<Link> {
+    let grid = term.grid();
+    let last = grid.last_column();
+    let doorlopend = |line: i32| grid[Line(line)][last].flags.contains(Flags::WRAPLINE);
+    let mut first = point.line.0;
+    while first > grid.topmost_line().0 && doorlopend(first - 1) {
+        first -= 1;
+    }
+    let mut end = point.line.0;
+    while end < grid.bottommost_line().0 && doorlopend(end) {
+        end += 1;
+    }
+
+    let mut cells: Vec<(char, CellPoint)> = Vec::new();
+    for line in first..=end {
+        for col in 0..grid.columns() {
+            let cell = &grid[Line(line)][Column(col)];
+            if !cell.flags.intersects(Flags::WIDE_CHAR_SPACER | Flags::LEADING_WIDE_CHAR_SPACER) {
+                cells.push((cell.c, CellPoint::new(Line(line), Column(col))));
+            }
+        }
+    }
+
+    let grens = |c: char| c.is_whitespace() || "\"'`()[]{}<>│|,".contains(c);
+    let i = cells.iter().position(|(_, p)| *p == point)?;
+    if grens(cells[i].0) {
+        return None;
+    }
+    let mut a = i;
+    while a > 0 && !grens(cells[a - 1].0) {
+        a -= 1;
+    }
+    let mut b = i;
+    while b + 1 < cells.len() && !grens(cells[b + 1].0) {
+        b += 1;
+    }
+    // Een leesteken aan het eind hoort bij de zin.
+    while b > a && ".:;!?".contains(cells[b].0) {
+        b -= 1;
+    }
+    if i > b {
+        return None;
+    }
+
+    let tekst: String = cells[a..=b].iter().map(|(c, _)| c).collect();
+    let doel = if tekst.starts_with("https://") || tekst.starts_with("http://") {
+        Doel::Url(tekst)
+    } else {
+        // Een regelnummer erachter, zoals `src/main.rs:12`, hoort niet bij het pad.
+        let pad = tekst.split(':').next()?;
+        if !pad.chars().any(char::is_alphanumeric) {
+            return None;
+        }
+        let pad = match pad.strip_prefix("~/") {
+            Some(rest) => crate::thuis().join(rest),
+            None => dir.join(pad),
+        };
+        Doel::Pad(pad.exists().then_some(pad)?)
+    };
+    Some(Link { start: cells[a].1, end: cells[b].1, doel })
 }
 
 fn resolve(color: Color, colors: &Colors, thema: &Thema) -> Rgba {
@@ -617,4 +775,35 @@ fn key_bytes(key: &Keystroke, mode: TermMode) -> Option<Vec<u8>> {
         _ => key.key_char.clone()?,
     };
     Some(text.into_bytes())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn term(tekst: &str, cols: usize) -> Term<Proxy> {
+        let (tx, _rx) = flume::unbounded();
+        let mut term = Term::new(Config::default(), &Grid { cols, rows: 5 }, Proxy(tx));
+        Processor::<vte::ansi::StdSyncHandler>::new().advance(&mut term, tekst.as_bytes());
+        term
+    }
+
+    fn at(term: &Term<Proxy>, line: i32, col: usize) -> Option<Doel> {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+        link_at(term, CellPoint::new(Line(line), Column(col)), dir).map(|l| l.doel)
+    }
+
+    #[::core::prelude::v1::test]
+    fn links() {
+        let t = term("zie src/main.rs:12, en `Cargo.toml`.", 80);
+        assert!(matches!(at(&t, 0, 6), Some(Doel::Pad(p)) if p.ends_with("src/main.rs")));
+        assert!(matches!(at(&t, 0, 25), Some(Doel::Pad(p)) if p.ends_with("Cargo.toml")));
+        assert_eq!(at(&t, 0, 1), None); // "zie" bestaat niet
+        assert_eq!(at(&t, 0, 3), None); // spatie
+        let t = term("open http://localhost:3000/a.", 80);
+        assert_eq!(at(&t, 0, 10), Some(Doel::Url("http://localhost:3000/a".into())));
+        // Doorlopend over twee regels.
+        let t = term("xx https://example.com/abcdef", 12);
+        assert_eq!(at(&t, 1, 2), Some(Doel::Url("https://example.com/abcdef".into())));
+    }
 }
