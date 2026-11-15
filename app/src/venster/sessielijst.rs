@@ -205,6 +205,16 @@ impl Jera {
                             Some(veld) => self.naam_invoer(veld, th, cx),
                             None => div().flex_1().min_w_0().truncate().child(titel(sessie, cx)).into_any_element(),
                         })
+                        // Zolang de sessie een poort open heeft of een agent-browser draait.
+                        .when_some(Some(self.draait(sessie, cx)).filter(|d| !d.is_empty()), |d, regels| {
+                            d.child(
+                                div()
+                                    .id(("draait", id))
+                                    .flex_none()
+                                    .child(pijl(POORT, th))
+                                    .tooltip(move |_, cx| cx.new(|_| Tip(regels.clone())).into()),
+                            )
+                        })
                         .when(!sessie.agents.is_empty(), |d| {
                             let bezig = sessie.agents.iter().filter(|a| a.stand == agents::Stand::Bezig).count();
                             d.child(
