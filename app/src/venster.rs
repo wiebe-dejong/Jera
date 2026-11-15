@@ -416,12 +416,6 @@ impl Jera {
             if tab.gekozen > pos || tab.gekozen >= tab.sessies.len() {
                 tab.gekozen = tab.gekozen.saturating_sub(1);
             }
-            if tab.sessies.is_empty() {
-                self.tabs.remove(index);
-                if self.actief >= index {
-                    self.actief = self.actief.saturating_sub(1);
-                }
-            }
             break;
         }
         cx.notify();
@@ -616,7 +610,15 @@ impl Jera {
                 self.boom(tab, &tab.root, 1, th, cx, &mut rijen);
                 div().children(rijen).into_any_element()
             }
-            (Stand::Sessies | Stand::Bestanden, None) => lege_staat(th, cx).into_any_element(),
+            (Stand::Sessies | Stand::Bestanden, None) => lege_staat(
+                th,
+                "Nog geen sessie.",
+                knop_vak(th)
+                    .id("leeg-map")
+                    .child("+ map")
+                    .on_click(cx.listener(|this, _, window, cx| this.toon_openen(false, window, cx))),
+            )
+            .into_any_element(),
         };
         div()
             .flex()
@@ -762,6 +764,21 @@ impl Render for Jera {
             window.set_window_title(&naam(&tab.root));
         }
         let terminal = self.gekozen_terminal().cloned();
+        // Een tab zonder sessies blijft open, met in plaats van de terminal een knop voor een nieuwe.
+        let leeg = match (&terminal, self.tabs.get(self.actief)) {
+            (None, Some(tab)) => {
+                let root = tab.root.clone();
+                Some(lege_staat(
+                    th,
+                    "Geen sessies.",
+                    knop_vak(th)
+                        .id("leeg-sessie")
+                        .child("Sessie starten")
+                        .on_click(cx.listener(move |this, _, window, cx| this.start(root.clone(), window, cx))),
+                ))
+            }
+            _ => None,
+        };
         div()
             .relative()
             .size_full()
@@ -794,7 +811,7 @@ impl Render for Jera {
                                     .flex()
                                     .flex_1()
                                     .min_h_0()
-                                    .child(div().flex_1().min_w_0().children(terminal))
+                                    .child(div().flex_1().min_w_0().children(terminal).children(leeg))
                                     .when_some(self.tabs.get(self.actief).filter(|_| self.git_open), |d, tab| {
                                         d.child(
                                             div()
@@ -817,7 +834,8 @@ impl Render for Jera {
     }
 }
 
-fn lege_staat(th: &Thema, cx: &mut Context<Jera>) -> impl IntoElement {
+/// Wat er staat als er niets is: één regel in `mute` en de knop die het laat verschijnen.
+fn lege_staat(th: &Thema, regel: &'static str, knop: impl IntoElement) -> impl IntoElement {
     div()
         .flex()
         .flex_col()
@@ -825,13 +843,8 @@ fn lege_staat(th: &Thema, cx: &mut Context<Jera>) -> impl IntoElement {
         .gap(px(t::PAD))
         .p(px(t::PAD))
         .text_color(rgb(th.mute))
-        .child("Nog geen sessie.")
-        .child(
-            knop_vak(th)
-                .id("leeg-map")
-                .child("+ map")
-                .on_click(cx.listener(|this, _, window, cx| this.toon_openen(false, window, cx))),
-        )
+        .child(regel)
+        .child(knop)
 }
 
 pub(crate) fn naam(map: &Path) -> String {
