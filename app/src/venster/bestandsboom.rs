@@ -338,7 +338,8 @@ impl Jera {
                     }))
                     .child(
                         vak()
-                            .when(crate::documenten::kan(&menu.pad), |d| {
+                            // Wat Jera ook bewerkt, hoeft niet naar een andere app.
+                            .when(crate::documenten::kan(&menu.pad) && !crate::documenten::bewerkt(&menu.pad), |d| {
                                 let icoon = bestandsicoon::bestand(&menu.pad, th);
                                 d.child(
                                     regel("in-app", icoon, t("in app openen", "open in app"), None)

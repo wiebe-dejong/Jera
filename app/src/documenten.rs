@@ -1,7 +1,8 @@
 //! Het venster Documenten: markdown, tabellen (csv en xlsx), json, afbeeldingen en pdf, elk in een
 //! tab. Er is hoogstens één zo'n venster. Verandert een bestand op schijf, dan leest het venster
-//! het opnieuw.
+//! het opnieuw. Markdown en json kan ik ook bewerken.
 
+mod bewerk;
 mod json;
 mod markdown;
 mod pdf;
@@ -13,14 +14,15 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use gpui_kit::*;
+use gpui_kit::{prelude::FluentBuilder, *};
 
 use crate::bestandsicoon;
 use crate::taal::t;
 use crate::thema::{self as t, Thema};
 use crate::venster::{lijn, naam, tab_vak};
+use bewerk::{Bewerk, Vraag};
 
-actions!(documenten, [SluitTab, VorigeTab, VolgendeTab]);
+actions!(documenten, [SluitTab, VorigeTab, VolgendeTab, Bewaar]);
 
 /// Zo vaak kijkt het venster of een open bestand op schijf veranderde.
 const KIJK_ELKE: Duration = Duration::from_millis(500);
@@ -52,6 +54,11 @@ pub fn kan(pad: &Path) -> bool {
     soort(pad).is_some() && !pad.is_dir()
 }
 
+/// Of Jera dit bestand ook bewerkt; dan hoeft het niet naar een andere app.
+pub fn bewerkt(pad: &Path) -> bool {
+    kan(pad) && soort(pad).is_some_and(bewerkbaar)
+}
+
 /// Het open venster Documenten.
 struct Venster(AnyWindowHandle, WeakEntity<Documenten>);
 
@@ -62,7 +69,16 @@ pub fn init(cx: &mut App) {
         KeyBinding::new("cmd-w", SluitTab, Some("Documenten")),
         KeyBinding::new("cmd-shift-[", VorigeTab, Some("Documenten")),
         KeyBinding::new("cmd-shift-]", VolgendeTab, Some("Documenten")),
+        KeyBinding::new("cmd-s", Bewaar, Some("Documenten")),
     ]);
+}
+
+/// Heeft een tab in Documenten wijzigingen die niet bewaard zijn, dan toont het venster die tab
+/// met de vraag of ik wil bewaren, en is het antwoord waar: nog niet stoppen.
+pub fn houd_tegen(cx: &mut App) -> bool {
+    let Some(Venster(venster, docs)) = cx.try_global::<Venster>() else { return false };
+    let (venster, docs) = (*venster, docs.clone());
+    venster.update(cx, |_, window, cx| docs.update(cx, |docs, cx| docs.houd_tegen(window, cx)).unwrap_or(false)).unwrap_or(false)
 }
 
 /// Opent `pad` in het venster Documenten, in de tab waarin het al staat of in een nieuwe.
@@ -118,6 +134,7 @@ pub struct Documenten {
     actief: usize,
     volgende_id: usize,
     focus: FocusHandle,
+    vraag: Option<Vraag>,
 }
 
 struct Doc {
@@ -127,6 +144,10 @@ struct Doc {
     /// Wanneer het bestand veranderde, bij het laatste lezen.
     gewijzigd: Option<SystemTime>,
     inhoud: Inhoud,
+    /// De tekst op schijf, van markdown en json.
+    tekst: SharedString,
+    /// Bestaat zodra ik markdown of json voor het eerst bewerk.
+    bewerk: Option<Bewerk>,
 }
 
 enum Inhoud {
@@ -149,11 +170,15 @@ enum Gelezen {
     Pdf(Vec<(f32, f32)>),
 }
 
-fn lees(pad: &Path, soort: Soort) -> Gelezen {
+/// Wat in het bestand staat, en van markdown en json ook de tekst.
+fn lees(pad: &Path, soort: Soort) -> (Gelezen, Option<SharedString>) {
     let fout = |f: String| Gelezen::Fout(f);
-    match soort {
-        Soort::Markdown => match std::fs::read(pad) {
-            Ok(bytes) => Gelezen::Markdown(String::from_utf8_lossy(&bytes).into_owned()),
+    let gelezen = match soort {
+        Soort::Markdown | Soort::Json => match std::fs::read(pad) {
+            Ok(bytes) => {
+                let tekst = String::from_utf8_lossy(&bytes).into_owned();
+                return (uit_tekst(soort, &tekst), Some(tekst.into()));
+            }
             Err(f) => fout(f.to_string()),
         },
         Soort::Beeld => {
@@ -171,15 +196,24 @@ fn lees(pad: &Path, soort: Soort) -> Gelezen {
             }
         }
         Soort::Tabel => tabel::lees(pad).map_or_else(fout, Gelezen::Tabel),
-        Soort::Json => match std::fs::read(pad) {
-            Ok(bytes) => match serde_json::from_slice(&bytes) {
-                Ok(waarde) => Gelezen::Json(waarde),
-                Err(f) => fout(format!("{} {}, {} {}.", t("Geen geldige json: regel", "Not valid json: line"), f.line(), t("teken", "column"), f.column())),
-            },
-            Err(f) => fout(f.to_string()),
-        },
         Soort::Pdf => pdf::lees(pad).map_or_else(fout, Gelezen::Pdf),
+    };
+    (gelezen, None)
+}
+
+/// Markdown of json uit zijn tekst.
+fn uit_tekst(soort: Soort, tekst: &str) -> Gelezen {
+    match soort {
+        Soort::Json => match serde_json::from_str(tekst) {
+            Ok(waarde) => Gelezen::Json(waarde),
+            Err(f) => Gelezen::Fout(json_fout(&f)),
+        },
+        _ => Gelezen::Markdown(tekst.to_string()),
     }
+}
+
+fn json_fout(f: &serde_json::Error) -> String {
+    format!("{} {}, {} {}.", t("Geen geldige json: regel", "Not valid json: line"), f.line(), t("teken", "column"), f.column())
 }
 
 impl Documenten {
@@ -190,15 +224,19 @@ impl Documenten {
         cx.spawn_in(window, async move |this, cx| {
             loop {
                 cx.background_executor().timer(KIJK_ELKE).await;
-                if this.update(cx, |docs, cx| docs.kijk(cx)).is_err() {
+                if this.update_in(cx, |docs, window, cx| docs.kijk(window, cx)).is_err() {
                     break;
                 }
             }
         })
         .detach();
+        let docs = cx.weak_entity();
+        window.on_window_should_close(cx, move |window, cx| {
+            !docs.update(cx, |docs, cx| docs.houd_tegen(window, cx)).unwrap_or(false)
+        });
         #[cfg(feature = "schermafdruk")]
         schermafdruk(window, cx);
-        Self { tabs: Vec::new(), actief: 0, volgende_id: 0, focus }
+        Self { tabs: Vec::new(), actief: 0, volgende_id: 0, focus, vraag: None }
     }
 
     /// Toont `pad`: de tab waarin het al staat, of een nieuwe achteraan.
@@ -213,14 +251,14 @@ impl Documenten {
         let id = self.volgende_id;
         self.volgende_id += 1;
         let gewijzigd = gewijzigd(&pad);
-        self.tabs.push(Doc { id, pad, soort, gewijzigd, inhoud: Inhoud::Laden });
+        self.tabs.push(Doc { id, pad, soort, gewijzigd, inhoud: Inhoud::Laden, tekst: SharedString::default(), bewerk: None });
         self.actief = self.tabs.len() - 1;
-        self.lees(id, cx);
+        self.lees(id, window, cx);
         cx.notify();
     }
 
     /// Leest elk bestand opnieuw dat sinds de vorige keer veranderde.
-    fn kijk(&mut self, cx: &mut Context<Self>) {
+    fn kijk(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let mut opnieuw = Vec::new();
         for doc in &mut self.tabs {
             let nu = gewijzigd(&doc.pad);
@@ -230,22 +268,40 @@ impl Documenten {
             }
         }
         for id in opnieuw {
-            self.lees(id, cx);
+            self.lees(id, window, cx);
         }
     }
 
-    fn lees(&mut self, id: usize, cx: &mut Context<Self>) {
+    fn lees(&mut self, id: usize, window: &mut Window, cx: &mut Context<Self>) {
         let Some(doc) = self.tabs.iter().find(|doc| doc.id == id) else { return };
         let (pad, soort) = (doc.pad.clone(), doc.soort);
-        cx.spawn(async move |this, cx| {
-            let gelezen = cx.background_executor().spawn(async move { lees(&pad, soort) }).await;
-            let _ = this.update(cx, |docs, cx| docs.zet(id, gelezen, cx));
+        cx.spawn_in(window, async move |this, cx| {
+            let (gelezen, tekst) = cx.background_executor().spawn(async move { lees(&pad, soort) }).await;
+            let _ = this.update_in(cx, |docs, window, cx| docs.zet(id, gelezen, tekst, window, cx));
         })
         .detach();
     }
 
-    /// Zet wat gelezen is in de tab. Een tabel, json of pdf houdt waar ik was.
-    fn zet(&mut self, id: usize, gelezen: Gelezen, cx: &mut Context<Self>) {
+    /// Zet wat gelezen is in de tab. Heb ik wijzigingen die niet bewaard zijn, dan blijft de tab
+    /// zoals hij is; anders krijgt ook de editor de nieuwe tekst.
+    fn zet(&mut self, id: usize, gelezen: Gelezen, tekst: Option<SharedString>, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(doc) = self.tabs.iter_mut().find(|doc| doc.id == id) else { return };
+        if let Some(tekst) = tekst {
+            let mijn = doc.gewijzigd(cx);
+            if let Some(bewerk) = &mut doc.bewerk {
+                if mijn {
+                    bewerk.buiten |= tekst != doc.tekst;
+                    return;
+                }
+                bewerk.neem_over(tekst.clone(), window, cx);
+            }
+            doc.tekst = tekst;
+        }
+        self.vul(id, gelezen, cx);
+    }
+
+    /// Toont wat gelezen is. Een tabel, json of pdf houdt waar ik was.
+    fn vul(&mut self, id: usize, gelezen: Gelezen, cx: &mut Context<Self>) {
         let Some(doc) = self.tabs.iter_mut().find(|doc| doc.id == id) else { return };
         let pad = doc.pad.clone();
         doc.inhoud = match (&doc.inhoud, gelezen) {
@@ -271,7 +327,19 @@ impl Documenten {
         cx.notify();
     }
 
+    /// Sluit de tab, of vraagt eerst of ik wil bewaren.
     fn sluit(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(doc) = self.tabs.get(index) else { return };
+        if doc.gewijzigd(cx) {
+            self.actief = index;
+            self.vraag = Some(Vraag::Sluiten(doc.id));
+            cx.notify();
+            return;
+        }
+        self.haal_weg(index, window, cx);
+    }
+
+    fn haal_weg(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
         if index >= self.tabs.len() {
             return;
         }
@@ -292,6 +360,7 @@ impl Documenten {
     fn titelbalk(&self, th: &Thema, cx: &mut Context<Self>) -> impl IntoElement {
         let tabs = self.tabs.iter().enumerate().map(|(index, doc)| {
             let naam = naam(&doc.pad);
+            let gewijzigd = doc.gewijzigd(cx);
             // Twee tabs met dezelfde naam: de map erachter zegt welke het is.
             let dubbel = self.tabs.iter().filter(|ander| crate::venster::naam(&ander.pad) == naam).count() > 1;
             let map = doc.pad.parent().map(crate::venster::naam).filter(|_| dubbel);
@@ -305,6 +374,18 @@ impl Documenten {
                 .child(bestandsicoon::bestand(&doc.pad, th))
                 .child(div().min_w_0().truncate().child(naam))
                 .children(map.map(|map| div().text_color(rgb(th.mute)).font_weight(FontWeight::NORMAL).child(map)))
+                // Niet bewaard: een stip, die onder de muis het kruis wordt.
+                .when(gewijzigd, |d| {
+                    d.child(
+                        div()
+                            .flex()
+                            .justify_center()
+                            .min_w(px(t::ICOON))
+                            .text_color(rgb(th.mute))
+                            .group_hover(groep.clone(), |s| s.hidden())
+                            .child("●"),
+                    )
+                })
                 .child(
                     div()
                         .id(("sluit", doc.id))
@@ -313,8 +394,8 @@ impl Documenten {
                         .min_w(px(t::ICOON))
                         .text_color(rgb(th.mute))
                         .font_weight(FontWeight::NORMAL)
-                        .invisible()
-                        .group_hover(groep, |s| s.visible())
+                        .when(!gewijzigd, |d| d.invisible().group_hover(groep.clone(), |s| s.visible()))
+                        .when(gewijzigd, |d| d.hidden().group_hover(groep.clone(), |s| s.flex()))
                         .hover(|d| d.text_color(rgb(th.ink)))
                         .child("×")
                         .on_click(cx.listener(move |this, _, window, cx| {
@@ -327,7 +408,29 @@ impl Documenten {
                     cx.notify();
                 }))
         });
-        let pad = self.tabs.get(self.actief).map(|doc| doc.pad.clone());
+        let doc = self.tabs.get(self.actief);
+        let pad = doc.map(|doc| doc.pad.clone());
+        // Markdown en json bewerk ik hier; de rest kan naar de app die macOS ervoor heeft.
+        let rechts = match doc {
+            Some(doc) if bewerkbaar(doc.soort) => {
+                let bewerkt = doc.bewerk.as_ref().is_some_and(|bewerk| bewerk.aan);
+                tab_vak(th, false)
+                    .id("bewerken")
+                    .flex_none()
+                    .child(if bewerkt { t("lezen", "read") } else { t("bewerken", "edit") })
+                    .on_click(cx.listener(|this, _, window, cx| this.wissel(window, cx)))
+            }
+            _ => tab_vak(th, false)
+                .id("in-app")
+                .flex_none()
+                .child(t("in app openen", "open in app"))
+                .on_click(cx.listener(move |_, _, _, cx| {
+                    if let Some(pad) = &pad {
+                        cx.open_with_system(pad);
+                    }
+                })),
+        };
+        let fout = doc.and_then(|doc| doc.bewerk.as_ref()).and_then(|bewerk| bewerk.fout.clone());
         div()
             .flex()
             .flex_none()
@@ -346,28 +449,35 @@ impl Documenten {
                     .children(tabs.flat_map(|tab| [lijn(th).into_any_element(), tab.into_any_element()]))
                     .child(lijn(th)),
             )
+            .children(fout.map(|fout| {
+                div()
+                    .flex()
+                    .flex_shrink(1.0)
+                    .min_w_0()
+                    .items_center()
+                    .px(px(t::TAB_PAD))
+                    .text_color(rgb(th.mute))
+                    .child(div().truncate().child(fout))
+            }))
             .child(lijn(th))
-            .child(
-                tab_vak(th, false)
-                    .id("in-app")
-                    .flex_none()
-                    .child(t("in app openen", "open in app"))
-                    .on_click(cx.listener(move |_, _, _, cx| {
-                        if let Some(pad) = &pad {
-                            cx.open_with_system(pad);
-                        }
-                    })),
-            )
+            .child(rechts)
     }
 }
 
+fn bewerkbaar(soort: Soort) -> bool {
+    matches!(soort, Soort::Markdown | Soort::Json)
+}
+
 /// JERA_DOC_SHOT=pad bewaart elke seconde dit venster als afbeelding. JERA_DOC_TAB=n kiest na
-/// drie seconden tab n, JERA_DOC_SCROLL=y scrolt daarna zoveel punten omlaag.
+/// drie seconden tab n, JERA_DOC_SCROLL=y scrolt daarna zoveel punten omlaag. JERA_DOC_TYP=tekst
+/// zet dan de tab op bewerken en typt de tekst, JERA_DOC_BEWAAR bewaart na zes seconden.
 #[cfg(feature = "schermafdruk")]
 fn schermafdruk(window: &mut Window, cx: &mut Context<Documenten>) {
     let Ok(pad) = std::env::var("JERA_DOC_SHOT") else { return };
     let tab: Option<usize> = std::env::var("JERA_DOC_TAB").ok().and_then(|n| n.parse().ok());
     let scroll: Option<f32> = std::env::var("JERA_DOC_SCROLL").ok().and_then(|n| n.parse().ok());
+    let typ = std::env::var("JERA_DOC_TYP");
+    let bewaar = std::env::var("JERA_DOC_BEWAAR").is_ok();
     cx.spawn_in(window, async move |this, cx| {
         for tik in 1.. {
             cx.background_executor().timer(Duration::from_secs(1)).await;
@@ -389,6 +499,13 @@ fn schermafdruk(window: &mut Window, cx: &mut Context<Documenten>) {
                         };
                         window.dispatch_event(PlatformInput::Scroll(event), cx);
                     }
+                    if let Ok(tekst) = &typ {
+                        docs.wissel(window, cx);
+                        docs.typ(tekst, window, cx);
+                    }
+                }
+                if tik == 6 && bewaar {
+                    window.dispatch_action(Box::new(Bewaar), cx);
                 }
                 if let Ok(beeld) = window.render_to_image() {
                     let tijdelijk = format!("{pad}.tmp.png");
@@ -430,18 +547,19 @@ impl Render for Documenten {
         if let Some(doc) = doc {
             window.set_window_title(&naam(&doc.pad));
         }
-        let inhoud = doc.map(|doc| match &doc.inhoud {
-            Inhoud::Laden => div().into_any_element(),
-            Inhoud::Fout(fout) => regel(th, fout.clone()),
-            Inhoud::Markdown(tekst) => markdown::toon(doc.id, tekst.clone(), &doc.pad, th, window),
-            Inhoud::Beeld(beeld) => div()
+        let inhoud = doc.map(|doc| match (&doc.bewerk, &doc.inhoud) {
+            (Some(bewerk), _) if bewerk.aan => bewerk.toon(doc.soort, th, window, cx),
+            (_, Inhoud::Laden) => div().into_any_element(),
+            (_, Inhoud::Fout(fout)) => regel(th, fout.clone()),
+            (_, Inhoud::Markdown(tekst)) => markdown::toon(doc.id, tekst.clone(), &doc.pad, th, window),
+            (_, Inhoud::Beeld(beeld)) => div()
                 .size_full()
                 .p(px(24.0))
                 .child(img(beeld.clone()).size_full().object_fit(ObjectFit::ScaleDown))
                 .into_any_element(),
-            Inhoud::Tabel(tabel) => tabel.clone().into_any_element(),
-            Inhoud::Json(json) => json.clone().into_any_element(),
-            Inhoud::Pdf(pdf) => pdf.clone().into_any_element(),
+            (_, Inhoud::Tabel(tabel)) => tabel.clone().into_any_element(),
+            (_, Inhoud::Json(json)) => json.clone().into_any_element(),
+            (_, Inhoud::Pdf(pdf)) => pdf.clone().into_any_element(),
         });
         div()
             .key_context("Documenten")
@@ -455,6 +573,9 @@ impl Render for Documenten {
                 this.actief = (this.actief + 1) % this.tabs.len().max(1);
                 cx.notify();
             }))
+            .on_action(cx.listener(|this, _: &Bewaar, _, cx| {
+                this.bewaar(this.actief, false, cx);
+            }))
             .size_full()
             .flex()
             .flex_col()
@@ -466,5 +587,6 @@ impl Render for Documenten {
             .whitespace_nowrap()
             .child(self.titelbalk(th, cx))
             .child(div().flex_1().min_h_0().children(inhoud))
+            .children(self.dialoog(th, cx))
     }
 }

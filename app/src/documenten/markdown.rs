@@ -10,7 +10,7 @@ use gpui_kit::{
 use crate::thema::{self as t, Thema};
 
 /// Zo breed wordt de tekst hoogstens; daarbuiten blijft het venster leeg.
-const BREED: f32 = 760.0;
+pub(super) const BREED: f32 = 760.0;
 
 pub(super) fn toon(id: usize, tekst: SharedString, pad: &Path, th: &Thema, window: &Window) -> AnyElement {
     let map = pad.parent().map(Path::to_path_buf).unwrap_or_default();

@@ -52,7 +52,11 @@ pub fn init(cx: &mut App) {
     cx.on_action(|_: &IconenZed, cx| kies_iconen(true, cx));
     cx.on_action(|_: &TaalNederlands, cx| kies_taal(false, cx));
     cx.on_action(|_: &TaalEngels, cx| kies_taal(true, cx));
-    cx.on_action(|_: &Stop, cx| cx.quit());
+    cx.on_action(|_: &Stop, cx| {
+        if !crate::documenten::houd_tegen(cx) {
+            cx.quit();
+        }
+    });
     cx.bind_keys([
         KeyBinding::new("cmd-q", Stop, None),
         KeyBinding::new("cmd-o", OpenProject, None),

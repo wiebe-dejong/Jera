@@ -7,7 +7,7 @@ Geef het pad waarop geklikt is en wat er op het klembord van macOS staat.
 - Het menu staat op de plek van de klik, op `bg`, met een rand van `lijn-dikte` in `line-strong`. Rechte hoeken, geen schaduw.
 - Elke regel is `h-rij` hoog en begint op `pad`, met een icoon van `icoon` groot in `mute`, dan `gap`, dan het woord. Onder de muis krijgt een regel het vlak `sel`.
 - De regels, in drie groepen gescheiden door een lijn in `line`: `nieuw` · `kopiëren`, `plakken` · `naam wijzigen`, `naar prullenmand`.
-- Bij een bestand dat Documenten toont, staat daarboven `in app openen`, met het icoon van het bestand uit de bestandsboom, en een lijn. Het opent het bestand in de app die macOS ervoor heeft.
+- Bij een bestand dat Documenten toont maar niet bewerkt (dus niet bij markdown en json), staat daarboven `in app openen`, met het icoon van het bestand uit de bestandsboom, en een lijn. Het opent het bestand in de app die macOS ervoor heeft.
 - Achter `nieuw` staat het pijltje van een dichte map. Onder de muis gaat rechts ernaast een tweede vak open met de soorten: `map`, een lijn, dan `bestand` en de soorten van bestanden met hun icoon uit de bestandsboom en rechts de extensie in `mute`. Zolang dat vak open is, heeft `nieuw` het vlak `sel`.
 - De iconen van de acties zijn eigen lijntekeningen: plus, twee vellen, klembord, potlood, prullenbak. Dit is een uitzondering op "voeg geen icoon toe als een woord volstaat", op verzoek.
 - Zolang het menu open is, is de regel waar het bij hoort gekozen: vlak `sel`, `accent`-streep, vet. Elke regel in de bestandsboom krijgt onder de muis het vlak `sel`.

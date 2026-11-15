@@ -17,8 +17,8 @@
  },
  "lastChange": {
   "by": "Wiebe de Jong",
-  "at": "2026-11-15T15:06:12Z",
+  "at": "2026-11-15T17:20:00Z",
   "via": "Claude Code",
-  "note": "Voorstel: Documenten; Contextmenu krijgt in app openen"
+  "note": "Documenten: markdown en json bewerken; Dialoog bij niet bewaarde wijzigingen; Contextmenu zonder in app openen bij markdown en json"
  }
 }
