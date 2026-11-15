@@ -212,7 +212,7 @@ impl Jera {
             None => {
                 // De branches staan klaar voordat ik het git-paneel open.
                 let git = cx.new(|cx| {
-                    let mut git = GitPaneel::new(root.clone(), cx);
+                    let mut git = GitPaneel::new(root.clone());
                     git.ververs(cx);
                     git
                 });
