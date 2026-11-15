@@ -61,7 +61,7 @@ pub const DONKER: Thema = Thema {
     ink: 0xd5d9e0,
     mute: 0x8a93a2,
     sel: 0x1c2129,
-    accent: 0x5fd7a7,
+    accent: 0xa8d5e5,
     ok: 0x4fcb7c,
     warn: 0xf2cc60,
     bad: 0xff6b6b,
