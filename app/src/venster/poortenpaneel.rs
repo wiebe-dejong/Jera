@@ -11,20 +11,20 @@ const H_PLAATJE: f32 = 180.0;
 pub(super) const POORT: &[u8] = include_bytes!("../../iconen/poort.svg");
 
 impl Jera {
-    /// De sessie in Jera waarin de Claude met dit pid draait.
-    fn sessie_van(&self, claude: u32, cx: &App) -> Option<&Sessie> {
-        let (ouder, _) = self.poorten.sessies.get(&claude)?;
+    /// De sessie in Jera met dit sessie-id.
+    fn sessie_van(&self, id: &str, cx: &App) -> Option<&Sessie> {
+        let (ouder, _) = self.poorten.sessies.get(id)?;
         self.tabs.iter().flat_map(|tab| &tab.sessies).find(|s| s.terminal.read(cx).pid == Some(*ouder))
     }
 
     /// Wat de sessie heeft draaien, één regel per poort of browser, voor onder de muis.
     pub(super) fn draait(&self, sessie: &Sessie, cx: &App) -> Vec<SharedString> {
         let Some(shell) = sessie.terminal.read(cx).pid else { return Vec::new() };
-        let van = |claude: Option<u32>| {
-            claude.and_then(|c| self.poorten.sessies.get(&c)).is_some_and(|(ouder, _)| *ouder == shell)
+        let van = |sessie: &Option<String>| {
+            sessie.as_ref().and_then(|id| self.poorten.sessies.get(id)).is_some_and(|(ouder, _)| *ouder == shell)
         };
-        let poorten = self.poorten.poorten.iter().filter(|p| van(p.claude)).map(|p| format!("{}  {}", p.nummer, p.commando));
-        let browsers = self.poorten.browsers.iter().filter(|b| van(b.claude)).map(|b| format!("agent-browser  {}", b.naam));
+        let poorten = self.poorten.poorten.iter().filter(|p| van(&p.sessie)).map(|p| format!("{}  {}", p.nummer, p.commando));
+        let browsers = self.poorten.browsers.iter().filter(|b| van(&b.sessie)).map(|b| format!("agent-browser  {}", b.naam));
         poorten.chain(browsers).map(Into::into).collect()
     }
 
@@ -60,40 +60,40 @@ impl Jera {
 
         // De sessies: die van Jera in de volgorde van de tabs, daarna die van elders.
         let volgorde: Vec<u32> = self.tabs.iter().flat_map(|tab| &tab.sessies).filter_map(|s| s.terminal.read(cx).pid).collect();
-        let mut sessies: Vec<u32> = stand
+        let mut sessies: Vec<&String> = stand
             .poorten
             .iter()
-            .filter_map(|p| p.claude)
-            .chain(stand.browsers.iter().filter_map(|b| b.claude))
-            .filter(|c| stand.sessies.contains_key(c))
+            .filter_map(|p| p.sessie.as_ref())
+            .chain(stand.browsers.iter().filter_map(|b| b.sessie.as_ref()))
+            .filter(|id| stand.sessies.contains_key(*id))
             .collect();
-        sessies.sort_by_key(|c| {
-            let (ouder, naam) = &stand.sessies[c];
+        sessies.sort_by_key(|id| {
+            let (ouder, naam) = &stand.sessies[*id];
             (volgorde.iter().position(|p| p == ouder).unwrap_or(usize::MAX), naam.clone())
         });
         sessies.dedup();
 
         let mut rijen: Vec<AnyElement> = Vec::new();
-        for claude in sessies {
-            let kop = match self.sessie_van(claude, cx) {
+        for id in sessies {
+            let kop = match self.sessie_van(id, cx) {
                 Some(sessie) => titel(sessie, cx),
-                None => stand.sessies[&claude].1.clone(),
+                None => stand.sessies[id].1.clone(),
             };
             rijen.push(groepkop(kop, th).into_any_element());
-            for poort in stand.poorten.iter().filter(|p| p.claude == Some(claude)) {
+            for poort in stand.poorten.iter().filter(|p| p.sessie.as_ref() == Some(id)) {
                 rijen.push(self.poort_rij(poort, th, cx));
             }
-            for browser in stand.browsers.iter().filter(|b| b.claude == Some(claude)) {
+            for browser in stand.browsers.iter().filter(|b| b.sessie.as_ref() == Some(id)) {
                 rijen.extend(self.browser_rijen(browser, th, cx));
             }
         }
 
         // Zonder sessie: standaard alleen wat uit de thuismap is gestart, met Alles de rest.
         let zonder: Vec<&Poort> = match self.alles {
-            true => stand.poorten.iter().filter(|p| p.claude.is_none()).collect(),
-            false => standaard.iter().copied().filter(|p| p.claude.is_none()).collect(),
+            true => stand.poorten.iter().filter(|p| p.sessie.is_none()).collect(),
+            false => standaard.iter().copied().filter(|p| p.sessie.is_none()).collect(),
         };
-        let browsers_zonder: Vec<&Browser> = stand.browsers.iter().filter(|b| b.claude.is_none()).collect();
+        let browsers_zonder: Vec<&Browser> = stand.browsers.iter().filter(|b| b.sessie.is_none()).collect();
         let verborgen = stand.poorten.len() - standaard.len();
         if !zonder.is_empty() || !browsers_zonder.is_empty() || verborgen > 0 {
             let alles = self.alles;
@@ -127,8 +127,8 @@ impl Jera {
         }
 
         // De wezen, met één knop die ze allemaal stopt.
-        let wees_poorten: Vec<&Poort> = stand.poorten.iter().filter(|p| stand.wees(p.claude)).collect();
-        let wees_browsers: Vec<&Browser> = stand.browsers.iter().filter(|b| stand.wees(b.claude)).collect();
+        let wees_poorten: Vec<&Poort> = stand.poorten.iter().filter(|p| stand.wees(&p.sessie)).collect();
+        let wees_browsers: Vec<&Browser> = stand.browsers.iter().filter(|b| stand.wees(&b.sessie)).collect();
         if !wees_poorten.is_empty() || !wees_browsers.is_empty() {
             let pids: Vec<u32> = wees_poorten.iter().map(|p| p.pid).collect();
             let namen: Vec<String> = wees_browsers.iter().map(|b| b.naam.clone()).collect();

@@ -17,15 +17,16 @@ pub struct Poort {
     pub commando: String,
     /// De map waaruit het proces is gestart.
     pub map: PathBuf,
-    /// Het pid van de Claude-sessie die het startte.
-    pub claude: Option<u32>,
+    /// Het id van de Claude-sessie die het startte. Dat blijft hetzelfde als het gesprek
+    /// wordt voortgezet, ook na een herstart van Jera.
+    pub sessie: Option<String>,
 }
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct Browser {
     pub naam: String,
     pub pid: u32,
-    pub claude: Option<u32>,
+    pub sessie: Option<String>,
 }
 
 /// Wat er nu draait.
@@ -33,20 +34,20 @@ pub struct Browser {
 pub struct Stand {
     pub poorten: Vec<Poort>,
     pub browsers: Vec<Browser>,
-    /// De Claude-sessies die draaien: pid van Claude naar het pid van zijn ouder en de naam uit het sessiebestand.
-    pub sessies: HashMap<u32, (u32, String)>,
+    /// De Claude-sessies die draaien: sessie-id naar het pid van de ouder van Claude en de naam uit het sessiebestand.
+    pub sessies: HashMap<String, (u32, String)>,
 }
 
 impl Stand {
-    /// Hoort `claude` bij een sessie die niet meer draait.
-    pub fn wees(&self, claude: Option<u32>) -> bool {
-        claude.is_some_and(|pid| !self.sessies.contains_key(&pid))
+    /// Hoort `sessie` bij een sessie die niet meer draait.
+    pub fn wees(&self, sessie: &Option<String>) -> bool {
+        sessie.as_ref().is_some_and(|id| !self.sessies.contains_key(id))
     }
 
     /// De poorten van de standaardlijst: gestart in de thuismap, of door een sessie.
     pub fn standaard(&self) -> impl Iterator<Item = &Poort> {
         let thuis = crate::thuis();
-        self.poorten.iter().filter(move |p| p.claude.is_some() || p.map.starts_with(&thuis))
+        self.poorten.iter().filter(move |p| p.sessie.is_some() || p.map.starts_with(&thuis))
     }
 }
 
@@ -57,12 +58,15 @@ fn browsermap() -> PathBuf {
 
 pub fn lees() -> Stand {
     let ouders = ouders();
-    let sessies: HashMap<u32, (u32, String)> = claude::sessies()
+    let mut claude_pids = HashSet::new();
+    let sessies: HashMap<String, (u32, String)> = claude::sessies()
         .into_iter()
         .filter_map(|json| {
             let pid = json["pid"].as_u64()? as u32;
             let ouder = *ouders.get(&pid)?;
-            Some((pid, (ouder, json["name"].as_str().unwrap_or_default().to_string())))
+            claude_pids.insert(pid);
+            let id = json["sessionId"].as_str()?.to_string();
+            Some((id, (ouder, json["name"].as_str().unwrap_or_default().to_string())))
         })
         .collect();
 
@@ -85,17 +89,17 @@ pub fn lees() -> Stand {
     // De poorten van Claude Code zelf en van agent-browser en zijn Chrome horen er niet bij.
     let luistert: Vec<(u32, u16)> = luisteraars()
         .into_iter()
-        .filter(|(pid, _)| !sessies.contains_key(pid))
+        .filter(|(pid, _)| !claude_pids.contains(pid))
         .filter(|(pid, _)| !boven(*pid, &ouders).any(|p| browser_pids.contains(&p)))
         .collect();
 
-    // Het sessienummer staat in de omgeving van het proces. Een proces dat zijn naam overschrijft
+    // Het sessie-id staat in de omgeving van het proces. Een proces dat zijn naam overschrijft
     // (zoals next-server) wist die; dan staat hij bij een ouder.
     let mut rij: Vec<u32> = luistert.iter().map(|(pid, _)| *pid).chain(browser_pids.iter().copied()).collect();
     rij.extend(rij.clone().iter().flat_map(|pid| boven(*pid, &ouders).skip(1)));
     rij.sort();
     rij.dedup();
-    let omgeving = claude_pids(&rij);
+    let omgeving = sessie_ids(&rij);
     let commandos = commandos(&rij);
     // Een app die vanuit een sessie is geopend (zoals Raycast) erft het sessienummer ook,
     // maar is geen server van die sessie.
@@ -104,8 +108,8 @@ pub fn lees() -> Stand {
             if commandos.get(&p).is_some_and(|c| c.contains(".app/Contents/")) {
                 return None;
             }
-            if let Some(claude) = omgeving.get(&p) {
-                return Some(*claude);
+            if let Some(id) = omgeving.get(&p) {
+                return Some(id.clone());
             }
         }
         None
@@ -120,12 +124,12 @@ pub fn lees() -> Stand {
             pid,
             commando: commandos.get(&pid).map(|c| kort(c)).unwrap_or_default(),
             map: mappen.get(&pid).cloned().unwrap_or_default(),
-            claude: van(pid),
+            sessie: van(pid),
         })
         .collect();
     poorten.sort_by_key(|p| p.nummer);
     let mut browsers: Vec<Browser> =
-        browsers.into_iter().map(|(naam, pid)| Browser { naam, pid, claude: van(pid) }).collect();
+        browsers.into_iter().map(|(naam, pid)| Browser { naam, pid, sessie: van(pid) }).collect();
     browsers.sort_by(|a, b| a.naam.cmp(&b.naam));
     Stand { poorten, browsers, sessies }
 }
@@ -164,8 +168,8 @@ fn luisteraars() -> Vec<(u32, u16)> {
     uit
 }
 
-/// `CLAUDE_PID` uit de omgeving van deze processen.
-fn claude_pids(pids: &[u32]) -> HashMap<u32, u32> {
+/// `CLAUDE_CODE_SESSION_ID` uit de omgeving van deze processen.
+fn sessie_ids(pids: &[u32]) -> HashMap<u32, String> {
     if pids.is_empty() {
         return HashMap::new();
     }
@@ -175,8 +179,8 @@ fn claude_pids(pids: &[u32]) -> HashMap<u32, u32> {
         .filter_map(|regel| {
             let regel = regel.trim_start();
             let pid = regel.split_whitespace().next()?.parse().ok()?;
-            let na = regel.split(" CLAUDE_PID=").nth(1)?;
-            Some((pid, na.split_whitespace().next()?.parse().ok()?))
+            let na = regel.split(" CLAUDE_CODE_SESSION_ID=").nth(1)?;
+            Some((pid, na.split_whitespace().next()?.to_string()))
         })
         .collect()
 }

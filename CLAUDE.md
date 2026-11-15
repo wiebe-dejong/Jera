@@ -24,4 +24,4 @@ Besloten op 2026-11-14, zie `SPEC.md`. De feiten staan in `research/native.md`.
   - `native.md` (2026-11-14): GPUI met GPUI Kit, Swift, Rune en andere native app-bases, en de terminalpakketten voor GPUI.
   - `agents.md` (2026-11-14): subagents en teamleden van een sessie, waar ze staan en hoe hun stand af te lezen is. Gemeten.
   - `sessies.md` (2026-11-14): hoe Jera van buiten ziet wat een Claude Code-sessie doet: het sessiebestand, hooks, oude sessies. Gemeten.
-  - `poorten.md` (2026-11-15): welke sessie een poort of agent-browser startte (via `CLAUDE_PID` in de omgeving), en de bestanden van agent-browser. Gemeten.
+  - `poorten.md` (2026-11-15): welke sessie een poort of agent-browser startte (via het sessie-id in de omgeving), en de bestanden van agent-browser. Gemeten.

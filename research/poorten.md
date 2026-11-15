@@ -7,9 +7,10 @@ Hoe Jera ziet welke sessie een server of agent-browser startte. Gemeten op deze 
 - Een proces dat Claude start, krijgt in zijn omgeving onder meer `CLAUDE_PID` (het pid van de sessie) en `CLAUDE_CODE_SESSION_ID`. Ook gezien: `CLAUDECODE=1`, `CLAUDE_CODE_CHILD_SESSION=1`.
 - Die variabelen blijven staan als het proces loskomt van Claude. De daemon van agent-browser had ppid 1 en toch `CLAUDE_PID` en `CLAUDE_CODE_SESSION_ID`. Via de procesboom is de sessie dus niet te vinden, via de omgeving wel.
 - `ps -E -ww -o command= -p <pid>` toont de omgeving van een eigen proces.
-- De keten: `lsof -nP -iTCP -sTCP:LISTEN` geeft poort en pid → de omgeving geeft `CLAUDE_PID` → `~/.claude/sessions/<CLAUDE_PID>.json` is de sessie. Bestaat dat pid niet meer, dan is het proces een wees.
-- Gemeten: een proces dat zijn naam overschrijft (`process.title` in Node, zoals `next-server`) wist ook zijn omgeving; `ps -E` toont dan geen `CLAUDE_PID`. Jera kijkt daarom ook bij de ouders van het proces.
-- Gemeten: een app die vanuit een sessie is geopend erft het sessienummer ook. Raycast had `CLAUDE_PID` van een sessie die niet meer draaide en zou dan een wees zijn. Jera telt een proces met een `.app/Contents/` in zijn keten niet als server van een sessie.
+- De keten: `lsof -nP -iTCP -sTCP:LISTEN` geeft poort en pid → de omgeving geeft `CLAUDE_CODE_SESSION_ID` → het sessiebestand in `~/.claude/sessions/` met dat `sessionId` is de sessie. Draait geen sessie met dat id, dan is het proces een wees.
+- Jera koppelt op het sessie-id, niet op `CLAUDE_PID`. Gemeten op 2026-11-15: `claude --resume <id>` houdt hetzelfde sessie-id, maar krijgt een nieuw pid. Na een herstart van Jera, of als ik een oude sessie hervat, horen de servers zo nog bij hun gesprek.
+- Gemeten: een proces dat zijn naam overschrijft (`process.title` in Node, zoals `next-server`) wist ook zijn omgeving; `ps -E` toont dan geen sessie-id. Jera kijkt daarom ook bij de ouders van het proces.
+- Gemeten: een app die vanuit een sessie is geopend erft het sessienummer ook. Raycast had het sessie-id van een sessie die niet meer draaide en zou dan een wees zijn. Jera telt een proces met een `.app/Contents/` in zijn keten niet als server van een sessie.
 - Niet gemeten, wel te verwachten: processen in Docker luisteren via `com.docker.backend` en hebben geen `CLAUDE_PID`. Een agent-browser die twee sessies delen, hoort bij de sessie die hem startte.
 
 ## agent-browser
