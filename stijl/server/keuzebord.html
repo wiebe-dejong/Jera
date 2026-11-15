@@ -1,0 +1,511 @@
+<meta charset="utf-8">
+<title>Stijl Jera server</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Geist:wght@300..700&family=Geist+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,300..600&display=swap">
+<style>
+/* ================= BORD (niet aanpassen) =================
+   Het bord is de werkbank om de frames heen. Het object zelf leeft in .site met eigen tokens (BASE). */
+:root{
+  --c-bg:#F1F2EE; --c-fg:#18201B; --c-mute:#5F6862; --c-line:#D9DDD5; --c-card:#FFFFFF; --c-acc:#2D6A45; --c-sel:#1D3A2A; --c-on-sel:#FFFFFF;
+  --c-vast:#2D6A45; --c-vast-bg:#E3ECE2; --c-vast-line:#C3D6C4;
+  --c-ui:"Geist",system-ui,-apple-system,sans-serif; --c-mono:"Geist Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--c-bg:#111412;--c-fg:#E7EBE6;--c-mute:#97A099;--c-line:#2A302C;--c-card:#191D1A;--c-acc:#A8D5E5;--c-sel:#E7EBE6;--c-on-sel:#111412;--c-vast:#8FC79F;--c-vast-bg:#18251D;--c-vast-line:#2C4234;color-scheme:dark}}
+:root[data-theme="dark"]{--c-bg:#111412;--c-fg:#E7EBE6;--c-mute:#97A099;--c-line:#2A302C;--c-card:#191D1A;--c-acc:#A8D5E5;--c-sel:#E7EBE6;--c-on-sel:#111412;--c-vast:#8FC79F;--c-vast-bg:#18251D;--c-vast-line:#2C4234;color-scheme:dark}
+body{margin:0;background:var(--c-bg);color:var(--c-fg);font-family:var(--c-ui);padding-inline:24px;padding-block:28px 96px}
+@media (max-width:620px){body{padding-inline:16px}}
+.app{max-width:1480px;margin:0 auto;display:flex;flex-direction:column;gap:28px}
+.top{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 16px}
+.top h1{font-weight:500;font-size:26px;letter-spacing:-.02em;margin:0}
+.round{font-family:var(--c-mono);font-size:12px;padding:3px 8px;border:1px solid var(--c-line);border-radius:3px;color:var(--c-mute)}
+.tabs{display:flex;flex-wrap:wrap;gap:8px 22px;position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--c-bg);padding-block:10px;border-bottom:1px solid var(--c-line)}
+@media (max-width:900px){.tabs{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;margin-inline:-16px;padding-inline:16px}.tg{flex-wrap:nowrap}}
+.tab{flex:none;font:500 13px var(--c-ui);color:var(--c-fg);background:var(--c-card);border:1px solid var(--c-line);border-radius:3px;padding:6px 10px;cursor:pointer;display:flex;gap:6px;align-items:baseline}
+.tab span{font-family:var(--c-mono);font-size:11px;color:var(--c-mute)}
+/* Status: vast, deels, open, later. Overal hetzelfde tegeltje. */
+.tile{display:inline-block;flex:none;box-sizing:border-box;width:9px;height:9px;border:1.5px solid var(--tc);border-radius:1px;align-self:center}
+[data-st]{--tc:var(--c-mute)}
+[data-st="vast"],[data-st="deels"]{--tc:var(--c-vast)}
+[data-st="vast"] .tile,.tile[data-st="vast"]{background:var(--tc)}
+[data-st="deels"] .tile,.tile[data-st="deels"]{background:linear-gradient(135deg,var(--tc) 50%,transparent 50%)}
+[data-st="later"] .tile,.tile[data-st="later"]{background:linear-gradient(var(--tc),var(--tc)) center/100% 1.5px no-repeat}
+.tg{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.tgl{flex:none;font:500 11px var(--c-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--c-mute);padding-right:4px}
+.tgl b{font-weight:500;color:var(--c-fg)}
+.tab[data-st="vast"],.tab[data-st="deels"]{background:var(--c-vast-bg);border-color:var(--c-vast-line)}
+.tab[data-st="deels"]{border-style:dashed;border-color:var(--c-vast)}
+.tk{font:500 11px var(--c-mono);padding:1px 5px;border-radius:2px;background:var(--c-card);color:var(--c-vast);border:1px solid var(--c-vast-line);white-space:nowrap}
+.prog{display:flex;gap:3px;align-items:center;align-self:center;margin-left:auto}
+.prog .tile{width:11px;height:11px}
+.tab:hover{border-color:var(--c-fg)}
+.tab[aria-selected="true"]{background:var(--c-sel);color:var(--c-on-sel);border-color:var(--c-sel);--tc:currentColor}
+.tab[aria-selected="true"] span{color:inherit;opacity:.7}
+.tab[aria-selected="true"] .tk{background:transparent;color:inherit;border-color:currentColor}
+.tab:focus-visible,.replay:focus-visible{outline:2px solid var(--c-acc);outline-offset:2px}
+.panel{display:flex;flex-direction:column;gap:28px}
+.opts{display:flex;flex-direction:column;gap:64px}
+.phd{display:flex;flex-direction:column;gap:12px}
+.phd-t{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px}
+.phd-n{font:500 13px var(--c-mono);color:var(--c-mute)}
+.phd h2{font:500 32px/1.1 var(--c-ui);letter-spacing:-.02em;margin:0}
+.part{display:flex;flex-direction:column;gap:28px}
+.phd.sub{border-top:2px solid var(--c-fg);padding-top:20px}
+.phd.sub h2{font-size:24px}
+@media (max-width:620px){.phd h2{font-size:26px}}
+.stc{display:inline-flex;align-items:center;gap:7px;font:500 12px var(--c-mono);letter-spacing:.04em;text-transform:uppercase;padding:5px 9px;border-radius:3px;border:1px solid var(--c-line);color:var(--c-mute)}
+.stc[data-st="vast"],.stc[data-st="deels"]{background:var(--c-vast-bg);border-color:var(--c-vast-line);color:var(--c-vast)}
+.stc[data-st="deels"]{border-style:dashed;border-color:var(--c-vast)}
+.phd .notes{font-size:13px}
+.phd .notes dd{font-size:12px}
+.opt{display:flex;flex-direction:column;gap:14px}
+.opt-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 14px;border-top:1px solid var(--c-line);padding-top:18px}
+.opt-k{font:600 22px var(--c-ui);width:26px}
+.opt-n{font:400 22px var(--c-ui);margin:0;letter-spacing:-.01em}
+.replay{margin-left:auto;font:500 13px var(--c-ui);background:transparent;color:var(--c-fg);border:1px solid var(--c-line);border-radius:3px;padding:6px 12px;cursor:pointer}
+.replay:hover{border-color:var(--c-fg)}
+.spec{display:flex;flex-wrap:wrap;gap:6px 22px;font-size:12.5px;color:var(--c-mute);margin:0}
+.spec div{display:flex;gap:6px;align-items:center;min-width:0}
+.spec dt{font-weight:500;color:var(--c-fg)}
+.spec dd{margin:0;font-family:var(--c-mono);font-size:11.5px;font-variant-numeric:tabular-nums}
+.sw{display:inline-block;width:12px;height:12px;border-radius:2px;border:1px solid var(--c-line);vertical-align:-1px;margin-right:4px}
+.pass{color:#1F7A44}.fail{color:#C2361F}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .pass{color:#7FD19B}:root:not([data-theme="light"]) .fail{color:#FF8A73}}
+:root[data-theme="dark"] .pass{color:#7FD19B}:root[data-theme="dark"] .fail{color:#FF8A73}
+.stage{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px;align-items:start}
+.stage.duo-m{grid-template-columns:minmax(0,1fr) 340px 340px}
+@media (max-width:1180px){.stage.duo-m{grid-template-columns:minmax(0,1fr) 300px}.stage.duo-m .fr:last-child{grid-column:2}}
+@media (max-width:980px){.stage,.stage.duo-m{grid-template-columns:minmax(0,1fr)}.stage .fr.m,.stage.duo-m .fr:last-child{grid-column:auto;max-width:390px;width:100%}}
+.fr{background:var(--c-card);border:1px solid var(--c-line);border-radius:8px;overflow:hidden;min-width:0}
+.bar{height:28px;display:flex;align-items:center;gap:6px;padding-inline:10px;border-bottom:1px solid var(--c-line);font:11px var(--c-mono);color:var(--c-mute)}
+.bar i{width:8px;height:8px;border-radius:50%;background:var(--c-line);display:block}
+.bar b{font-weight:400;margin-left:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vp{overflow:hidden;position:relative}
+.vp.tall{max-height:960px;overflow-y:auto}
+.fr.m .vp.tall{max-height:720px}
+.fold{position:absolute;left:0;right:0;border-top:2px dashed var(--c-acc);z-index:9;pointer-events:none}
+.fold span{position:absolute;right:8px;top:4px;font:500 11px var(--c-mono);background:var(--c-acc);color:#fff;padding:2px 6px;letter-spacing:.05em;text-transform:uppercase}
+
+/* ================= OBJECT =================
+   Alles hieronder is van het object dat gekozen wordt. Elk fragment heeft eigen klassen; alle
+   waarden die een beslisgebied kan veranderen zijn tokens (var(--x)) met hun basiswaarde in BASE. */
+/* Mac-app: alleen het venster op 1280, geen mobiel frame. */
+.stage,.stage.duo-m{grid-template-columns:minmax(0,1fr)}
+.stage .fr.m{display:none}
+.stage .fr{max-width:1282px}
+/* Jera: bundle.css van het design system, op .site. */
+.site{background:var(--bg);color:var(--ink);font:400 12.5px/1.3 var(--font-mono);-webkit-font-smoothing:antialiased}
+.site *,.site *::before,.site *::after{box-sizing:border-box}
+.site :where(button){font:inherit;letter-spacing:inherit;text-transform:inherit;color:inherit;background:none;border:0;padding:0;margin:0;cursor:pointer;text-align:left}
+/* iconen */
+.ck-ic{flex:none;display:block;width:var(--icoon);height:var(--icoon)}
+.s-ok{stroke:var(--ok)}.s-bad{stroke:var(--bad)}.s-mute{stroke:var(--mute)}.s-ink{stroke:var(--ink)}
+.f-warn{fill:var(--warn)}.f-bad{fill:var(--bad)}
+.ck-q{fill:var(--bg);font:700 11px system-ui,sans-serif}
+@keyframes ck-draai{to{transform:rotate(360deg)}}
+.ck-spin{animation:ck-draai 1.1s linear infinite}
+@media (prefers-reduced-motion:reduce){.ck-spin{animation:none}}
+
+/* titelbalk met tabs */
+.ck-top{display:flex;align-items:stretch;height:var(--h-titelbalk);padding-left:var(--tab-pad);background:var(--bar);border-bottom:var(--lijn-dikte) solid var(--line);white-space:nowrap;overflow:hidden}
+.ck-lights{display:flex;align-items:center;gap:8px;margin-right:16px}
+.ck-lights i{display:block;width:12px;height:12px;border-radius:50%}
+.ck-tab{display:flex;align-items:center;gap:8px;margin-bottom:-1px;padding:0 var(--tab-pad);border-left:var(--lijn-dikte) solid var(--line);border-top:var(--streep) solid transparent;color:var(--mute)}
+.ck-tab[aria-current]{background:var(--bg);color:var(--ink);font-weight:700;border-top-color:var(--accent)}
+.ck-tab span{font-weight:400;color:var(--mute)}
+.ck-comp{display:flex;align-items:center;gap:8px;margin-left:auto;padding:0 var(--tab-pad);border-left:var(--lijn-dikte) solid var(--line)}
+.ck-comp span{color:var(--mute);margin-right:8px}
+
+/* linkerkolom */
+.ck-kolom{width:var(--b-kolom);max-width:100%;display:flex;flex-direction:column;border-right:var(--lijn-dikte) solid var(--line)}
+.ck-sw{display:flex;gap:18px;height:var(--h-schakelaar);padding:0 var(--pad);border-bottom:var(--lijn-dikte) solid var(--line)}
+.ck-sw button{border-top:var(--streep) solid transparent;border-bottom:var(--streep) solid transparent;color:var(--mute)}
+.ck-sw button[aria-pressed="true"]{color:var(--ink);font-weight:700;border-bottom-color:var(--accent)}
+.ck-grp{display:flex;align-items:center;height:calc(var(--h-rij) + 2px);margin-top:8px;padding-left:var(--pad);color:var(--mute)}
+.ck-grp b{flex:1;font-weight:400}
+.ck-grp button{width:32px;height:100%;text-align:center}
+.ck-row{display:flex;align-items:center;gap:var(--gap);width:100%;height:var(--h-rij);padding:0 var(--pad);border-radius:var(--hoek)}
+.ck-row.is-sel{background:var(--sel);font-weight:700;box-shadow:inset var(--streep) 0 var(--accent)}
+.ck-row.is-idle{color:var(--mute)}
+.ck-t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ck-m{flex:none;color:var(--mute)}
+
+/* knop */
+.ck-knop{flex:none;display:inline-flex;align-items:center;height:var(--h-knop);padding:0 8px;border:var(--lijn-dikte) solid var(--line-strong);border-radius:var(--hoek)}
+.ck-knop.is-gevaar{color:var(--bad)}
+.ck-knop.is-hoofd{background:var(--ink);border-color:var(--ink);color:var(--bg);font-weight:700}
+
+/* Render-regel */
+.ck-render{display:flex;align-items:stretch;height:var(--h-render);border-bottom:var(--lijn-dikte) solid var(--line);white-space:nowrap}
+.ck-svcs{flex:1;min-width:0;display:flex;overflow:hidden}
+.ck-svc{flex:none;display:flex;align-items:center;gap:8px;padding:0 var(--tab-pad);border-right:var(--lijn-dikte) solid var(--line);font-weight:700}
+.ck-gitknop{flex:none;padding:0 var(--tab-pad);border-left:var(--lijn-dikte) solid var(--line);border-top:var(--streep) solid transparent;border-bottom:var(--streep) solid transparent;color:var(--mute)}
+.ck-gitknop[aria-pressed="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+
+/* terminal */
+.ck-term{padding:12px var(--tab-pad);font:400 12.5px/1.55 var(--font-mono);white-space:nowrap;overflow:hidden}
+.ck-term b{font-weight:700}
+.ck-term .m{color:var(--mute)}.ck-term .g{color:var(--term-green)}.ck-term .acc{color:var(--term-accent)}
+.ck-term .sp{margin-top:1.55em}.ck-term .i2{padding-left:2ch}.ck-term .i5{padding-left:5ch}
+.ck-term .del{background:var(--term-del)}.ck-term .add{background:var(--term-add)}
+.ck-in{display:flex;align-items:center;gap:1ch;height:var(--h-invoer);margin-top:1.55em;padding:0 10px;border:var(--lijn-dikte) solid var(--line-strong);border-radius:var(--hoek)}
+.ck-in i{display:block;width:.6em;height:1.25em;background:var(--ink)}
+
+/* git-paneel */
+.ck-gitp{width:346px;max-width:100%;border-left:var(--lijn-dikte) solid var(--line);overflow:hidden}
+.ck-gitp svg{display:block}
+.ck-gitp text{font:400 11px var(--font-mono);fill:var(--mute)}
+.ck-gitp text.bn{font-size:12px;font-weight:600}
+.ck-gitp text.n{font-size:11.5px;font-weight:700}
+.f-bg{fill:var(--bg)}.s-bg{stroke:var(--bg)}.s-line{stroke:var(--line)}.s-line2{stroke:var(--line-strong)}
+.s-l1{stroke:var(--lane-1)}.s-l2{stroke:var(--lane-2)}.s-l3{stroke:var(--lane-3)}.s-l4{stroke:var(--lane-4)}
+.ck-gitp .f-l1,.f-l1{fill:var(--lane-1)}.ck-gitp .f-l2,.f-l2{fill:var(--lane-2)}.ck-gitp .f-l3,.f-l3{fill:var(--lane-3)}.ck-gitp .f-l4,.f-l4{fill:var(--lane-4)}
+
+/* bestandsboom */
+.ck-boom .ck-row{gap:6px}
+.ck-boom .d1{padding-left:calc(var(--pad) + var(--inspring))}
+.ck-boom .d2{padding-left:calc(var(--pad) + 2 * var(--inspring))}
+.ck-boom .ck-plus{flex:none;width:32px;margin-right:calc(-1 * var(--pad));height:100%;text-align:center;color:var(--mute)}
+
+/* agents onder een sessie */
+.ck-som{flex:none;color:var(--mute);font-weight:400;font-variant-numeric:tabular-nums}
+.ck-pijl{flex:none;display:flex}
+.ck-ag{font-weight:400;padding-left:calc(var(--pad) + var(--icoon) + var(--gap))}
+.ck-agkop{display:flex;align-items:center;gap:6px;width:100%;height:20px;padding:0 var(--pad) 0 calc(var(--pad) + var(--icoon) + var(--gap));font-size:11px;color:var(--mute)}
+.ck-agkop b{flex:1;font-weight:400}
+.ck-kaart{display:flex;flex-direction:column;max-width:360px;padding:7px 10px;background:var(--bg);border:var(--lijn-dikte) solid var(--line-strong)}
+.ck-kaart span+span{color:var(--mute)}
+.t-blue{color:var(--team-blue)}.t-green{color:var(--team-green)}.t-yellow{color:var(--team-yellow)}.t-purple{color:var(--team-purple)}
+.t-orange{color:var(--team-orange)}.t-pink{color:var(--team-pink)}.t-cyan{color:var(--team-cyan)}.t-red{color:var(--team-red)}
+
+/* paneel met poorten en agent-browser */
+.ck-paneel{width:360px;max-width:100%;border-left:var(--lijn-dikte) solid var(--line)}
+.ck-poort{flex:none;width:5ch;font-weight:700;font-variant-numeric:tabular-nums}
+
+/* dialoog en leeg scherm */
+.ck-dialoog{width:420px;max-width:100%;border:var(--lijn-dikte) solid var(--line-strong);background:var(--bg)}
+.ck-dialoog h2{margin:0;display:flex;align-items:center;height:var(--h-titelbalk);padding:0 var(--pad);background:var(--bar);border-bottom:var(--lijn-dikte) solid var(--line);font:inherit;font-weight:700}
+.ck-dialoog .ck-voet{display:flex;justify-content:flex-end;gap:8px;padding:var(--pad);border-top:var(--lijn-dikte) solid var(--line)}
+.ck-leeg{display:flex;flex-direction:column;align-items:flex-start;gap:var(--pad);padding:var(--pad);color:var(--mute)}
+.ck-vak{padding:var(--pad)}
+
+/* onder de muis: een rij of knop krijgt het vlak sel, een woord of teken in mute wordt ink */
+button.ck-row:hover,.ck-row.ck-ag:hover,button.ck-agkop:hover,.ck-knop:not(.is-hoofd):hover{background:var(--sel)}
+.ck-tab:hover,.ck-sw button:hover,.ck-gitknop:hover,.ck-grp button:hover,.ck-plus:hover{color:var(--ink)}
+.ck-pijl:hover .s-mute{stroke:var(--ink)}
+
+.vf{position:relative;width:353px;height:420px;overflow:hidden;background:var(--bg);font:12px/1.3 "JetBrains Mono",ui-monospace,Menlo,monospace}
+.vf svg{position:absolute;inset:0;display:block}.vf svg text{font-family:inherit}
+.vf .naam{position:absolute;font-weight:600;line-height:18px;white-space:nowrap}
+.vf .dag{position:absolute;right:8px;color:var(--mute);font-size:11px;white-space:nowrap;line-height:1.35}
+
+.ck-comp[aria-pressed="true"]{color:var(--ink);box-shadow:inset 0 calc(-1 * var(--streep)) var(--accent)}
+.win{position:relative;height:720px;display:flex;flex-direction:column;overflow:hidden}
+.lijf{flex:1;display:flex;min-height:0}
+.lijf .ck-kolom{flex:none}
+.midden{flex:1;min-width:0;display:flex;flex-direction:column}
+.rechts{flex:none;border-left:var(--lijn-dikte) solid var(--line);overflow:hidden;display:flex;flex-direction:column}
+.rechts.kol{width:361px}
+.boven{flex:1;min-height:0;overflow:hidden;border-bottom:var(--lijn-dikte) solid var(--line)}
+.onder{flex:1;min-height:0;overflow:auto}
+.gp{width:353px}
+.pp{width:360px;padding-bottom:8px}
+.pp .ck-grp b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ck-grp .ck-knop.alle{width:auto;height:var(--h-knop);margin-right:var(--pad);text-align:center}
+.laag{position:absolute;top:var(--h-titelbalk);right:0;width:362px;background:var(--bg);border:var(--lijn-dikte) solid var(--line-strong);border-top:0;z-index:5}
+.plaatje{margin:4px var(--pad) 4px calc(var(--pad) + 0px);border:var(--lijn-dikte) solid var(--line);background:#f6f6f2}
+.pl-top{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:10px 10px 6px}
+.pl-top i{display:block;height:30px;background:#fff;border:1px solid #e2e2da}
+.pl-graf{margin:0 10px 10px;height:56px;background:#fff;border:1px solid #e2e2da}
+.plaatje span{display:block;padding:3px 8px;font-size:11px;color:var(--mute);background:var(--bg);border-top:var(--lijn-dikte) solid var(--line)}
+/* artifacts */
+.ck-kolom{position:relative}
+.s-mute-l{stroke:var(--mute)}
+.is-gelezen{color:var(--mute)}
+.ck-arts{flex:none;display:flex;align-items:stretch;border-left:var(--lijn-dikte) solid var(--line)}
+.ck-arts .ck-lbl{display:flex;align-items:center;padding-left:var(--tab-pad);color:var(--mute)}
+.ck-art{flex:none;display:flex;align-items:center;max-width:26ch;padding:0 calc(var(--tab-pad) / 2) 0 var(--tab-pad);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ck-art:last-child{padding-right:var(--tab-pad)}
+.ck-art:hover{background:var(--sel)}
+.ck-meer{flex:none;display:flex;align-items:center;padding:0 var(--tab-pad);color:var(--mute)}
+.ck-artic{flex:none;display:flex;align-items:center;gap:3px;color:var(--mute);font-weight:400}
+.ck-menu{position:absolute;left:96px;width:250px;padding:4px 0;background:var(--bg);border:var(--lijn-dikte) solid var(--line-strong);z-index:5}
+.ck-menu .ck-row{font-weight:400}
+.paneel-pp{width:360px}
+@media (prefers-reduced-motion: reduce){.site *{transition:none !important;animation:none !important}}
+</style>
+<style>
+/* server rechtsonder */
+.win{height:540px}
+.midden{position:relative}
+.ck-term{flex:1;min-height:0}
+.fl{display:flex;align-items:center;height:26px;padding:0 12px;font:500 11px var(--c-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--c-mute);background:var(--c-bg);border-block:1px solid var(--c-line)}
+.fl:first-child{border-top:0}
+.sv{display:flex;align-items:stretch;white-space:nowrap;color:var(--mute)}
+.sv .it{display:flex;align-items:center;gap:6px;padding:0 var(--tab-pad)}
+.sv .it b{font-weight:400;color:var(--mute)}
+.sv .it .nr{color:var(--ink);font-weight:700}
+.sv .stip{display:block;width:6px;height:6px;border-radius:50%;background:var(--ok)}
+.sv .ck-ic{width:13px;height:13px}
+.sv:hover,.sv:hover b{color:var(--ink)}
+.sv[aria-pressed="true"],.sv[aria-pressed="true"] b{color:var(--ink)}
+/* A statusbalk */
+.sb{flex:none;display:flex;height:24px;background:var(--bar);border-top:var(--lijn-dikte) solid var(--line)}
+.sb .sv{margin-left:auto;border-left:var(--lijn-dikte) solid var(--line)}
+.sb .sv .it+.it{border-left:var(--lijn-dikte) solid var(--line)}
+.sb .sv[aria-pressed="true"]{box-shadow:inset 0 var(--streep) var(--accent)}
+/* B pil */
+.pil{position:absolute;right:12px;bottom:12px;height:26px;background:var(--bar);border:var(--lijn-dikte) solid var(--line-strong);z-index:4}
+.pil .it{padding:0 8px}
+.pil.sv[aria-pressed="true"]{border-color:var(--accent)}
+/* C regel onder de terminal */
+.tr{flex:none;display:flex;justify-content:flex-end;height:26px;border-top:var(--lijn-dikte) solid var(--line)}
+.tr .sv .it+.it{border-left:var(--lijn-dikte) solid var(--line)}
+.tr .sv{border-left:var(--lijn-dikte) solid var(--line)}
+.tr .sv[aria-pressed="true"]{box-shadow:inset 0 calc(-1 * var(--streep)) var(--accent)}
+/* uitgeklapt */
+.lade{position:absolute;right:0;bottom:0;width:362px;max-height:calc(100% - 40px);overflow:auto;background:var(--bg);border:var(--lijn-dikte) solid var(--line-strong);border-bottom:0;z-index:5}
+.lade.b-pil{right:12px;bottom:44px;border-bottom:var(--lijn-dikte) solid var(--line-strong)}
+.lade.b-tr{bottom:26px}
+.ldo{flex:none;height:230px;overflow:auto;border-top:var(--lijn-dikte) solid var(--line)}
+.ldo .pp{width:auto}
+.ldo .plaatje{max-width:336px}
+.lijst{padding-bottom:8px}
+.lijst .ck-grp:first-child{margin-top:4px}
+.lijst .ck-row{gap:var(--gap)}
+.ck-poort{width:42px}
+.lijst .ck-t{flex:0 1 auto}
+.ck-wie{flex:1 1 0;min-width:0;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--mute)}
+.lijst .pl-top i{height:20px}.lijst .pl-graf{height:36px}
+</style>
+<div class="app">
+  <header class="top"><h1>Stijl Jera server</h1><span class="round">Ronde 3</span><span class="prog" id="prog" role="img"></span></header>
+  <nav class="tabs" id="tabs" role="tablist" aria-label="Beslisgebieden"></nav>
+  <main class="panel" id="panel" role="tabpanel"></main>
+</div>
+<script>
+/* ================= OBJECT: data (per bord invullen) ================= */
+const IMG = {};
+
+/* Donker thema van Jera, uit stijl/design-system/tokens.json. */
+const BASE = {
+  '--bg':'#0e1013','--bar':'#14171b','--line':'#23272e','--line-strong':'#333944','--ink':'#d5d9e0','--mute':'#8a93a2','--sel':'#1c2129',
+  '--accent':'#a8d5e5','--ok':'#4fcb7c','--warn':'#f2cc60','--bad':'#ff6b6b',
+  '--term-green':'#5fd7a7','--term-accent':'#f2cc60','--term-add':'rgba(95, 215, 167, 0.16)','--term-del':'rgba(255, 143, 143, 0.16)',
+  '--font-mono':'"JetBrains Mono",ui-monospace,Menlo,monospace',
+  '--pad':'12px','--tab-pad':'14px','--gap':'9px','--inspring':'14px','--hoek':'0px',
+  '--h-rij':'26px','--h-titelbalk':'40px','--h-schakelaar':'30px','--h-render':'30px','--h-invoer':'32px','--h-knop':'20px','--icoon':'14px','--b-kolom':'290px',
+  '--lijn-dikte':'1px','--streep':'2px',
+};
+const BASECTX = { plek:'balk', teller:'woord', open:'lade', indeling:'soort' };
+
+const IC = {
+  bezig:`<svg class="ck-ic ck-spin" viewBox="0 0 16 16" fill="none" role="img" aria-label="bezig"><circle cx="8" cy="8" r="6" stroke-width="2" opacity=".3" class="s-ok"/><path d="M8 2a6 6 0 0 1 6 6" stroke-width="2" stroke-linecap="round" class="s-ok"/></svg>`,
+  vraag:`<svg class="ck-ic" viewBox="0 0 16 16" fill="none" role="img" aria-label="wacht op antwoord"><circle cx="8" cy="8" r="7.5" class="f-warn"/><text x="8" y="12" text-anchor="middle" class="ck-q">?</text></svg>`,
+  slot:`<svg class="ck-ic" viewBox="0 0 16 16" fill="none" role="img" aria-label="wacht op toestemming"><rect x="2.5" y="7" width="11" height="8" rx="1.5" class="f-bad"/><path d="M5 7V5a3 3 0 0 1 6 0v2" stroke-width="1.8" class="s-bad"/></svg>`,
+  klaar:`<svg class="ck-ic" viewBox="0 0 16 16" fill="none" role="img" aria-label="net klaar"><path d="M3 8.5l3.2 3.2L13 4.8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="s-ok"/></svg>`,
+  idle:`<svg class="ck-ic" viewBox="0 0 16 16" fill="none" role="img" aria-label="idle"><path d="M5 8h6" stroke-width="2" stroke-linecap="round" class="s-mute"/></svg>`,
+  kruis:`<svg class="ck-ic" viewBox="0 0 16 16" fill="none" role="img" aria-label="deploy mislukt"><path d="M4 4l8 8M12 4l-8 8" stroke-width="2.2" stroke-linecap="round" class="s-bad"/></svg>`,
+  srv:`<svg class="ck-ic" viewBox="0 0 16 16" fill="none" role="img" aria-label="poorten"><rect x="2" y="2.5" width="12" height="4.5" stroke-width="1.6" class="s-mute"/><rect x="2" y="9" width="12" height="4.5" stroke-width="1.6" class="s-mute"/><path d="M4.5 4.75h1M4.5 11.25h1" stroke-width="1.6" class="s-mute"/></svg>`,
+  brw:`<svg class="ck-ic" viewBox="0 0 16 16" fill="none" role="img" aria-label="browsers"><rect x="1.8" y="2.8" width="12.4" height="10.4" stroke-width="1.6" class="s-mute"/><path d="M1.8 6h12.4" stroke-width="1.6" class="s-mute"/></svg>`,
+  art:`<svg class="ck-ic" viewBox="0 0 16 16" fill="none" role="img" aria-label="artifacts"><path d="M7 3H3v10h10V9" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="s-mute"/><path d="M10 3h3v3M13 3L8 8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="s-mute"/></svg>`,
+};
+
+/* Wat draait in webshop: twee sessies en één poort zonder sessie. */
+const SES = {kpi:'KPI-kaarten responsive maken', csv:'Bug in csv-export'};
+const VOL = {
+  ports:[{n:3000,cmd:'next dev',s:'kpi'},{n:8000,cmd:'uvicorn app:main',s:'csv'},{n:5432,cmd:'postgres',s:null}],
+  browsers:[{s:'kpi',url:'localhost:3000/dashboard'}],
+  arts:[{t:'Stijl KPI-kaarten',s:'kpi'},{t:'KPI-kaarten op telefoon',s:'kpi'},{t:'Export als csv',s:'csv'}],
+};
+const NUL = {ports:[],browsers:[],arts:[{t:'Stijl KPI-kaarten',s:'kpi'},{t:'KPI-kaarten op telefoon',s:'kpi'}]};
+
+const titelbalk = () => `<div class="ck-top"><span class="ck-lights" aria-hidden="true"><i style="background:#FF5F57"></i><i style="background:#FEBC2E"></i><i style="background:#28C840"></i></span><button type="button" class="ck-tab" aria-current="page">webshop <span>3</span></button><button type="button" class="ck-tab">jera <span>1</span></button><button type="button" class="ck-tab" aria-label="Map toevoegen">+ map</button></div>`;
+
+const kolom = () => `<div class="ck-kolom"><div class="ck-sw"><button type="button" aria-pressed="true">sessies</button><button type="button">bestanden</button></div>
+<div class="ck-grp"><b>webshop/</b><button type="button">+</button></div>
+<button type="button" class="ck-row is-sel">${IC.bezig}<span class="ck-t">${SES.kpi}</span></button>
+<button type="button" class="ck-row">${IC.vraag}<span class="ck-t">${SES.csv}</span></button>
+<button type="button" class="ck-row">${IC.slot}<span class="ck-t">Supabase-migratie leden</span></button>
+<div class="ck-grp"><b>frontend/</b><button type="button">+</button></div>
+<button type="button" class="ck-row">${IC.klaar}<span class="ck-t">Testomgeving opzetten</span></button>
+<button type="button" class="ck-row is-idle">${IC.idle}<span class="ck-t">Tabel sorteren</span></button></div>`;
+
+const render = () => `<div class="ck-render"><div class="ck-svcs"><button type="button" class="ck-svc">${IC.klaar}api</button><button type="button" class="ck-svc">${IC.kruis}web</button></div><button type="button" class="ck-gitknop" aria-pressed="false">git</button></div>`;
+
+const term = () => `<div class="ck-term"><div class="m">&gt; maak de kpi-kaarten responsive op telefoon</div>
+<div class="sp"><span class="g">⏺</span> <b>Update</b>(frontend/components/KpiCards.tsx)</div><div class="i2 m">⎿ Updated with 1 addition and 1 removal</div>
+<div class="i5 del">41 - &lt;div className="grid grid-cols-4 gap-4"&gt;</div><div class="i5 add">41 + &lt;div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-4"&gt;</div>
+<div class="sp"><span class="g">⏺</span> <b>Bash</b>(npm run dev)</div><div class="i2 m">⎿ ready on http://localhost:3000</div>
+<div class="sp"><span class="g">⏺</span> <b>Artifact</b>(stijl/kpi-kaarten/keuzebord.html)</div><div class="i2 m">⎿ Published at https://claude.ai/artifact/NdzPybgFpCDDsQePYDT9DV</div>
+<div class="sp acc">✻ Kijken… <span class="m">(12s · esc to interrupt)</span></div>
+<div class="ck-in">&gt;<i></i></div><div class="i2 m">? for shortcuts</div></div>`;
+
+/* De teller: een soort met 0 staat er niet; alle 3 op 0 en er staat niets. */
+const teller = (c,d,open) => {
+  const it = (inh) => `<span class="it">${inh}</span>`;
+  const n = x => `<span class="nr">${x}</span>`;
+  let items=[];
+  if(c.teller==='woord'){
+    if(d.ports.length)items.push(it(`<b>poorten</b>${n(d.ports.length)}`));
+    if(d.browsers.length)items.push(it(`<b>browsers</b>${n(d.browsers.length)}`));
+    if(d.arts.length)items.push(it(`<b>artifacts</b>${n(d.arts.length)}`));
+  } else if(c.teller==='nummer'){
+    if(d.ports.length)items.push(it(d.ports.map(p=>`<i class="stip"></i>${n(p.n)}`).join('&nbsp;')));
+    if(d.browsers.length)items.push(it(`<b>browsers</b>${n(d.browsers.length)}`));
+    if(d.arts.length)items.push(it(`<b>artifacts</b>${n(d.arts.length)}`));
+  } else {
+    if(d.ports.length)items.push(it(`${IC.srv}${n(d.ports.length)}`));
+    if(d.browsers.length)items.push(it(`${IC.brw}${n(d.browsers.length)}`));
+    if(d.arts.length)items.push(it(`${IC.art}${n(d.arts.length)}`));
+  }
+  if(!items.length)return '';
+  const cls = c.plek==='pil'?'pil sv':'sv';
+  return `<button type="button" class="${cls}" aria-pressed="${!!open}">${items.join('')}</button>`;
+};
+
+const rij = (p,wie) => `<div class="ck-row"><span class="ck-poort">${p.n}</span><span class="ck-t">${p.cmd}</span><span class="ck-wie">${wie}</span><button type="button" class="ck-knop">Openen</button><button type="button" class="ck-knop is-gevaar">Stoppen</button></div>`;
+const brw = (b,wie) => `<div class="ck-row"><span class="ck-t">${wie}</span><span class="ck-wie"></span><button type="button" class="ck-knop is-gevaar">Sluiten</button></div><div class="plaatje"><div class="pl-top"><i></i><i></i><i></i><i></i></div><div class="pl-graf"></div><span>${b.url}</span></div>`;
+const art = (a,wie) => `<div class="ck-row"><span class="ck-t">${a.t}</span><span class="ck-wie">${wie}</span><button type="button" class="ck-knop">Openen</button></div>`;
+const grp = t => `<div class="ck-grp"><b>${t}</b></div>`;
+const wie = s => s?SES[s]:'~';
+
+const lijst = (c,d) => {
+  if(c.indeling==='soort'){
+    let h='';
+    if(d.ports.length)h+=grp('Poorten')+d.ports.map(p=>rij(p,wie(p.s))).join('');
+    if(d.browsers.length)h+=grp('Browsers')+d.browsers.map(b=>brw(b,wie(b.s))).join('');
+    if(d.arts.length)h+=grp('Artifacts')+d.arts.map(a=>art(a,wie(a.s))).join('');
+    return `<div class="pp lijst">${h}</div>`;
+  }
+  const sessies=[...Object.keys(SES),null];
+  return `<div class="pp lijst">${sessies.map(s=>{
+    const ps=d.ports.filter(p=>p.s===s),bs=d.browsers.filter(b=>b.s===s),as=d.arts.filter(a=>a.s===s);
+    if(!ps.length&&!bs.length&&!as.length)return '';
+    return grp(s?SES[s]:'zonder sessie')+ps.map(p=>rij(p,'')).join('')+bs.map(b=>brw(b,'agent-browser')).join('')+as.map(a=>art(a,'')).join('');
+  }).join('')}</div>`;
+};
+
+const venster = (c,d,open) => {
+  const tel = teller(c,d,open);
+  const pil = c.plek==='pil'?tel:'';
+  const tr = c.plek==='regel'&&tel?`<div class="tr">${tel}</div>`:'';
+  const sb = c.plek==='balk'?`<div class="sb">${tel}</div>`:'';
+  const lade = open&&c.open==='lade'?`<div class="lade ${c.plek==='pil'?'b-pil':c.plek==='regel'?'b-tr':''}">${lijst(c,d)}</div>`:'';
+  const onder = open&&c.open==='onder'?`<div class="ldo">${lijst(c,d)}</div>`:'';
+  const rechts = open&&c.open==='kolom'?`<div class="rechts kol"><div class="onder">${lijst(c,d)}</div></div>`:'';
+  return `<div class="win">${titelbalk()}<div class="lijf">${kolom()}<div class="midden">${render()}${term()}${onder}${tr}${pil}${lade}</div>${rechts}</div>${sb}</div>`;
+};
+
+const F = {
+  dicht: c => `<div class="fl">ingeklapt</div>${venster(c,VOL,false)}`,
+  open:  c => `<div class="fl">uitgeklapt</div>${venster(c,VOL,true)}`,
+  nul:   c => `<div class="fl">0 poorten · 0 browsers · 2 artifacts</div>${venster(c,NUL,false)}`,
+};
+
+const TABS = [
+{id:'plek',name:'Plek rechtsonder',frags:['dicht','open'],opts:[
+ {k:'A',name:'Statusbalk onderaan',ctx:{plek:'balk'},spec:[['Plek','balk onder het hele venster, rechts'],['Breedte','hele venster, ook onder de sessielijst'],['Hoogte','24 px, vlak bar, lijn erboven'],['Links','leeg'],['Open','streep accent boven'],['Alle 3 op 0','balk blijft staan, leeg']]},
+ {k:'B',name:'Zwevend in de terminal',ctx:{plek:'pil'},spec:[['Plek','rechtsonder in de terminal, 12 px van de rand'],['Vorm','26 px, vlak bar, rand line-strong'],['Bedekt','de hoek van de terminal'],['Open','rand accent'],['Alle 3 op 0','weg']]},
+ {k:'C',name:'Regel onder de terminal',ctx:{plek:'regel'},spec:[['Plek','onder de terminal, tussen linkerkolom en kolom rechts'],['Breedte','alleen de terminal; de sessielijst loopt door tot onderaan'],['Hoogte','26 px, lijn erboven'],['Uitlijning','rechts'],['Open','streep accent onder'],['Alle 3 op 0','regel weg, terminal 26 px hoger']]},
+]},
+{id:'teller',name:'Teller',frags:['dicht','nul'],opts:[
+ {k:'A',name:'Woord en aantal',ctx:{teller:'woord'},spec:[['Per soort','poorten 3 · browsers 1 · artifacts 3'],['Woord','mute'],['Aantal','ink, vet'],['0','soort weg']]},
+ {k:'B',name:'Poortnummers',ctx:{teller:'nummer'},spec:[['Poorten','elk nummer met een stip ok, 6 px'],['Browsers, artifacts','woord en aantal'],['0','soort weg']]},
+ {k:'C',name:'Icoon en aantal',ctx:{teller:'icoon'},spec:[['Per soort','icoon 13 px in mute, aantal in ink'],['Woord','onder de muis'],['0','soort weg']]},
+]},
+{id:'open',name:'Openklappen',frags:['open'],opts:[
+ {k:'A',name:'Lade over de terminal',ctx:{open:'lade'},spec:[['Plek','boven de teller, rechts tegen de rand'],['Maat','362 px breed, tot de titelbalk hoog'],['Terminal','blijft even groot, ligt eronder'],['Sluiten','klik op de teller of ernaast']]},
+ {k:'B',name:'Kolom rechts',ctx:{open:'kolom'},spec:[['Plek','kolom rechts van de terminal, zoals nu'],['Maat','360 px breed, volle hoogte'],['Met git','git boven, dit onder, helft om helft'],['Terminal','360 px smaller']]},
+ {k:'C',name:'Lade onder de terminal',ctx:{open:'onder'},spec:[['Plek','onder de terminal, over haar breedte'],['Maat','230 px hoog'],['Terminal','230 px lager'],['Sluiten','klik op de teller']]},
+]},
+{id:'indeling',name:'Indeling',frags:['open'],opts:[
+ {k:'A',name:'Per soort',ctx:{indeling:'soort'},spec:[['Koppen','Poorten · Browsers · Artifacts'],['Per regel','de sessie in mute, rechts; wat niet past valt weg achter …'],['Zoals','het paneel nu']]},
+ {k:'B',name:'Per sessie',ctx:{indeling:'sessie'},spec:[['Koppen','de titel van de sessie, daarna zonder sessie'],['Per sessie','poorten, browser, artifacts'],['Per regel','geen sessienaam']]},
+]},
+];
+
+/* ================= STAND (per ronde bijwerken) ================= */
+const CHOSEN  = {plek:'A', teller:'A', open:'A', indeling:'A'};            /* tab-id: letter. Gekozen; de tab toont alleen die optie en alle andere tabs bouwen erop. */
+const PARTIAL = {};            /* tab-id: 'wat is goedgekeurd'. Gekozen, maar alleen dit deel staat vast. */
+const LATER   = {};            /* tab-id: true. Gesloten voor nu, komt later terug; toelichting in NOTES. */
+const PCHOSEN = {};            /* 'tab.deel': letter. Gekozen deelvragen. */
+const NOTES   = {};            /* tab-id: [[label, tekst], ...] boven de opties, bijvoorbeeld waarom iets later komt. */
+
+/* ================= ENGINE (niet aanpassen) ================= */
+const state = id => LATER[id]?'later':PARTIAL[id]?'deels':CHOSEN[id]?'vast':'open';
+const STATE_L = {vast:'Vast',deels:'Deels',open:'Open',later:'Later'};
+const pick = id => CHOSEN[id]+(PARTIAL[id]?' · '+PARTIAL[id]:'');
+const lum = h => {const n=parseInt(h.slice(1),16);const f=x=>{x/=255;return x<=.03928?x/12.92:Math.pow((x+.055)/1.055,2.4)};return .2126*f(n>>16&255)+.7152*f(n>>8&255)+.0722*f(n&255)};
+const ratio = (a,b) => {const x=lum(a),y=lum(b);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05)};
+const grade = r => r>=7?'AAA':r>=4.5?'AA':r>=3?'alleen groot':'nee';
+const sw = h => `<span class="sw" style="background:${h}"></span>${h}`;
+const pair = (v,a,b) => {const r=ratio(v[a],v[b]);return `${r.toFixed(1)}:1 <span class="${r>=4.5?'pass':r>=3?'':'fail'}">${grade(r)}</span>`};
+let UID=0; const STY=[];
+function styleOf(v){return Object.entries(v).map(([k,x])=>`${k}:${x}`).join(';')}
+function site(frags,ctx,vars,cls,w,extra=''){
+  const c={...ctx,vars};
+  return `<div class="site ${cls}" data-w="${w}" style="${(`width:${w}px;${styleOf(vars)}`).replace(/"/g,'&quot;')}">${frags.map(f=>F[f](c)).join('')}${extra}</div>`;
+}
+function baseFor(tabId){
+  let v={...BASE},c={...BASECTX},cls='',css=[];
+  for(const [t,k] of Object.entries(CHOSEN)){if(t===tabId)continue;const o=TABS.find(x=>x.id===t).opts.find(x=>x.k===k);if(!o)continue;Object.assign(v,o.vars||{});Object.assign(c,o.ctx||{});cls+=' '+(o.cls||'');if(o.css)css.push(o.css)}
+  for(const [key,k] of Object.entries(PCHOSEN)){const [t,p]=key.split('.');const o=TABS.find(x=>x.id===t).parts.find(x=>x.id===p).opts.find(x=>x.k===k);Object.assign(v,o.vars||{});Object.assign(c,o.ctx||{})}
+  return {v,c,cls,css};
+}
+const NUM = Object.fromEntries(TABS.map((t,i)=>[t.id,String(i+1).padStart(2,'0')]));
+function panelHead(tab){
+  const s=state(tab.id);
+  const notes=NOTES[tab.id]?`<dl class="spec notes">${NOTES[tab.id].map(([a,b])=>`<div><dt>${a}</dt><dd>${b}</dd></div>`).join('')}</dl>`:'';
+  return `<header class="phd"><div class="phd-t"><span class="phd-n">${NUM[tab.id]}</span><h2>${tab.name}</h2><span class="stc" data-st="${s}"><i class="tile"></i>${STATE_L[s]}${CHOSEN[tab.id]?' · '+CHOSEN[tab.id]:''}</span></div>${notes}</header>`;
+}
+function renderTab(tab){
+  if(LATER[tab.id])return panelHead(tab);
+  const B=baseFor(tab.id);const bid='b'+(++UID);B.css.forEach(x=>STY.push(x.replaceAll('&','.'+bid)));
+  const opts = CHOSEN[tab.id]?tab.opts.filter(o=>o.k===CHOSEN[tab.id]):tab.opts;
+  const parts=(tab.parts||[]).map(p=>{const ch=PCHOSEN[tab.id+'.'+p.id],s=ch?'vast':'open';
+    return `<div class="part"><header class="phd sub"><div class="phd-t"><h2>${p.name}</h2><span class="stc" data-st="${s}"><i class="tile"></i>${STATE_L[s]}${ch?' · '+ch:''}</span></div></header><div class="opts">${(ch?p.opts.filter(o=>o.k===ch):p.opts).map(o=>renderOpt(tab,o,B,bid,p.frags,p.url)).join('')}</div></div>`}).join('');
+  return panelHead(tab)+'<div class="opts">'+opts.map(o=>renderOpt(tab,o,B,bid,tab.frags)).join('')+parts+'</div>';
+}
+function renderOpt(tab,o,B,bid,frags,url='Jera'){
+  const id='o'+(++UID);const ctx={...B.c,...(tab.ctx||{}),...(o.ctx||{})};const cls=`${B.cls} ${bid} ${o.cls||''} ${id}`;
+  if(o.css)STY.push(o.css.replaceAll('&','.'+id));
+  const pages=o.pages||[{url,frags:o.frags||frags}];
+  let spec=[...(o.spec||[])];
+  if(o.swatches||o.pairs){const v={...B.v,...(o.vars||{})};
+    for(const [n,k] of (o.swatches||[]))spec.push([n,sw(v[k])]);
+    for(const [n,f,b] of (o.pairs||[]))spec.push([n,pair(v,f,b)]);}
+  const frames=pages.map(p=>{const vars={...B.v,...(o.vars||{}),...(p.vars||{})};
+    const foldD=p.fold?'<div class="fold" style="top:800px"><span>Eerste scherm · 1280 × 800</span></div>':'';
+    const foldM=p.fold?'<div class="fold" style="top:740px"><span>390 × 740</span></div>':'';
+    const fr=(m,frags,fold)=>`<div class="fr ${m?'m':''}"><div class="bar"><i></i><i></i><i></i><b>${p.url}</b></div><div class="vp ${p.tall?'tall':''}">${site(frags,ctx,vars,cls,m?390:1280,fold)}</div></div>`;
+    return `<div class="stage ${p.mExtra?'duo-m':''}">${fr(0,p.frags,foldD)}${fr(1,p.frags,foldM)}${p.mExtra?fr(1,p.mExtra,''):''}</div>`}).join('');
+  return `<section class="opt" data-opt="${o.k}"><div class="opt-head"><span class="opt-k">${o.k}</span><h2 class="opt-n">${o.name}</h2>${tab.replay?'<button class="replay" type="button">Speel af</button>':''}</div>
+    <dl class="spec">${spec.map(([a,b])=>`<div><dt>${a}</dt><dd>${b}</dd></div>`).join('')}</dl>${frames}</section>`;
+}
+function fit(root=document){root.querySelectorAll('.vp').forEach(vp=>{const s=vp.firstElementChild;if(!s)return;const z=Math.min(1,vp.clientWidth/+s.dataset.w);s.style.zoom=z})}
+function play(opt){opt.querySelectorAll('.site').forEach(s=>{s.classList.remove('play');void s.offsetWidth;s.classList.add('play')})}
+for(const k in IMG){try{const [h,b]=IMG[k].split(',');const bin=atob(b);const u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);IMG[k]=URL.createObjectURL(new Blob([u],{type:h.slice(5,h.indexOf(';'))}))}catch(e){}}
+const tabsEl=document.getElementById('tabs'),panel=document.getElementById('panel');
+const tabBtn=t=>`<button class="tab" role="tab" type="button" id="t-${t.id}" aria-controls="panel" aria-selected="false" data-tab="${t.id}" data-st="${state(t.id)}"><i class="tile"></i><span>${NUM[t.id]}</span>${t.name}${CHOSEN[t.id]?`<b class="tk">${pick(t.id)}</b>`:''}</button>`;
+tabsEl.innerHTML=['open','deels','later','vast'].map(g=>{const ts=TABS.filter(t=>state(t.id)===g);return ts.length?`<div class="tg" role="presentation"><span class="tgl">${STATE_L[g]} <b>${ts.length}</b></span>${ts.map(tabBtn).join('')}</div>`:''}).join('');
+const prog=document.getElementById('prog');
+prog.innerHTML=TABS.map(t=>`<i class="tile" data-st="${state(t.id)}" title="${NUM[t.id]} ${t.name}"></i>`).join('');
+prog.setAttribute('aria-label',['vast','deels','open','later'].map(g=>`${TABS.filter(t=>state(t.id)===g).length} ${g}`).join(', '));
+const styleEl=document.getElementById('optcss');
+const STORE='stijl-tab-jera-server';
+function show(id,push){
+  const tab=TABS.find(t=>t.id===id)||TABS[0];
+  STY.length=0;panel.innerHTML=renderTab(tab);styleEl.textContent=STY.join('\n');
+  tabsEl.querySelectorAll('.tab').forEach(b=>b.setAttribute('aria-selected',b.dataset.tab===tab.id));
+  fit(panel);setTimeout(()=>{fit(panel);panel.querySelectorAll('.opt').forEach(play)},60);
+  if(push){try{history.replaceState(null,'','#'+tab.id)}catch(e){}try{localStorage.setItem(STORE,tab.id)}catch(e){}}
+}
+tabsEl.addEventListener('click',e=>{const b=e.target.closest('.tab');if(!b)return;show(b.dataset.tab,true);b.scrollIntoView({block:'nearest',inline:'nearest'});window.scrollTo({top:0})});
+tabsEl.addEventListener('keydown',e=>{if(!['ArrowRight','ArrowLeft'].includes(e.key))return;const bs=[...tabsEl.querySelectorAll('.tab')];const i=bs.indexOf(document.activeElement);if(i<0)return;const n=bs[(i+(e.key==='ArrowRight'?1:-1)+bs.length)%bs.length];n.focus();n.click()});
+panel.addEventListener('click',e=>{const r=e.target.closest('.replay');if(r)play(r.closest('.opt'))});
+new ResizeObserver(()=>fit(panel)).observe(panel);
+let start=(location.hash||'').slice(1);if(!TABS.some(t=>t.id===start)){try{start=localStorage.getItem(STORE)||''}catch(e){start=''}}
+show(start||TABS[0].id,false);
+document.fonts&&document.fonts.ready.then(()=>fit(panel));
+</script>

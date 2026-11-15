@@ -1,4 +1,5 @@
-//! Het paneel met drie kopjes: poorten, browsers en artifacts, van het project in de actieve tab.
+//! De teller rechts in de statusbalk en de lade erboven met drie kopjes: poorten, browsers en
+//! artifacts, van het project in de actieve tab.
 //! Een kopje zonder regels staat er niet.
 //! Elke regel noemt de sessie die het startte; "sessie gestopt" als die sessie niet meer draait.
 
@@ -6,11 +7,9 @@ use super::*;
 use crate::artifacts::{self, Artifact};
 use crate::poorten::{self, Browser, Poort};
 
-/// De breedte van de kolom rechts als het paneel open is.
-pub(super) const B_PANEEL: f32 = 360.0;
+/// De breedte van de lade binnen haar rand.
+const B_PANEEL: f32 = 360.0;
 const H_PLAATJE: f32 = 180.0;
-
-pub(super) const POORT: &[u8] = include_bytes!("../../iconen/poort.svg");
 
 impl Jera {
     /// De sessie in Jera met dit sessie-id.
@@ -22,15 +21,6 @@ impl Jera {
     /// Hoort `sessie` bij de Claude-sessie in de terminal met deze shell.
     fn van_shell(&self, sessie: &Option<String>, shell: u32) -> bool {
         sessie.as_ref().and_then(|id| self.poorten.sessies.get(id)).is_some_and(|(ouder, _)| *ouder == shell)
-    }
-
-    /// Wat de sessie heeft draaien, één regel per poort of browser, voor onder de muis.
-    pub(super) fn draait(&self, sessie: &Sessie, cx: &App) -> Vec<SharedString> {
-        let Some(shell) = sessie.terminal.read(cx).pid else { return Vec::new() };
-        let van = |sessie: &Option<String>| self.van_shell(sessie, shell);
-        let poorten = self.poorten.poorten.iter().filter(|p| van(&p.sessie)).map(|p| format!("{}  {}", p.nummer, p.commando));
-        let browsers = self.poorten.browsers.iter().filter(|b| van(&b.sessie)).map(|_| "browser".to_string());
-        poorten.chain(browsers).map(Into::into).collect()
     }
 
     /// Stopt de poorten en sluit de browsers die de sessie startte. Voor als ik een sessie in Jera sluit.
@@ -48,33 +38,98 @@ impl Jera {
             .detach();
     }
 
-    /// De knop rechts in de tabbalk, met de aantallen. Open heeft hij een streep in `accent` eronder.
-    pub(super) fn poortenknop(&self, th: &Thema, cx: &mut Context<Self>) -> impl IntoElement {
-        let aantal = |n: usize| div().text_color(rgb(th.mute)).mr(px(8.0)).child(n.to_string());
-        let root = self.tabs.get(self.actief).map(|tab| tab.root.as_path());
-        let poorten = root.map_or(0, |root| self.poorten.poorten_van(root).count());
-        let browsers = root.map_or(0, |root| self.poorten.browsers_van(root).count());
-        div()
-            .id("poortenknop")
-            .flex()
-            .flex_none()
-            .items_center()
-            .gap(px(8.0))
-            .px(px(t::TAB_PAD))
-            .pt(px(t::STREEP))
-            .border_b(px(t::STREEP))
-            .border_color(transparent_black())
-            .text_color(rgb(th.mute))
-            .when(self.poorten_open, |d| d.text_color(rgb(th.ink)).border_color(rgb(th.accent)))
-            .when(!self.poorten_open, |d| d.hover(|d| d.text_color(rgb(th.ink))))
-            .child(t("poorten", "ports"))
-            .child(aantal(poorten))
-            .child("browsers")
-            .child(aantal(browsers))
-            .on_click(cx.listener(|this, _, _, cx| {
-                this.poorten_open = !this.poorten_open;
+    /// De artifacts van de sessies van dit project die draaien, in de volgorde van de tabs.
+    fn artifacts_van(&self, root: &Path, cx: &App) -> Vec<(&String, &Artifact)> {
+        let stand = &self.poorten;
+        let volgorde: Vec<u32> = self.tabs.iter().flat_map(|tab| &tab.sessies).filter_map(|s| s.terminal.read(cx).pid).collect();
+        let mut sessies: Vec<&String> = self
+            .artifacts
+            .keys()
+            .filter(|id| stand.sessies.contains_key(*id) && stand.van_project(Some(id.as_str()), root))
+            .collect();
+        sessies.sort_by_key(|id| {
+            let (ouder, naam) = &stand.sessies[*id];
+            (volgorde.iter().position(|p| p == ouder).unwrap_or(usize::MAX), naam.clone())
+        });
+        sessies.into_iter().flat_map(|id| self.artifacts[id].iter().map(move |a| (id, a))).collect()
+    }
+
+    /// De teller rechts in de statusbalk: per soort het woord in `mute` en het aantal in `ink`, vet.
+    /// Een soort met 0 staat er niet. Open heeft hij een streep in `accent` erboven.
+    pub(super) fn teller(&self, th: &Thema, cx: &mut Context<Self>) -> Option<impl IntoElement> {
+        let root = self.tabs.get(self.actief).map(|tab| tab.root.as_path())?;
+        let aantallen = [
+            (t("poorten", "ports"), self.poorten.poorten_van(root).count()),
+            ("browsers", self.poorten.browsers_van(root).count()),
+            ("artifacts", self.artifacts_van(root, cx).len()),
+        ];
+        let aantallen: Vec<_> = aantallen.into_iter().filter(|(_, n)| *n > 0).collect();
+        if aantallen.is_empty() {
+            return None;
+        }
+        let open = self.poorten_open;
+        let woord = if open { th.ink } else { th.mute };
+        let items = aantallen.into_iter().enumerate().flat_map(|(i, (label, n))| {
+            let item = div()
+                .flex()
+                .items_center()
+                .gap(px(6.0))
+                .px(px(t::TAB_PAD))
+                .child(div().text_color(rgb(woord)).child(label))
+                .child(div().font_weight(FontWeight::BOLD).child(n.to_string()));
+            (i > 0).then(|| lijn(th).into_any_element()).into_iter().chain([item.into_any_element()])
+        });
+        Some(
+            div()
+                .id("teller")
+                .flex()
+                .flex_none()
+                .border_t(px(t::STREEP))
+                .pb(px(t::STREEP))
+                .border_color(transparent_black())
+                .when(open, |d| d.border_color(rgb(th.accent)))
+                .when(!open, |d| d.hover(|d| d.bg(rgb(th.sel))))
+                .children(items)
+                .on_click(cx.listener(|this, _, _, cx| {
+                    this.poorten_open = !this.poorten_open;
+                    cx.notify();
+                })),
+        )
+    }
+
+    /// De lade boven de teller, over de terminal, rechts tegen de rand. Een klik ernaast sluit haar.
+    pub(super) fn lade(&self, th: &Thema, cx: &mut Context<Self>) -> impl IntoElement {
+        let achter = div()
+            .id("lade-achter")
+            .absolute()
+            .inset_0()
+            .occlude()
+            .on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| {
+                this.poorten_open = false;
                 cx.notify();
-            }))
+            }));
+        let lade = div()
+            .id("lade")
+            .max_h_full()
+            .w(px(B_PANEEL + 2.0 * t::LIJN))
+            .overflow_y_scroll()
+            .occlude()
+            .bg(rgb(th.bg))
+            .border(px(t::LIJN))
+            .border_b_0()
+            .border_color(rgb(th.line_strong))
+            .child(self.poortenpaneel(th, cx));
+        // Tussen de titelbalk en de statusbalk, onderaan.
+        let vak = div()
+            .absolute()
+            .top(px(t::H_TITELBALK))
+            .bottom(px(t::H_STATUSBALK))
+            .right_0()
+            .flex()
+            .flex_col()
+            .justify_end()
+            .child(lade);
+        div().absolute().inset_0().child(achter).child(vak)
     }
 
     /// Bij wie iets hoort: de titel van de sessie, haar naam als ze niet in Jera draait, of "sessie gestopt".
@@ -133,19 +188,7 @@ impl Jera {
             }
         }
 
-        // Artifacts van de sessies van dit project die draaien, in de volgorde van de tabs.
-        let volgorde: Vec<u32> = self.tabs.iter().flat_map(|tab| &tab.sessies).filter_map(|s| s.terminal.read(cx).pid).collect();
-        let mut sessies: Vec<&String> = self
-            .artifacts
-            .keys()
-            .filter(|id| stand.sessies.contains_key(*id) && stand.van_project(Some(id.as_str()), root))
-            .collect();
-        sessies.sort_by_key(|id| {
-            let (ouder, naam) = &stand.sessies[*id];
-            (volgorde.iter().position(|p| p == ouder).unwrap_or(usize::MAX), naam.clone())
-        });
-        let artifacts: Vec<(&String, &Artifact)> =
-            sessies.into_iter().flat_map(|id| self.artifacts[id].iter().map(move |a| (id, a))).collect();
+        let artifacts = self.artifacts_van(root, cx);
         if !artifacts.is_empty() {
             rijen.push(groepkop(t("Artifacts", "Artifacts").into(), th).into_any_element());
             for (id, artifact) in artifacts {

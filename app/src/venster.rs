@@ -25,7 +25,6 @@ use bestandsboom::{Keuze, Sub};
 use naamveld::{Doel, NaamVeld};
 pub(crate) use onderdelen::{PIJL_DICHT, PIJL_OPEN, knop_vak, lijn, pijl, tab_vak};
 use onderdelen::*;
-use poortenpaneel::{B_PANEEL, POORT};
 use sessielijst::titel;
 
 use crate::agents::{self, Agent};
@@ -646,8 +645,6 @@ impl Jera {
             .child(lijn(th))
             .child(div().flex_1())
             .child(lijn(th))
-            .child(self.poortenknop(th, cx))
-            .child(lijn(th))
             .child(
                 div()
                     .flex()
@@ -939,10 +936,12 @@ impl Render for Jera {
                                     .flex_1()
                                     .min_h_0()
                                     .child(div().flex_1().min_w_0().children(terminal).children(leeg))
-                                    .children(self.rechts(th, cx)),
+                                    .children(self.rechts(th)),
                             ),
                     ),
             )
+            .child(self.statusbalk(th, cx))
+            .when(self.poorten_open, |d| d.child(self.lade(th, cx)))
             .children(self.menu.as_ref().map(|menu| self.menu_vak(menu, th, cx)))
             .children(self.sessie_menu.and_then(|(id, plek)| self.sessie_menu_vak(id, plek, th, cx)))
             .children(self.sluiten.as_deref().and_then(|root| self.sluit_vraag(root, th, cx)))
@@ -953,27 +952,24 @@ impl Render for Jera {
 }
 
 impl Jera {
-    /// De kolom rechts van de terminal: het git-paneel, het paneel met poorten, of allebei,
-    /// git boven en poorten onder, helft om helft.
-    fn rechts(&self, th: &Thema, cx: &mut Context<Self>) -> Option<impl IntoElement> {
-        let git = self.tabs.get(self.actief).filter(|_| self.git_open).map(|tab| tab.git.clone());
-        if git.is_none() && !self.poorten_open {
-            return None;
-        }
-        let kolom = div().flex_none().h_full().border_l(px(t::LIJN)).border_color(rgb(th.line));
-        Some(match (git, self.poorten_open) {
-            (Some(git), false) => kolom.child(git),
-            (git, _) => kolom
-                .flex()
-                .flex_col()
-                .w(px(B_PANEEL))
-                .when_some(git, |d, git| {
-                    d.child(
-                        div().flex_1().min_h_0().overflow_hidden().border_b(px(t::LIJN)).border_color(rgb(th.line)).child(git),
-                    )
-                })
-                .child(div().id("poortenpaneel").flex_1().min_h_0().overflow_y_scroll().child(self.poortenpaneel(th, cx))),
-        })
+    /// De kolom rechts van de terminal: het git-paneel.
+    fn rechts(&self, th: &Thema) -> Option<impl IntoElement> {
+        let git = self.tabs.get(self.actief).filter(|_| self.git_open).map(|tab| tab.git.clone())?;
+        Some(div().flex_none().h_full().border_l(px(t::LIJN)).border_color(rgb(th.line)).child(git))
+    }
+
+    /// De balk onder het hele venster, met rechts de teller.
+    fn statusbalk(&self, th: &Thema, cx: &mut Context<Self>) -> impl IntoElement {
+        let teller = self.teller(th, cx);
+        div()
+            .flex()
+            .flex_none()
+            .h(px(t::H_STATUSBALK))
+            .bg(rgb(th.bar))
+            .border_t(px(t::LIJN))
+            .border_color(rgb(th.line))
+            .child(div().flex_1())
+            .when_some(teller, |d, teller| d.child(lijn(th)).child(teller))
     }
 }
 
