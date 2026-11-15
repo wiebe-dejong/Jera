@@ -134,8 +134,6 @@ pub struct Jera {
     /// De poorten en agent-browsers van de hele computer, en of hun paneel openstaat.
     poorten: poorten::Stand,
     poorten_open: bool,
-    /// Ook de poorten die niet uit de thuismap zijn gestart.
-    alles: bool,
     /// Het laatste plaatje van elke agent-browser.
     plaatjes: HashMap<String, Arc<RenderImage>>,
     /// Per sessie-id de artifacts die de sessie publiceerde.
@@ -184,7 +182,6 @@ impl Jera {
             openen_open: false,
             poorten: poorten::Stand::default(),
             poorten_open: false,
-            alles: false,
             plaatjes: HashMap::new(),
             artifacts: HashMap::new(),
         }
@@ -400,7 +397,6 @@ impl Jera {
             "bestanden" => self.stand = Stand::Bestanden,
             "git" => self.git_open = !self.git_open,
             "poorten" => self.poorten_open = !self.poorten_open,
-            "alles" => self.alles = !self.alles,
             "oud" => self.wissel_oud(cx),
             "agents" => {
                 let Some(tab) = self.tabs.get(self.actief) else { return };

@@ -5,6 +5,7 @@ use std::{
     collections::{HashMap, HashSet},
     path::{Path, PathBuf},
     process::Command,
+    sync::Mutex,
 };
 
 use crate::claude;
@@ -36,6 +37,8 @@ pub struct Stand {
     pub browsers: Vec<Browser>,
     /// De Claude-sessies die draaien: sessie-id naar het pid van de ouder van Claude en de naam uit het sessiebestand.
     pub sessies: HashMap<String, (u32, String)>,
+    /// De map waarin elke sessie hierboven liep, ook die niet meer draaien.
+    pub mappen: HashMap<String, PathBuf>,
 }
 
 impl Stand {
@@ -44,12 +47,24 @@ impl Stand {
         sessie.as_ref().is_some_and(|id| !self.sessies.contains_key(id))
     }
 
-    /// De poorten van de standaardlijst: gestart in de thuismap, of door een sessie.
-    pub fn standaard(&self) -> impl Iterator<Item = &Poort> {
-        let thuis = crate::thuis();
-        self.poorten.iter().filter(move |p| p.sessie.is_some() || p.map.starts_with(&thuis))
+    /// Liep `sessie` in het project in `root`.
+    pub fn van_project(&self, sessie: Option<&str>, root: &Path) -> bool {
+        sessie.and_then(|id| self.mappen.get(id)).is_some_and(|map| map.starts_with(root))
+    }
+
+    /// De poorten van het project in `root`: van een sessie daar, of gestart in die map.
+    pub fn poorten_van<'a>(&'a self, root: &'a Path) -> impl Iterator<Item = &'a Poort> {
+        self.poorten.iter().filter(move |p| self.van_project(p.sessie.as_deref(), root) || p.map.starts_with(root))
+    }
+
+    /// De agent-browsers van een sessie in het project in `root`.
+    pub fn browsers_van<'a>(&'a self, root: &'a Path) -> impl Iterator<Item = &'a Browser> {
+        self.browsers.iter().filter(move |b| self.van_project(b.sessie.as_deref(), root))
     }
 }
+
+/// De map van een sessie die niet meer draait, eenmaal uit haar gesprek gelezen.
+static MAPPEN: Mutex<Vec<(String, Option<PathBuf>)>> = Mutex::new(Vec::new());
 
 /// `~/.agent-browser`.
 fn browsermap() -> PathBuf {
@@ -59,6 +74,7 @@ fn browsermap() -> PathBuf {
 pub fn lees() -> Stand {
     let ouders = ouders();
     let mut claude_pids = HashSet::new();
+    let mut sessiemappen = HashMap::new();
     let sessies: HashMap<String, (u32, String)> = claude::sessies()
         .into_iter()
         .filter_map(|json| {
@@ -66,6 +82,9 @@ pub fn lees() -> Stand {
             let ouder = *ouders.get(&pid)?;
             claude_pids.insert(pid);
             let id = json["sessionId"].as_str()?.to_string();
+            if let Some(cwd) = json["cwd"].as_str() {
+                sessiemappen.insert(id.clone(), PathBuf::from(cwd));
+            }
             Some((id, (ouder, json["name"].as_str().unwrap_or_default().to_string())))
         })
         .collect();
@@ -115,23 +134,83 @@ pub fn lees() -> Stand {
         None
     };
 
+    // De poorten van macOS zelf (AirPlay in ControlCenter, rapportd) en van een app (Raycast
+    // Backend, met Raycast als ouder) horen er ook niet bij, ook niet onder Alles. Niet op
+    // `.app/` zoeken: Python draait zelf vanuit `Python.framework/…/Python.app`.
+    let apps = crate::thuis().join("Applications/");
+    let mac = ["/Applications/", "/System/", "/usr/libexec/", "/usr/sbin/", &apps.to_string_lossy()].map(String::from);
+    let draait_uit = |pid: u32, mappen: &[String]| {
+        boven(pid, &ouders).take(2).any(|p| commandos.get(&p).is_some_and(|c| mappen.iter().any(|m| c.starts_with(m.as_str()))))
+    };
+    // Behalve de poorten van Docker-containers: die opent Docker Desktop zelf.
+    let docker = match luistert.iter().any(|(pid, _)| draait_uit(*pid, &[DOCKER_APP.to_string()])) {
+        true => docker(),
+        false => HashMap::new(),
+    };
+    let luistert: Vec<(u32, u16)> =
+        luistert.into_iter().filter(|(pid, nummer)| docker.contains_key(nummer) || !draait_uit(*pid, &mac)).collect();
+
     let pids: Vec<u32> = luistert.iter().map(|(pid, _)| *pid).collect();
     let mappen = mappen(&pids);
     let mut poorten: Vec<Poort> = luistert
         .into_iter()
-        .map(|(pid, nummer)| Poort {
-            nummer,
-            pid,
-            commando: commandos.get(&pid).map(|c| kort(c)).unwrap_or_default(),
-            map: mappen.get(&pid).cloned().unwrap_or_default(),
-            sessie: van(pid),
+        .map(|(pid, nummer)| match docker.get(&nummer) {
+            // Een container heet naar zichzelf en hoort bij de map van docker compose.
+            Some((naam, map)) => Poort { nummer, pid, commando: naam.clone(), map: map.clone(), sessie: None },
+            None => Poort {
+                nummer,
+                pid,
+                commando: commandos.get(&pid).map(|c| kort(c)).unwrap_or_default(),
+                map: mappen.get(&pid).cloned().unwrap_or_default(),
+                sessie: van(pid),
+            },
         })
         .collect();
     poorten.sort_by_key(|p| p.nummer);
     let mut browsers: Vec<Browser> =
         browsers.into_iter().map(|(naam, pid)| Browser { naam, pid, sessie: van(pid) }).collect();
     browsers.sort_by(|a, b| a.naam.cmp(&b.naam));
-    Stand { poorten, browsers, sessies }
+
+    // De map van een sessie die niet meer draait, staat in haar gesprek.
+    let mut gelezen = MAPPEN.lock().unwrap();
+    let wezen = poorten.iter().map(|p| &p.sessie).chain(browsers.iter().map(|b| &b.sessie)).flatten();
+    for id in wezen.filter(|id| !sessiemappen.contains_key(*id)).cloned().collect::<Vec<_>>() {
+        let map = match gelezen.iter().find(|(i, _)| *i == id) {
+            Some((_, map)) => map.clone(),
+            None => {
+                let map = claude::map_van(&id);
+                gelezen.push((id.clone(), map.clone()));
+                map
+            }
+        };
+        if let Some(map) = map {
+            sessiemappen.insert(id, map);
+        }
+    }
+    Stand { poorten, browsers, sessies, mappen: sessiemappen }
+}
+
+/// Docker Desktop. De poorten van containers opent `com.docker.backend` daarin.
+const DOCKER_APP: &str = "/Applications/Docker.app/";
+
+/// De poorten van de containers die draaien: poort naar de naam van de container en de map
+/// waaruit docker compose hem startte. Een container zonder compose heeft geen map.
+fn docker() -> HashMap<u16, (String, PathBuf)> {
+    let opmaak = "{{.Names}}\t{{.Label \"com.docker.compose.project.working_dir\"}}\t{{.Ports}}";
+    let docker = format!("{DOCKER_APP}Contents/Resources/bin/docker");
+    let mut uit = HashMap::new();
+    for regel in uitvoer(&docker, &["ps", "--format", opmaak]).lines() {
+        let mut delen = regel.split('\t');
+        let (Some(naam), Some(map), Some(poorten)) = (delen.next(), delen.next(), delen.next()) else { continue };
+        // Zoals `0.0.0.0:5432->5432/tcp, [::]:5432->5432/tcp`.
+        for deel in poorten.split(", ") {
+            let nummer = deel.split_once("->").and_then(|(buiten, _)| buiten.rsplit(':').next()?.parse().ok());
+            if let Some(nummer) = nummer {
+                uit.insert(nummer, (naam.to_string(), PathBuf::from(map)));
+            }
+        }
+    }
+    uit
 }
 
 /// `pid` en zijn ouders, tot launchd.

@@ -1,4 +1,5 @@
-//! Het paneel met drie kopjes: poorten, browsers en artifacts. Een kopje zonder regels staat er niet.
+//! Het paneel met drie kopjes: poorten, browsers en artifacts, van het project in de actieve tab.
+//! Een kopje zonder regels staat er niet.
 //! Elke regel noemt de sessie die het startte; "wees" als die sessie niet meer draait.
 
 use super::*;
@@ -32,6 +33,9 @@ impl Jera {
     /// De knop rechts in de tabbalk, met de aantallen. Open heeft hij een streep in `accent` eronder.
     pub(super) fn poortenknop(&self, th: &Thema, cx: &mut Context<Self>) -> impl IntoElement {
         let aantal = |n: usize| div().text_color(rgb(th.mute)).mr(px(8.0)).child(n.to_string());
+        let root = self.tabs.get(self.actief).map(|tab| tab.root.as_path());
+        let poorten = root.map_or(0, |root| self.poorten.poorten_van(root).count());
+        let browsers = root.map_or(0, |root| self.poorten.browsers_van(root).count());
         div()
             .id("poortenknop")
             .flex()
@@ -46,9 +50,9 @@ impl Jera {
             .when(self.poorten_open, |d| d.text_color(rgb(th.ink)).border_color(rgb(th.accent)))
             .when(!self.poorten_open, |d| d.hover(|d| d.text_color(rgb(th.ink))))
             .child(t("poorten", "ports"))
-            .child(aantal(self.poorten.standaard().count()))
+            .child(aantal(poorten))
             .child("browsers")
-            .child(aantal(self.poorten.browsers.len()))
+            .child(aantal(browsers))
             .on_click(cx.listener(|this, _, _, cx| {
                 this.poorten_open = !this.poorten_open;
                 cx.notify();
@@ -68,37 +72,14 @@ impl Jera {
     pub(super) fn poortenpaneel(&self, th: &Thema, cx: &mut Context<Self>) -> impl IntoElement {
         let stand = &self.poorten;
         let mut rijen: Vec<AnyElement> = Vec::new();
+        let leeg = || div().p(px(t::PAD)).text_color(rgb(th.mute)).child(t("Er luistert niets.", "Nothing is listening."));
+        let Some(root) = self.tabs.get(self.actief).map(|tab| tab.root.as_path()) else { return leeg() };
 
-        // Poorten: standaard alleen die van een sessie of uit de thuismap, met Alles de rest.
-        let standaard: Vec<&Poort> = stand.standaard().collect();
-        let verborgen = stand.poorten.len() - standaard.len();
-        let poorten: Vec<&Poort> = match self.alles {
-            true => stand.poorten.iter().collect(),
-            false => standaard,
-        };
-        // Ook zonder regels, als er iets verborgen luistert: dan staat Alles erin.
-        if !poorten.is_empty() || verborgen > 0 {
-            let alles = self.alles;
+        let poorten: Vec<&Poort> = stand.poorten_van(root).collect();
+        if !poorten.is_empty() {
             let wezen: Vec<u32> = poorten.iter().filter(|p| stand.wees(&p.sessie)).map(|p| p.pid).collect();
             rijen.push(
                 groepkop(t("Poorten", "Ports").into(), th)
-                    .when(verborgen > 0, |d| {
-                        d.child(
-                            div()
-                                .id("alles")
-                                .flex()
-                                .items_center()
-                                .h_full()
-                                .px(px(t::PAD))
-                                .when(alles, |d| d.text_color(rgb(th.ink)))
-                                .hover(|d| d.text_color(rgb(th.ink)))
-                                .child(t("alles", "all"))
-                                .on_click(cx.listener(|this, _, _, cx| {
-                                    this.alles = !this.alles;
-                                    cx.notify();
-                                })),
-                        )
-                    })
                     .when(!wezen.is_empty(), |d| {
                         d.child(gevaar_knop("stop-wezen", t("Stop wezen", "Stop orphans"), th).mr(px(t::PAD)).on_click(
                             cx.listener(move |_, _, _, cx| {
@@ -114,8 +95,9 @@ impl Jera {
             }
         }
 
-        if !stand.browsers.is_empty() {
-            let wezen: Vec<String> = stand.browsers.iter().filter(|b| stand.wees(&b.sessie)).map(|b| b.naam.clone()).collect();
+        let browsers: Vec<&Browser> = stand.browsers_van(root).collect();
+        if !browsers.is_empty() {
+            let wezen: Vec<String> = browsers.iter().filter(|b| stand.wees(&b.sessie)).map(|b| b.naam.clone()).collect();
             rijen.push(
                 groepkop(t("Browsers", "Browsers").into(), th)
                     .when(!wezen.is_empty(), |d| {
@@ -128,14 +110,18 @@ impl Jera {
                     })
                     .into_any_element(),
             );
-            for browser in &stand.browsers {
+            for browser in browsers {
                 rijen.extend(self.browser_rijen(browser, th, cx));
             }
         }
 
-        // Artifacts van de sessies die draaien, in de volgorde van de tabs.
+        // Artifacts van de sessies van dit project die draaien, in de volgorde van de tabs.
         let volgorde: Vec<u32> = self.tabs.iter().flat_map(|tab| &tab.sessies).filter_map(|s| s.terminal.read(cx).pid).collect();
-        let mut sessies: Vec<&String> = self.artifacts.keys().filter(|id| stand.sessies.contains_key(*id)).collect();
+        let mut sessies: Vec<&String> = self
+            .artifacts
+            .keys()
+            .filter(|id| stand.sessies.contains_key(*id) && stand.van_project(Some(id.as_str()), root))
+            .collect();
         sessies.sort_by_key(|id| {
             let (ouder, naam) = &stand.sessies[*id];
             (volgorde.iter().position(|p| p == ouder).unwrap_or(usize::MAX), naam.clone())
@@ -150,7 +136,7 @@ impl Jera {
         }
 
         if rijen.is_empty() {
-            return div().p(px(t::PAD)).text_color(rgb(th.mute)).child(t("Er luistert niets.", "Nothing is listening."));
+            return leeg();
         }
         div().pb(px(8.0)).children(rijen)
     }
