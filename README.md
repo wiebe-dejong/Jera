@@ -92,11 +92,12 @@ app/bundel.sh
 Early, and built for one person's workflow first. Expect rough edges. The interface is in Dutch for now (`sessies`, `bestanden`, `oud`).
 
 Coming next:
-- A panel with every listening port (open or kill) and running `agent-browser` instances
-- Render deploy status above the terminal
-- Two terminals side by side
-- Taking over a session that's running elsewhere
-- Tabs and sessions restored after a restart
+- Tab works inside a session
+- Git commands from the UI, not just the graph
+- Dutch and English interface
+- Several Claude sessions in one view
+- A project stays open when it has no sessions
+- Browser and ports: every listening port (open or kill) and running `agent-browser` instances
 
 Every design decision is recorded in [`SPEC.md`](SPEC.md).
 
