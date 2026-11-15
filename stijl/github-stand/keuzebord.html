@@ -1,0 +1,242 @@
+<meta charset="utf-8">
+<title>Stijl GitHub-stand</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400;500&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* ================= BORD (niet aanpassen) =================
+   Het bord is de werkbank om de frames heen. Het object zelf leeft in .site met eigen tokens (BASE). */
+:root{
+  --c-bg:#F1F2EE; --c-fg:#18201B; --c-mute:#5F6862; --c-line:#D9DDD5; --c-card:#FFFFFF; --c-acc:#2D6A45; --c-sel:#1D3A2A; --c-on-sel:#FFFFFF;
+  --c-vast:#2D6A45; --c-vast-bg:#E3ECE2; --c-vast-line:#C3D6C4;
+  --c-ui:"Geist",system-ui,-apple-system,sans-serif; --c-mono:"Geist Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--c-bg:#111412;--c-fg:#E7EBE6;--c-mute:#97A099;--c-line:#2A302C;--c-card:#191D1A;--c-acc:#A8D5E5;--c-sel:#E7EBE6;--c-on-sel:#111412;--c-vast:#8FC79F;--c-vast-bg:#18251D;--c-vast-line:#2C4234;color-scheme:dark}}
+:root[data-theme="dark"]{--c-bg:#111412;--c-fg:#E7EBE6;--c-mute:#97A099;--c-line:#2A302C;--c-card:#191D1A;--c-acc:#A8D5E5;--c-sel:#E7EBE6;--c-on-sel:#111412;--c-vast:#8FC79F;--c-vast-bg:#18251D;--c-vast-line:#2C4234;color-scheme:dark}
+body{margin:0;background:var(--c-bg);color:var(--c-fg);font-family:var(--c-ui);padding-inline:24px;padding-block:28px 96px}
+@media (max-width:620px){body{padding-inline:16px}}
+.app{max-width:1480px;margin:0 auto;display:flex;flex-direction:column;gap:28px}
+.top{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 16px}
+.top h1{font-weight:500;font-size:26px;letter-spacing:-.02em;margin:0}
+.round{font-family:var(--c-mono);font-size:12px;padding:3px 8px;border:1px solid var(--c-line);border-radius:3px;color:var(--c-mute)}
+.tabs{display:flex;flex-wrap:wrap;gap:8px 22px;position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--c-bg);padding-block:10px;border-bottom:1px solid var(--c-line)}
+@media (max-width:900px){.tabs{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;margin-inline:-16px;padding-inline:16px}.tg{flex-wrap:nowrap}}
+.tab{flex:none;font:500 13px var(--c-ui);color:var(--c-fg);background:var(--c-card);border:1px solid var(--c-line);border-radius:3px;padding:6px 10px;cursor:pointer;display:flex;gap:6px;align-items:baseline}
+.tab span{font-family:var(--c-mono);font-size:11px;color:var(--c-mute)}
+/* Status: vast, deels, open, later. Overal hetzelfde tegeltje. */
+.tile{display:inline-block;flex:none;box-sizing:border-box;width:9px;height:9px;border:1.5px solid var(--tc);border-radius:1px;align-self:center}
+[data-st]{--tc:var(--c-mute)}
+[data-st="vast"],[data-st="deels"]{--tc:var(--c-vast)}
+[data-st="vast"] .tile,.tile[data-st="vast"]{background:var(--tc)}
+[data-st="deels"] .tile,.tile[data-st="deels"]{background:linear-gradient(135deg,var(--tc) 50%,transparent 50%)}
+[data-st="later"] .tile,.tile[data-st="later"]{background:linear-gradient(var(--tc),var(--tc)) center/100% 1.5px no-repeat}
+.tg{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.tgl{flex:none;font:500 11px var(--c-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--c-mute);padding-right:4px}
+.tgl b{font-weight:500;color:var(--c-fg)}
+.tab[data-st="vast"],.tab[data-st="deels"]{background:var(--c-vast-bg);border-color:var(--c-vast-line)}
+.tab[data-st="deels"]{border-style:dashed;border-color:var(--c-vast)}
+.tk{font:500 11px var(--c-mono);padding:1px 5px;border-radius:2px;background:var(--c-card);color:var(--c-vast);border:1px solid var(--c-vast-line);white-space:nowrap}
+.prog{display:flex;gap:3px;align-items:center;align-self:center;margin-left:auto}
+.prog .tile{width:11px;height:11px}
+.tab:hover{border-color:var(--c-fg)}
+.tab[aria-selected="true"]{background:var(--c-sel);color:var(--c-on-sel);border-color:var(--c-sel);--tc:currentColor}
+.tab[aria-selected="true"] span{color:inherit;opacity:.7}
+.tab[aria-selected="true"] .tk{background:transparent;color:inherit;border-color:currentColor}
+.tab:focus-visible,.replay:focus-visible{outline:2px solid var(--c-acc);outline-offset:2px}
+.panel{display:flex;flex-direction:column;gap:28px}
+.opts{display:flex;flex-direction:column;gap:64px}
+.phd{display:flex;flex-direction:column;gap:12px}
+.phd-t{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px}
+.phd-n{font:500 13px var(--c-mono);color:var(--c-mute)}
+.phd h2{font:500 32px/1.1 var(--c-ui);letter-spacing:-.02em;margin:0}
+.part{display:flex;flex-direction:column;gap:28px}
+.phd.sub{border-top:2px solid var(--c-fg);padding-top:20px}
+.phd.sub h2{font-size:24px}
+@media (max-width:620px){.phd h2{font-size:26px}}
+.stc{display:inline-flex;align-items:center;gap:7px;font:500 12px var(--c-mono);letter-spacing:.04em;text-transform:uppercase;padding:5px 9px;border-radius:3px;border:1px solid var(--c-line);color:var(--c-mute)}
+.stc[data-st="vast"],.stc[data-st="deels"]{background:var(--c-vast-bg);border-color:var(--c-vast-line);color:var(--c-vast)}
+.stc[data-st="deels"]{border-style:dashed;border-color:var(--c-vast)}
+.phd .notes{font-size:13px}
+.phd .notes dd{font-size:12px}
+.opt{display:flex;flex-direction:column;gap:14px}
+.opt-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 14px;border-top:1px solid var(--c-line);padding-top:18px}
+.opt-k{font:600 22px var(--c-ui);width:26px}
+.opt-n{font:400 22px var(--c-ui);margin:0;letter-spacing:-.01em}
+.replay{margin-left:auto;font:500 13px var(--c-ui);background:transparent;color:var(--c-fg);border:1px solid var(--c-line);border-radius:3px;padding:6px 12px;cursor:pointer}
+.replay:hover{border-color:var(--c-fg)}
+.spec{display:flex;flex-wrap:wrap;gap:6px 22px;font-size:12.5px;color:var(--c-mute);margin:0}
+.spec div{display:flex;gap:6px;align-items:center;min-width:0}
+.spec dt{font-weight:500;color:var(--c-fg)}
+.spec dd{margin:0;font-family:var(--c-mono);font-size:11.5px;font-variant-numeric:tabular-nums}
+.sw{display:inline-block;width:12px;height:12px;border-radius:2px;border:1px solid var(--c-line);vertical-align:-1px;margin-right:4px}
+.pass{color:#1F7A44}.fail{color:#C2361F}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .pass{color:#7FD19B}:root:not([data-theme="light"]) .fail{color:#FF8A73}}
+:root[data-theme="dark"] .pass{color:#7FD19B}:root[data-theme="dark"] .fail{color:#FF8A73}
+.stage{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px;align-items:start}
+.stage.duo-m{grid-template-columns:minmax(0,1fr) 340px 340px}
+@media (max-width:1180px){.stage.duo-m{grid-template-columns:minmax(0,1fr) 300px}.stage.duo-m .fr:last-child{grid-column:2}}
+@media (max-width:980px){.stage,.stage.duo-m{grid-template-columns:minmax(0,1fr)}.stage .fr.m,.stage.duo-m .fr:last-child{grid-column:auto;max-width:390px;width:100%}}
+.fr{background:var(--c-card);border:1px solid var(--c-line);border-radius:8px;overflow:hidden;min-width:0}
+.bar{height:28px;display:flex;align-items:center;gap:6px;padding-inline:10px;border-bottom:1px solid var(--c-line);font:11px var(--c-mono);color:var(--c-mute)}
+.bar i{width:8px;height:8px;border-radius:50%;background:var(--c-line);display:block}
+.bar b{font-weight:400;margin-left:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vp{overflow:hidden;position:relative}
+.vp.tall{max-height:960px;overflow-y:auto}
+.fr.m .vp.tall{max-height:720px}
+.fold{position:absolute;left:0;right:0;border-top:2px dashed var(--c-acc);z-index:9;pointer-events:none}
+.fold span{position:absolute;right:8px;top:4px;font:500 11px var(--c-mono);background:var(--c-acc);color:#fff;padding:2px 6px;letter-spacing:.05em;text-transform:uppercase}
+
+/* ================= OBJECT =================
+   Het git-paneel van Jera, op ware grootte, in de kleuren van stijl/design-system/tokens.json. */
+.stage2{display:flex;flex-wrap:wrap;gap:16px}
+.fr2{background:var(--c-card);border:1px solid var(--c-line);border-radius:8px;overflow:hidden;width:222px;flex:none}
+.jg{display:block;background:var(--bg);font-family:"JetBrains Mono",ui-monospace,Menlo,monospace}
+.jg text{font-family:inherit}
+.jg.d{--bg:#0e1013;--line:#23272e;--mute:#8a93a2;--lane-1:#6e9eff;--lane-2:#e8935a}
+.jg.l{--bg:#f6f6f2;--line:#d9d9d0;--mute:#5a616b;--lane-1:#2f6feb;--lane-2:#b4531a}
+</style>
+<style id="optcss"></style>
+<div class="app">
+  <header class="top"><h1>Stijl GitHub-stand</h1><span class="round">Ronde 3</span><span class="prog" id="prog" role="img"></span></header>
+  <nav class="tabs" id="tabs" role="tablist" aria-label="Beslisgebieden"></nav>
+  <main class="panel" id="panel" role="tabpanel"></main>
+</div>
+<script>
+/* ================= OBJECT: data (per bord invullen) ================= */
+
+/* Afbeeldingen één keer als data-URI; hieronder omgezet naar blob-URL's zodat herhaalde <img> geen megabytes dragen.
+   Gebruik in een fragment: <img src="${IMG.logo}">. */
+const IMG = {};
+
+/* De basis: de stand van nu in app/src/gitpaneel.rs (wolkje, holle en gestippelde lijn). */
+const BASE = {};
+const BASECTX = { mark:'wolk', seg:'nu' };
+
+/* Een branch betalen die van main aftakt. Voor: 2 commits lokaal die niet op GitHub staan.
+   Achter: 3 commits op GitHub die lokaal nog niet zijn opgehaald. Maten uit gitpaneel.rs, lijn 1.5 px. */
+const LIJN=1.5, W=220, H=250, X=65, L2='var(--lane-2)', L1='var(--lane-1)';
+const sq=(x,y,s,o)=>`<rect x="${x-s/2}" y="${y-s/2}" width="${s}" height="${s}" opacity="${o.op??1}" ${o.stroke?`stroke-width="2" style="stroke:${o.stroke};fill:${o.fill||'var(--bg)'}"`:`style="fill:${o.fill}"`}/>`;
+const ln=(x1,y1,x2,y2,col,w=LIJN,ex='')=>`<path d="M${x1} ${y1}L${x2} ${y2}" fill="none" stroke-width="${w}" style="stroke:${col}" ${ex}/>`;
+const tx=(x,y,s,col,w=400,anchor='start')=>`<text x="${x}" y="${y}" text-anchor="${anchor}" style="fill:${col};font-size:11px;font-weight:${w}">${s}</text>`;
+const WOLK=y=>`<path transform="translate(${X} ${y+1.5}) scale(.95)" d="M-5.5 4.5a3.6 3.6 0 0 1-.6-7.15a4.6 4.6 0 0 1 8.8-1.1a3.9 3.9 0 0 1 2.3 8.25z" stroke-width="2" stroke-linejoin="miter" style="stroke:${L2};fill:var(--bg)"/>`;
+function seg(kind,voor,y1,y2){
+  if(kind==='nu') return voor ? ln(X,y1,X,y2,L2,LIJN*2+1)+ln(X,y1,X,y2,'var(--bg)',LIJN*0.8) : ln(X,y1,X,y2,L2,LIJN,'stroke-dasharray="2 6" opacity=".7"');
+  if(kind==='stip') return ln(X,y1,X,y2,L2,LIJN,'stroke-dasharray="2 6" opacity=".7"');
+  if(kind==='vaag') return ln(X,y1,X,y2,L2,LIJN,'opacity=".35"');
+}
+function mark(kind,voor,oy,ty){
+  const n=voor?2:3;
+  if(kind==='wolk') return WOLK(oy);
+  if(kind==='origin') return ln(X-6,oy,X+6,oy,L2,2)+tx(X+11,oy+4,'origin','var(--mute)');
+  if(kind==='pijl') return tx(X+11,ty+4,(voor?'↑':'↓')+n,L2,600);
+  if(kind==='woord') return tx(X+11,ty+4,voor?`${n} te pushen`:`${n} te pullen`,'var(--mute)');
+}
+function graaf(c,voor,thema){
+  const top=95, mid=160, oy=voor?mid:top, ty=voor?top:mid;
+  let s='';
+  s+=ln(0,70.5,W,70.5,'var(--line)',1)+ln(0,175.5,W,175.5,'var(--line)',1);
+  s+=tx(W-8,84,'vandaag','var(--mute)',400,'end')+tx(W-8,189,'gisteren','var(--mute)',400,'end');
+  s+=ln(22,30,22,198,L1,LIJN,'opacity=".4"')+ln(X,48,X,top-8,L2,LIJN,'opacity=".4"');
+  s+=ln(22,H,22,205,L1)+ln(22,235,X-LIJN/2,235,L2)+ln(X,235,X,mid,L2);
+  s+=seg(c.seg,voor,mid,top);
+  s+=sq(22,235,5.4,{fill:L1})+sq(22,205,11.7,{stroke:L1});
+  for(const y of [215,190]) s+=sq(X,y,5.4,{fill:L2});
+  if(voor){ s+=sq(X,mid,5.4,{fill:L2}); for(const y of [135,115]) s+=sq(X,y,5.4,{fill:L2}); s+=sq(X,top,11.7,{stroke:L2}); }
+  else { for(const y of [135,115,top]) s+=sq(X,y,5.4,{stroke:L2,op:.6}); s+=sq(X,mid,11.7,{stroke:L2}); }
+  s+=mark(c.mark,voor,oy,ty);
+  s+=`<text x="29" y="21" style="fill:${L1};font-size:12px;font-weight:600">main</text><text x="72" y="39" style="fill:${L2};font-size:12px;font-weight:600">betalen</text>`;
+  return `<svg class="jg ${thema}" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="betalen ${voor?'2 commits voor':'3 commits achter'} op origin">${s}</svg>`;
+}
+const SCENES=[[true,'d','2 te pushen · donker'],[false,'d','3 te pullen · donker'],[true,'l','2 te pushen · licht'],[false,'l','3 te pullen · licht']];
+const F = {};
+
+const TABS = [
+{id:'teken',name:'Teken voor GitHub',frags:[],opts:[
+ {k:'A',name:'Wolkje',ctx:{mark:'wolk'},spec:[['Teken','wolkje 11 × 9 px, rand 2 px'],['Plek','de commit waar origin staat'],['Tekst','geen'],['Aantal','alleen in de tooltip']]},
+ {k:'B',name:'Streep met origin',ctx:{mark:'origin'},spec:[['Teken','dwarsstreep 12 px, 2 px'],['Plek','de commit waar origin staat'],['Tekst','origin, 11 px, mute'],['Aantal','alleen in de tooltip']]},
+ {k:'C',name:'Pijl met aantal',ctx:{mark:'pijl'},spec:[['Teken','geen'],['Plek','naast de kop van de branch'],['Tekst','↑2 / ↓3, 11 px 600, lijnkleur'],['Origin','waar de lijn ophoudt']]},
+ {k:'D',name:'Voluit',ctx:{mark:'woord'},spec:[['Teken','geen'],['Plek','naast de kop van de branch'],['Tekst','2 te pushen / 3 te pullen, 11 px, mute'],['Origin','waar de lijn ophoudt']]},
+]},
+{id:'stuk',name:'Het stuk ertussen',frags:[],opts:[
+ {k:'A',name:'Hol en gestippeld',ctx:{seg:'nu'},spec:[['Te pushen','holle lijn, 4 px rand, 1.2 px binnen'],['Te pullen','gestippeld 2 / 6, 70%'],['Commits','vol / hol 60%']]},
+ {k:'B',name:'Allebei gestippeld',ctx:{seg:'stip'},spec:[['Te pushen','gestippeld 2 / 6, 70%'],['Te pullen','gestippeld 2 / 6, 70%'],['Commits','vol / hol 60%']]},
+ {k:'C',name:'Allebei vaag',ctx:{seg:'vaag'},spec:[['Te pushen','doorgetrokken, 35%'],['Te pullen','doorgetrokken, 35%'],['Commits','vol / hol 60%']]},
+]},
+];
+
+/* ================= STAND (per ronde bijwerken) ================= */
+const CHOSEN  = {teken:'A',stuk:'B'};            /* tab-id: letter. Gekozen; de tab toont alleen die optie en alle andere tabs bouwen erop. */
+const PARTIAL = {};            /* tab-id: 'wat is goedgekeurd'. Gekozen, maar alleen dit deel staat vast. */
+const LATER   = {};            /* tab-id: true. Gesloten voor nu, komt later terug; toelichting in NOTES. */
+const PCHOSEN = {};            /* 'tab.deel': letter. Gekozen deelvragen. */
+const NOTES   = {};            /* tab-id: [[label, tekst], ...] boven de opties, bijvoorbeeld waarom iets later komt. */
+
+/* ================= ENGINE (niet aanpassen) ================= */
+const state = id => LATER[id]?'later':PARTIAL[id]?'deels':CHOSEN[id]?'vast':'open';
+const STATE_L = {vast:'Vast',deels:'Deels',open:'Open',later:'Later'};
+const pick = id => CHOSEN[id]+(PARTIAL[id]?' · '+PARTIAL[id]:'');
+const lum = h => {const n=parseInt(h.slice(1),16);const f=x=>{x/=255;return x<=.03928?x/12.92:Math.pow((x+.055)/1.055,2.4)};return .2126*f(n>>16&255)+.7152*f(n>>8&255)+.0722*f(n&255)};
+const ratio = (a,b) => {const x=lum(a),y=lum(b);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05)};
+const grade = r => r>=7?'AAA':r>=4.5?'AA':r>=3?'alleen groot':'nee';
+const sw = h => `<span class="sw" style="background:${h}"></span>${h}`;
+const pair = (v,a,b) => {const r=ratio(v[a],v[b]);return `${r.toFixed(1)}:1 <span class="${r>=4.5?'pass':r>=3?'':'fail'}">${grade(r)}</span>`};
+let UID=0; const STY=[];
+function styleOf(v){return Object.entries(v).map(([k,x])=>`${k}:${x}`).join(';')}
+function site(frags,ctx,vars,cls,w,extra=''){
+  const c={...ctx,vars};
+  return `<div class="site ${cls}" data-w="${w}" style="${(`width:${w}px;${styleOf(vars)}`).replace(/"/g,'&quot;')}">${frags.map(f=>F[f](c)).join('')}${extra}</div>`;
+}
+function baseFor(tabId){
+  let v={...BASE},c={...BASECTX},cls='',css=[];
+  for(const [t,k] of Object.entries(CHOSEN)){if(t===tabId)continue;const o=TABS.find(x=>x.id===t).opts.find(x=>x.k===k);if(!o)continue;Object.assign(v,o.vars||{});Object.assign(c,o.ctx||{});cls+=' '+(o.cls||'');if(o.css)css.push(o.css)}
+  for(const [key,k] of Object.entries(PCHOSEN)){const [t,p]=key.split('.');const o=TABS.find(x=>x.id===t).parts.find(x=>x.id===p).opts.find(x=>x.k===k);Object.assign(v,o.vars||{});Object.assign(c,o.ctx||{})}
+  return {v,c,cls,css};
+}
+const NUM = Object.fromEntries(TABS.map((t,i)=>[t.id,String(i+1).padStart(2,'0')]));
+function panelHead(tab){
+  const s=state(tab.id);
+  const notes=NOTES[tab.id]?`<dl class="spec notes">${NOTES[tab.id].map(([a,b])=>`<div><dt>${a}</dt><dd>${b}</dd></div>`).join('')}</dl>`:'';
+  return `<header class="phd"><div class="phd-t"><span class="phd-n">${NUM[tab.id]}</span><h2>${tab.name}</h2><span class="stc" data-st="${s}"><i class="tile"></i>${STATE_L[s]}${CHOSEN[tab.id]?' · '+CHOSEN[tab.id]:''}</span></div>${notes}</header>`;
+}
+function renderTab(tab){
+  if(LATER[tab.id])return panelHead(tab);
+  const B=baseFor(tab.id);const bid='b'+(++UID);B.css.forEach(x=>STY.push(x.replaceAll('&','.'+bid)));
+  const opts = CHOSEN[tab.id]?tab.opts.filter(o=>o.k===CHOSEN[tab.id]):tab.opts;
+  const parts=(tab.parts||[]).map(p=>{const ch=PCHOSEN[tab.id+'.'+p.id],s=ch?'vast':'open';
+    return `<div class="part"><header class="phd sub"><div class="phd-t"><h2>${p.name}</h2><span class="stc" data-st="${s}"><i class="tile"></i>${STATE_L[s]}${ch?' · '+ch:''}</span></div></header><div class="opts">${(ch?p.opts.filter(o=>o.k===ch):p.opts).map(o=>renderOpt(tab,o,B,bid,p.frags,p.url)).join('')}</div></div>`}).join('');
+  return panelHead(tab)+'<div class="opts">'+opts.map(o=>renderOpt(tab,o,B,bid,tab.frags)).join('')+parts+'</div>';
+}
+function renderOpt(tab,o,B,bid,frags,url='git'){
+  const id='o'+(++UID);const ctx={...B.c,...(tab.ctx||{}),...(o.ctx||{})};const cls=`${B.cls} ${bid} ${o.cls||''} ${id}`;
+  if(o.css)STY.push(o.css.replaceAll('&','.'+id));
+  let spec=[...(o.spec||[])];
+  const frames=`<div class="stage2">${SCENES.map(([v,th,lab])=>`<div class="fr2"><div class="bar"><b>${lab}</b></div>${graaf(ctx,v,th)}</div>`).join('')}</div>`;
+  return `<section class="opt" data-opt="${o.k}"><div class="opt-head"><span class="opt-k">${o.k}</span><h2 class="opt-n">${o.name}</h2>${tab.replay?'<button class="replay" type="button">Speel af</button>':''}</div>
+    <dl class="spec">${spec.map(([a,b])=>`<div><dt>${a}</dt><dd>${b}</dd></div>`).join('')}</dl>${frames}</section>`;
+}
+function fit(root=document){root.querySelectorAll('.vp').forEach(vp=>{const s=vp.firstElementChild;if(!s)return;const z=Math.min(1,vp.clientWidth/+s.dataset.w);s.style.zoom=z})}
+function play(opt){opt.querySelectorAll('.site').forEach(s=>{s.classList.remove('play');void s.offsetWidth;s.classList.add('play')})}
+for(const k in IMG){try{const [h,b]=IMG[k].split(',');const bin=atob(b);const u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);IMG[k]=URL.createObjectURL(new Blob([u],{type:h.slice(5,h.indexOf(';'))}))}catch(e){}}
+const tabsEl=document.getElementById('tabs'),panel=document.getElementById('panel');
+const tabBtn=t=>`<button class="tab" role="tab" type="button" id="t-${t.id}" aria-controls="panel" aria-selected="false" data-tab="${t.id}" data-st="${state(t.id)}"><i class="tile"></i><span>${NUM[t.id]}</span>${t.name}${CHOSEN[t.id]?`<b class="tk">${pick(t.id)}</b>`:''}</button>`;
+tabsEl.innerHTML=['open','deels','later','vast'].map(g=>{const ts=TABS.filter(t=>state(t.id)===g);return ts.length?`<div class="tg" role="presentation"><span class="tgl">${STATE_L[g]} <b>${ts.length}</b></span>${ts.map(tabBtn).join('')}</div>`:''}).join('');
+const prog=document.getElementById('prog');
+prog.innerHTML=TABS.map(t=>`<i class="tile" data-st="${state(t.id)}" title="${NUM[t.id]} ${t.name}"></i>`).join('');
+prog.setAttribute('aria-label',['vast','deels','open','later'].map(g=>`${TABS.filter(t=>state(t.id)===g).length} ${g}`).join(', '));
+const styleEl=document.getElementById('optcss');
+const STORE='stijl-tab-github-stand';
+function show(id,push){
+  const tab=TABS.find(t=>t.id===id)||TABS[0];
+  STY.length=0;panel.innerHTML=renderTab(tab);styleEl.textContent=STY.join('\n');
+  tabsEl.querySelectorAll('.tab').forEach(b=>b.setAttribute('aria-selected',b.dataset.tab===tab.id));
+  fit(panel);setTimeout(()=>{fit(panel);panel.querySelectorAll('.opt').forEach(play)},60);
+  if(push){try{history.replaceState(null,'','#'+tab.id)}catch(e){}try{localStorage.setItem(STORE,tab.id)}catch(e){}}
+}
+tabsEl.addEventListener('click',e=>{const b=e.target.closest('.tab');if(!b)return;show(b.dataset.tab,true);b.scrollIntoView({block:'nearest',inline:'nearest'});window.scrollTo({top:0})});
+tabsEl.addEventListener('keydown',e=>{if(!['ArrowRight','ArrowLeft'].includes(e.key))return;const bs=[...tabsEl.querySelectorAll('.tab')];const i=bs.indexOf(document.activeElement);if(i<0)return;const n=bs[(i+(e.key==='ArrowRight'?1:-1)+bs.length)%bs.length];n.focus();n.click()});
+panel.addEventListener('click',e=>{const r=e.target.closest('.replay');if(r)play(r.closest('.opt'))});
+new ResizeObserver(()=>fit(panel)).observe(panel);
+let start=(location.hash||'').slice(1);if(!TABS.some(t=>t.id===start)){try{start=localStorage.getItem(STORE)||''}catch(e){start=''}}
+show(start||TABS[0].id,false);
+document.fonts&&document.fonts.ready.then(()=>fit(panel));
+</script>

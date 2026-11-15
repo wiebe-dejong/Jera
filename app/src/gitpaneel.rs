@@ -28,7 +28,7 @@ const X0: f32 = 22.0; // de eerste lijn
 const RHMIN: f32 = 26.0; // kleinste afstand tussen twee rijen
 const RN: f32 = 18.0; // een regel in de kop met de namen
 const RUIMTE: f32 = 4.0; // kleinste afstand tussen twee randen
-const LIJN: f32 = 2.0;
+const LIJN: f32 = 1.5;
 const PUNT: f32 = 3.0;
 const DUB: f32 = 2.0;
 const MERGE: f32 = 3.4;
@@ -754,7 +754,7 @@ fn teken_branch(tek: &mut Tekening, ind: &Indeling, staat: &Staat, i: usize, hh:
         baan(onder, vec![(xi, voet), (xi, yp)], k, soort, th);
     }
     if yp > yt {
-        baan(onder, vec![(xi, yp), (xi, yt)], k, "lokaal", th);
+        onder.push(lijn(vec![(xi, yp), (xi, yt)], LIJN, kleur(k, 0.7), Some([2.0, 6.0])));
         boven.push(Vorm::Wolk { x: xi, y: yp, kleur: kleur(k, 1.0), vul: bg });
         if let Some(ot) = &b.origin_tov {
             doelen.push(doel(xi, yp, 10.0, tov_tip(ind, &format!("origin/{}", b.naam), ot), None));
