@@ -3,6 +3,7 @@
 use std::{
     collections::{HashMap, HashSet},
     path::{Path, PathBuf},
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -15,6 +16,7 @@ use gpui_kit::{
 mod bestandsboom;
 mod naamveld;
 mod onderdelen;
+mod poortenpaneel;
 mod sessielijst;
 
 use bestandsboom::{Item, Menu, kort_pad, lees_map};
@@ -23,6 +25,7 @@ use bestandsboom::Keuze;
 use naamveld::{Doel, NaamVeld};
 pub(crate) use onderdelen::knop_vak;
 use onderdelen::*;
+use poortenpaneel::{B_PANEEL, POORT};
 use sessielijst::titel;
 
 use crate::agents::{self, Agent};
@@ -31,6 +34,7 @@ use crate::bewerk;
 use crate::gitpaneel::GitPaneel;
 use crate::openen::{NieuwProject, OpenProject, Openen, OpenenEvent};
 use crate::oud::{self, Oud};
+use crate::poorten;
 use crate::status::{Gelezen, Lezer, Status};
 use crate::taal::t;
 use crate::terminal::{TerminalEvent, TerminalView};
@@ -49,6 +53,10 @@ const STATUS_ELKE: Duration = Duration::from_millis(500);
 /// Zonder sessiebestand na deze tijd staat Claude Code op een scherm bij de start, zoals
 /// de vraag of ik de map vertrouw. Daarvoor is het nog aan het starten.
 const START_DUUR: Duration = Duration::from_secs(3);
+/// Zo vaak leest Jera de poorten en agent-browsers.
+const POORTEN_ELKE: Duration = Duration::from_secs(2);
+/// Zolang het paneel open is, een nieuw plaatje van elke agent-browser na zoveel keer lezen.
+const PLAATJE_RONDES: u64 = 2;
 
 #[derive(Clone, Copy, PartialEq)]
 enum Stand {
@@ -122,6 +130,13 @@ pub struct Jera {
     naam_veld: Option<NaamVeld>,
     openen: Entity<Openen>,
     openen_open: bool,
+    /// De poorten en agent-browsers van de hele computer, en of hun paneel openstaat.
+    poorten: poorten::Stand,
+    poorten_open: bool,
+    /// Ook de poorten die niet uit de thuismap zijn gestart.
+    alles: bool,
+    /// Het laatste plaatje van elke agent-browser.
+    plaatjes: HashMap<String, Arc<RenderImage>>,
 }
 
 impl Jera {
@@ -164,6 +179,10 @@ impl Jera {
             naam_veld: None,
             openen,
             openen_open: false,
+            poorten: poorten::Stand::default(),
+            poorten_open: false,
+            alles: false,
+            plaatjes: HashMap::new(),
         }
     }
 
@@ -247,6 +266,65 @@ impl Jera {
             }
         })
         .detach();
+        Self::volg_poorten(window, cx);
+    }
+
+    /// Leest de poorten en agent-browsers, steeds opnieuw. Zolang het paneel open is, ook
+    /// een plaatje van elke agent-browser.
+    fn volg_poorten(window: &mut Window, cx: &mut Context<Self>) {
+        cx.spawn_in(window, async move |this, cx| {
+            for ronde in 0u64.. {
+                let stand = cx.background_executor().spawn(async { poorten::lees() }).await;
+                let Ok(namen) = this.update_in(cx, |this, window, cx| {
+                    if this.poorten != stand {
+                        this.poorten = stand;
+                        cx.notify();
+                    }
+                    // Het plaatje van een browser die er niet meer is, gaat weg.
+                    let browsers = &this.poorten.browsers;
+                    let weg: Vec<String> =
+                        this.plaatjes.keys().filter(|naam| !browsers.iter().any(|b| &b.naam == *naam)).cloned().collect();
+                    for naam in weg {
+                        if let Some(beeld) = this.plaatjes.remove(&naam) {
+                            cx.drop_image(beeld, Some(window));
+                        }
+                    }
+                    match this.poorten_open && ronde % PLAATJE_RONDES == 0 {
+                        true => this.poorten.browsers.iter().map(|b| b.naam.clone()).collect(),
+                        false => Vec::new(),
+                    }
+                }) else {
+                    break;
+                };
+                if !namen.is_empty() {
+                    let beelden: Vec<(String, Arc<RenderImage>)> = cx
+                        .background_executor()
+                        .spawn(async move {
+                            namen
+                                .into_iter()
+                                .filter_map(|naam| {
+                                    let beeld = poorten::plaatje(&naam)?;
+                                    Some((naam, Arc::new(RenderImage::new(vec![image::Frame::new(beeld)]))))
+                                })
+                                .collect()
+                        })
+                        .await;
+                    let klaar = this.update_in(cx, |this, window, cx| {
+                        for (naam, beeld) in beelden {
+                            if let Some(oud) = this.plaatjes.insert(naam, beeld) {
+                                cx.drop_image(oud, Some(window));
+                            }
+                        }
+                        cx.notify();
+                    });
+                    if klaar.is_err() {
+                        break;
+                    }
+                }
+                cx.background_executor().timer(POORTEN_ELKE).await;
+            }
+        })
+        .detach();
     }
 
     /// De pids van de shells van alle sessies.
@@ -312,6 +390,8 @@ impl Jera {
             "sessies" => self.stand = Stand::Sessies,
             "bestanden" => self.stand = Stand::Bestanden,
             "git" => self.git_open = !self.git_open,
+            "poorten" => self.poorten_open = !self.poorten_open,
+            "alles" => self.alles = !self.alles,
             "oud" => self.wissel_oud(cx),
             "agents" => {
                 let Some(tab) = self.tabs.get(self.actief) else { return };
@@ -547,6 +627,9 @@ impl Jera {
             )
             .child(lijn(th))
             .child(div().flex_1())
+            .child(lijn(th))
+            .child(self.poortenknop(th, cx))
+            .child(lijn(th))
             .child(
                 div()
                     .flex()
@@ -816,16 +899,7 @@ impl Render for Jera {
                                     .flex_1()
                                     .min_h_0()
                                     .child(div().flex_1().min_w_0().children(terminal).children(leeg))
-                                    .when_some(self.tabs.get(self.actief).filter(|_| self.git_open), |d, tab| {
-                                        d.child(
-                                            div()
-                                                .flex_none()
-                                                .h_full()
-                                                .border_l(px(t::LIJN))
-                                                .border_color(rgb(th.line))
-                                                .child(tab.git.clone()),
-                                        )
-                                    }),
+                                    .children(self.rechts(th, cx)),
                             ),
                     ),
             )
@@ -835,6 +909,31 @@ impl Render for Jera {
             .when(self.openen_open, |d| {
                 d.child(deferred(self.openen.update(cx, |openen, cx| openen.achter(cx))).with_priority(1))
             })
+    }
+}
+
+impl Jera {
+    /// De kolom rechts van de terminal: het git-paneel, het paneel met poorten, of allebei,
+    /// git boven en poorten onder, helft om helft.
+    fn rechts(&self, th: &Thema, cx: &mut Context<Self>) -> Option<impl IntoElement> {
+        let git = self.tabs.get(self.actief).filter(|_| self.git_open).map(|tab| tab.git.clone());
+        if git.is_none() && !self.poorten_open {
+            return None;
+        }
+        let kolom = div().flex_none().h_full().border_l(px(t::LIJN)).border_color(rgb(th.line));
+        Some(match (git, self.poorten_open) {
+            (Some(git), false) => kolom.child(git),
+            (git, _) => kolom
+                .flex()
+                .flex_col()
+                .w(px(B_PANEEL))
+                .when_some(git, |d, git| {
+                    d.child(
+                        div().flex_1().min_h_0().overflow_hidden().border_b(px(t::LIJN)).border_color(rgb(th.line)).child(git),
+                    )
+                })
+                .child(div().id("poortenpaneel").flex_1().min_h_0().overflow_y_scroll().child(self.poortenpaneel(th, cx))),
+        })
     }
 }
 

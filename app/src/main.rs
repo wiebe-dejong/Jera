@@ -13,6 +13,7 @@ mod gitpaneel;
 mod instellingen;
 mod openen;
 mod oud;
+mod poorten;
 mod status;
 mod taal;
 mod terminal;
