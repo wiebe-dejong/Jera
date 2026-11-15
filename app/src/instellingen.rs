@@ -68,7 +68,7 @@ fn menu(cx: &mut App) {
         MenuItem::separator(),
         MenuItem::submenu(Menu::new("Iconen").items([
             keuze("Kleur", IconenKleur, !zed()),
-            keuze("Zed", IconenZed, zed()),
+            keuze("Zwartwit", IconenZed, zed()),
         ])),
         MenuItem::separator(),
         MenuItem::action("Stop Jera", Stop),
