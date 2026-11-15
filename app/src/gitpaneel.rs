@@ -1,10 +1,12 @@
-//! Het git-paneel: de branches van de repo als graaf, rechts naast de terminal.
-//! De stijl komt uit `stijl/design-system/components/GitPaneel`:
+//! Het git-paneel: de branches van de repo als graaf, rechts naast de terminal, met erboven
+//! wat er te doen is (commit, update, push). De stijl komt uit `stijl/design-system/components/GitPaneel`:
 //! recht, de namen getrapt boven de lijnen, de dagen rechts op hun lijn.
+//! De keuzes voor de acties, de muis en het kaartje staan in `stijl/git-acties/keuzes.md`.
 
 use std::{
     cell::{Cell, RefCell},
     collections::{BTreeMap, HashMap, HashSet},
+    ops::Range,
     path::PathBuf,
     rc::Rc,
     sync::Arc,
@@ -12,15 +14,23 @@ use std::{
 };
 
 use chrono::{Datelike, Local, TimeZone, Timelike};
-use gpui_kit::{prelude::FluentBuilder, *};
+use gpui_kit::{
+    base::input::{Input, InputEvent, InputState},
+    prelude::FluentBuilder,
+    *,
+};
 
-use crate::git::{self, Branch, Commit, Repo, Tov};
+use crate::git::{self, Branch, Commit, Repo, Stand, UpdateFout};
 use crate::openen::{GitHub, gh};
 use crate::taal;
 use crate::thema::{self as t, Thema};
 
 /// Zo oud mogen de gelezen branches zijn als het paneel open is.
 const VERVERS: Duration = Duration::from_secs(20);
+/// Zo vaak haalt het paneel op bij GitHub, zolang het open is.
+const OPHALEN: Duration = Duration::from_secs(300);
+/// Zo lang blijft een punt aangewezen als de muis ervan af gaat: langs de punten bewegen knippert niet.
+const LOSLATEN: Duration = Duration::from_millis(150);
 
 // de maten van de graaf
 const LW: f32 = 43.0; // afstand tussen twee lijnen
@@ -48,6 +58,12 @@ pub struct GitPaneel {
     agents: bool,
     open: HashSet<String>,
     hover: Option<usize>,
+    /// Gaat omhoog bij elke beweging naar een punt: een wachtend loslaten met een oud nummer telt niet.
+    los: u32,
+    los_wacht: bool,
+    /// Het id van het punt met het kaartje: `c:hash`, `b:naam` of `o:naam`.
+    gekozen: Option<String>,
+    focus: FocusHandle,
     oorsprong: Rc<Cell<Point<Pixels>>>,
     doelen: Rc<RefCell<Vec<Doel>>>,
     /// `Some(false)` als de repo geen remote heeft: dan staat bovenaan Op GitHub.
@@ -56,6 +72,24 @@ pub struct GitPaneel {
     eigenaars: Vec<String>,
     eigenaar: usize,
     maak: Maak,
+    stand: Stand,
+    /// Het paneel staat open. Alleen dan haalt het op.
+    zichtbaar: bool,
+    opgehaald: Option<Instant>,
+    haalt_op: bool,
+    bezig: Option<Bezig>,
+    fout: Option<String>,
+    /// Het veld voor het commitbericht, zolang het open is.
+    veld: Option<(Entity<InputState>, Subscription)>,
+    /// Claude schrijft het commitbericht.
+    schrijft: bool,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum Bezig {
+    Commit,
+    Push,
+    Update,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -66,7 +100,7 @@ enum Maak {
 }
 
 impl GitPaneel {
-    pub fn new(root: PathBuf) -> Self {
+    pub fn new(root: PathBuf, cx: &mut Context<Self>) -> Self {
         Self {
             root,
             repo: None,
@@ -76,33 +110,55 @@ impl GitPaneel {
             agents: false,
             open: HashSet::new(),
             hover: None,
+            los: 0,
+            los_wacht: false,
+            gekozen: None,
+            focus: cx.focus_handle(),
             oorsprong: Rc::default(),
             doelen: Rc::default(),
             remote: None,
             eigenaars: Vec::new(),
             eigenaar: 0,
             maak: Maak::Niet,
+            stand: Stand::default(),
+            zichtbaar: false,
+            opgehaald: None,
+            haalt_op: false,
+            bezig: None,
+            fout: None,
+            veld: None,
+            schrijft: false,
         }
+    }
+
+    /// Of het paneel open staat. Bij het openen haalt het meteen op.
+    pub fn zet_zichtbaar(&mut self, open: bool) {
+        if open && !self.zichtbaar {
+            self.opgehaald = None;
+        }
+        self.zichtbaar = open;
     }
 
     /// Leest de branches opnieuw als ze ouder zijn dan `VERVERS`.
     pub fn ververs(&mut self, cx: &mut Context<Self>) {
+        self.haal_op(cx);
         if self.leest || self.gelezen.is_some_and(|t| t.elapsed() < VERVERS) {
             return;
         }
         self.leest = true;
         let root = self.root.clone();
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
-            let (repo, remote, eigenaars) = cx
+            let (repo, remote, eigenaars, stand) = cx
                 .background_executor()
                 .spawn(async move {
                     let remote = git::heeft_remote(&root);
                     let eigenaars = if remote == Some(false) { GitHub::eigenaars() } else { Vec::new() };
-                    (git::lees(&root), remote, eigenaars)
+                    (git::lees(&root), remote, eigenaars, git::stand(&root))
                 })
                 .await;
             let _ = this.update(cx, |p, cx| {
                 p.remote = remote;
+                p.stand = stand;
                 if !eigenaars.is_empty() && p.eigenaars.is_empty() {
                     p.eigenaars = eigenaars;
                 }
@@ -114,6 +170,196 @@ impl GitPaneel {
             });
         })
         .detach();
+    }
+
+    /// Leest opnieuw, nu meteen.
+    fn lees_nu(&mut self, cx: &mut Context<Self>) {
+        self.gelezen = None;
+        self.ververs(cx);
+    }
+
+    /// Haalt op bij GitHub als het paneel open is en het langer dan `OPHALEN` geleden is.
+    fn haal_op(&mut self, cx: &mut Context<Self>) {
+        if !self.zichtbaar || self.haalt_op || self.bezig.is_some() || self.remote != Some(true) {
+            return;
+        }
+        if self.opgehaald.is_some_and(|t| t.elapsed() < OPHALEN) {
+            return;
+        }
+        self.haalt_op = true;
+        let root = self.root.clone();
+        cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
+            let _ = cx.background_executor().spawn(async move { git::haal_op(&root) }).await;
+            let _ = this.update(cx, |p, cx| {
+                p.haalt_op = false;
+                p.opgehaald = Some(Instant::now());
+                p.lees_nu(cx);
+            });
+        })
+        .detach();
+    }
+
+    /// Commit (met het bericht uit het veld), push of update, op de achtergrond.
+    fn doe(&mut self, actie: Bezig, cx: &mut Context<Self>) {
+        if self.bezig.is_some() {
+            return;
+        }
+        let bericht = self.veld.as_ref().map(|(veld, _)| veld.read(cx).value().trim().to_string()).unwrap_or_default();
+        if actie == Bezig::Commit && bericht.is_empty() {
+            return;
+        }
+        let (root, upstream) = (self.root.clone(), self.stand.upstream);
+        self.bezig = Some(actie);
+        self.fout = None;
+        cx.notify();
+        cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
+            let uitkomst = cx
+                .background_executor()
+                .spawn(async move {
+                    match actie {
+                        Bezig::Commit => git::commit(&root, &bericht),
+                        Bezig::Push => git::push(&root, upstream),
+                        Bezig::Update => git::update(&root).map_err(|fout| match fout {
+                            UpdateFout::Conflict => {
+                                taal::t("conflict · vraag Claude om samen te voegen", "conflict · ask Claude to merge").to_string()
+                            }
+                            UpdateFout::Anders(fout) => fout,
+                        }),
+                    }
+                })
+                .await;
+            let _ = this.update(cx, |p, cx| {
+                p.bezig = None;
+                match uitkomst {
+                    Ok(()) if actie == Bezig::Commit => p.veld = None,
+                    Ok(()) => {}
+                    Err(fout) => p.fout = Some(if fout.is_empty() { taal::t("mislukt", "failed").into() } else { fout }),
+                }
+                p.lees_nu(cx);
+            });
+        })
+        .detach();
+    }
+
+    /// Opent het veld voor het commitbericht. Claude schrijft een voorstel; wat ik intussen typ blijft staan.
+    fn open_veld(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let veld = cx.new(|cx| {
+            let mut veld = InputState::new(window, cx);
+            veld.set_placeholder("…", window, cx);
+            veld
+        });
+        veld.update(cx, |veld, cx| veld.focus(window, cx));
+        let volg = cx.subscribe_in(&veld, window, |this, _, event, _, cx| {
+            if let InputEvent::PressEnter { .. } = event {
+                this.doe(Bezig::Commit, cx);
+            }
+        });
+        self.veld = Some((veld.clone(), volg));
+        self.schrijft = true;
+        self.fout = None;
+        cx.notify();
+        let root = self.root.clone();
+        cx.spawn_in(window, async move |this, cx| {
+            let bericht = cx.background_executor().spawn(async move { git::bericht(&root) }).await;
+            let _ = this.update_in(cx, |p, window, cx| {
+                p.schrijft = false;
+                // alleen als dit veld nog open is en leeg
+                if p.veld.as_ref().is_some_and(|(v, _)| *v == veld) && veld.read(cx).value().is_empty() {
+                    veld.update(cx, |veld, cx| match bericht {
+                        Some(bericht) => veld.set_value(bericht, window, cx),
+                        None => veld.set_placeholder(taal::t("bericht", "message"), window, cx),
+                    });
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    fn sluit_veld(&mut self, cx: &mut Context<Self>) {
+        if self.bezig != Some(Bezig::Commit) {
+            self.veld = None;
+            self.schrijft = false;
+            cx.notify();
+        }
+    }
+
+    /// Boven de graaf: wat er te doen is. Niets te doen, dan geen regel.
+    fn actieregel(&self, th: &Thema, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let s = self.stand;
+        let regel = || {
+            div()
+                .flex()
+                .flex_none()
+                .flex_wrap()
+                .items_center()
+                .gap(px(t::GAP))
+                .min_h(px(t::H_RIJ + 8.0))
+                .px(px(t::PAD))
+                .py(px(7.0))
+                .border_b(px(t::LIJN))
+                .border_color(rgb(th.line))
+        };
+        let knop = |id: &'static str, label: String| crate::venster::knop_vak(th).id(id).child(label);
+        let fout = self.fout.clone().map(|f| div().w_full().text_color(rgb(th.ink)).child(f));
+        if let Some((veld, _)) = &self.veld {
+            let rechts = if self.bezig == Some(Bezig::Commit) {
+                div().flex_none().text_color(rgb(th.mute)).child(taal::t("committen", "committing")).into_any_element()
+            } else {
+                knop("commit-ok", "commit".into()).on_click(cx.listener(|p, _, _, cx| p.doe(Bezig::Commit, cx))).into_any_element()
+            };
+            return Some(
+                regel()
+                    .child(
+                        div()
+                            .flex()
+                            .w_full()
+                            .items_center()
+                            .gap(px(t::GAP))
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .px(px(4.0))
+                                    .border(px(t::LIJN))
+                                    .border_color(rgb(th.line_strong))
+                                    .child(Input::new(veld)),
+                            )
+                            .child(rechts),
+                    )
+                    .children(fout)
+                    .capture_key_down(cx.listener(|p, e: &KeyDownEvent, _, cx| {
+                        if e.keystroke.key == "escape" {
+                            cx.stop_propagation();
+                            p.sluit_veld(cx);
+                        }
+                    }))
+                    .into_any_element(),
+            );
+        }
+        if let Some(bezig) = self.bezig {
+            let woord = match bezig {
+                Bezig::Commit => taal::t("committen", "committing"),
+                Bezig::Push => taal::t("pushen", "pushing"),
+                Bezig::Update => taal::t("updaten", "updating"),
+            };
+            return Some(regel().child(div().text_color(rgb(th.mute)).child(woord)).into_any_element());
+        }
+        let mut knoppen = Vec::new();
+        if s.wijz > 0 {
+            knoppen.push(knop("commit", format!("commit {}", s.wijz)).on_click(cx.listener(|p, _, window, cx| p.open_veld(window, cx))));
+        }
+        if s.remote && s.achter > 0 {
+            knoppen.push(knop("update", format!("update ↓{}", s.achter)).on_click(cx.listener(|p, _, _, cx| p.doe(Bezig::Update, cx))));
+        }
+        // push pas als er niets te halen is: anders weigert GitHub hem
+        if s.remote && s.voor > 0 && s.achter == 0 {
+            knoppen.push(knop("push", format!("push ↑{}", s.voor)).on_click(cx.listener(|p, _, _, cx| p.doe(Bezig::Push, cx))));
+        }
+        if knoppen.is_empty() && fout.is_none() {
+            return None;
+        }
+        Some(regel().children(knoppen).children(fout).into_any_element())
     }
 
     /// Maakt een privé repo op GitHub bij de gekozen eigenaar en zet de code erop.
@@ -201,10 +447,57 @@ impl GitPaneel {
             })
     }
 
+    /// Een knop als de muis erin staat, anders het dichtstbijzijnde punt binnen 30 px opzij en 20 px
+    /// boven of onder. Punten op een lijn liggen dichter bij elkaar, dus langs een lijn zit geen gat.
     fn doel_op(&self, positie: Point<Pixels>) -> Option<usize> {
         let p = positie - self.oorsprong.get();
         let (x, y) = (f32::from(p.x), f32::from(p.y));
-        self.doelen.borrow().iter().rposition(|d| (x - d.x).abs() <= d.rx && (y - d.y).abs() <= d.ry)
+        let doelen = self.doelen.borrow();
+        if let Some(i) = doelen.iter().rposition(|d| d.lane.is_none() && (x - d.x).abs() <= d.rx && (y - d.y).abs() <= d.ry) {
+            return Some(i);
+        }
+        doelen
+            .iter()
+            .enumerate()
+            .filter(|(_, d)| d.lane.is_some())
+            .filter_map(|(i, d)| {
+                let (dx, dy) = ((x - d.x).abs(), (y - d.y).abs());
+                (dx <= 30.0 && dy <= 20.0).then_some((i, dx * dx + 2.0 * dy * dy))
+            })
+            .min_by(|a, b| a.1.total_cmp(&b.1))
+            .map(|(i, _)| i)
+    }
+
+    /// De muis gaat naar een punt, of ervan af. Loslaten wacht `LOSLATEN`.
+    fn wijs(&mut self, hover: Option<usize>, cx: &mut Context<Self>) {
+        match hover {
+            Some(_) if hover != self.hover => {
+                self.hover = hover;
+                self.los += 1;
+                self.los_wacht = false;
+                cx.notify();
+            }
+            Some(_) => {
+                self.los += 1;
+                self.los_wacht = false;
+            }
+            None if self.hover.is_some() && !self.los_wacht => {
+                self.los_wacht = true;
+                let nr = self.los;
+                cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
+                    cx.background_executor().timer(LOSLATEN).await;
+                    let _ = this.update(cx, |p, cx| {
+                        if p.los == nr && p.los_wacht {
+                            p.hover = None;
+                            p.los_wacht = false;
+                            cx.notify();
+                        }
+                    });
+                })
+                .detach();
+            }
+            None => {}
+        }
     }
 }
 
@@ -216,6 +509,7 @@ impl Render for GitPaneel {
             .flex_col()
             .h_full()
             .when(self.remote == Some(false), |d| d.min_w(px(270.0)).child(self.op_github_rij(th, cx)))
+            .children(self.actieregel(th, cx))
             .child(self.graaf(window, cx))
     }
 }
@@ -235,11 +529,12 @@ impl GitPaneel {
                 .when(self.geen_git, |d| d.child(taal::t("Geen git in deze map", "No git in this folder")))
                 .into_any_element();
         };
-        let staat = Staat { agents: self.agents, open: self.open.clone(), hover: self.hover };
+        let staat = Staat { agents: self.agents, open: self.open.clone(), hover: self.hover, gekozen: self.gekozen.clone() };
         let breedte = breedte(&repo, staat.agents);
         let (oorsprong, doelen) = (self.oorsprong.clone(), self.doelen.clone());
         div()
             .id("git-paneel")
+            .track_focus(&self.focus)
             .flex_none()
             .w(px(breedte))
             .flex_1()
@@ -247,30 +542,40 @@ impl GitPaneel {
             .overflow_hidden()
             .on_mouse_move(cx.listener(|this, e: &MouseMoveEvent, _, cx| {
                 let hover = this.doel_op(e.position);
-                if hover != this.hover {
-                    this.hover = hover;
-                    cx.notify();
-                }
+                this.wijs(hover, cx);
             }))
             .on_hover(cx.listener(|this, binnen: &bool, _, cx| {
                 if !*binnen && this.hover.take().is_some() {
+                    this.los_wacht = false;
+                    cx.notify();
+                }
+            }))
+            // Escape haalt het kaartje weg, zonder dat de terminal (en Claude) hem krijgt.
+            .on_key_down(cx.listener(|this, e: &KeyDownEvent, _, cx| {
+                if e.keystroke.key == "escape" && this.gekozen.take().is_some() {
+                    cx.stop_propagation();
                     cx.notify();
                 }
             }))
             .on_mouse_down(
                 MouseButton::Left,
-                cx.listener(|this, e: &MouseDownEvent, _, cx| {
-                    let klik = this.doel_op(e.position).and_then(|i| this.doelen.borrow()[i].klik.clone());
-                    match klik {
-                        Some(Klik::Groep(key)) => {
+                cx.listener(|this, e: &MouseDownEvent, window, cx| {
+                    window.focus(&this.focus, cx);
+                    let doel = this.doel_op(e.position).map(|i| {
+                        let d = &this.doelen.borrow()[i];
+                        (d.klik.clone(), d.id.clone(), d.kaart.is_empty())
+                    });
+                    match doel {
+                        Some((Some(Klik::Groep(key)), _, _)) => {
                             if !this.open.remove(&key) {
                                 this.open.insert(key);
                             }
                         }
-                        Some(Klik::Agents) => this.agents = !this.agents,
-                        None => return,
+                        Some((Some(Klik::Agents), _, _)) => this.agents = !this.agents,
+                        // nog een klik op hetzelfde punt haalt het kaartje weg
+                        Some((None, id, false)) => this.gekozen = (this.gekozen.as_ref() != Some(&id)).then_some(id),
+                        _ => this.gekozen = None,
                     }
-                    this.hover = None;
                     cx.notify();
                 }),
             )
@@ -280,7 +585,7 @@ impl GitPaneel {
                     move |bounds, _, window, cx| {
                         oorsprong.set(bounds.origin);
                         let tek = teken(&repo, &staat, f32::from(bounds.size.width), f32::from(bounds.size.height), th);
-                        verf(&tek, staat.hover, bounds, th, window, cx);
+                        verf(&tek, &staat, bounds, th, window, cx);
                         *doelen.borrow_mut() = tek.doelen;
                     },
                 )
@@ -294,6 +599,7 @@ struct Staat {
     agents: bool,
     open: HashSet<String>,
     hover: Option<usize>,
+    gekozen: Option<String>,
 }
 
 #[derive(Clone)]
@@ -306,16 +612,19 @@ enum Klik {
 enum Soort {
     Kop,
     Gewoon,
-    Mute,
 }
 
-/// Een plek die iets laat zien als de muis erop staat, of iets doet bij een klik.
+/// Een punt of knop: de muis wijst het aan, een klik doet iets of toont het kaartje.
 struct Doel {
     x: f32,
     y: f32,
     rx: f32,
     ry: f32,
-    tip: Vec<(String, Soort)>,
+    /// De lijn van een punt. Een knop heeft er geen: die telt alleen als de muis erin staat.
+    lane: Option<usize>,
+    id: String,
+    /// Wat het kaartje na een klik toont. Leeg: geen kaartje.
+    kaart: Vec<(String, Soort)>,
     klik: Option<Klik>,
 }
 
@@ -334,6 +643,8 @@ struct Tekening {
     onder: Vec<Vorm>,
     boven: Vec<Vorm>,
     doelen: Vec<Doel>,
+    /// Welke vormen bij welke lijn horen, in `onder` en `boven`: die van de andere lijnen worden zwakker.
+    lanes: Vec<(usize, Range<usize>, Range<usize>)>,
 }
 
 fn kleur(c: u32, a: f32) -> Hsla {
@@ -370,6 +681,16 @@ fn dag_naam(ts: i64, nu: i64) -> String {
     }
     let t = Local.timestamp_opt(ts, 0).single().unwrap_or_default();
     format!("{} {} {}", taal::weekdag(t.weekday().num_days_from_monday() as usize), t.day(), taal::maand(t.month0() as usize))
+}
+
+/// Het tijdstip, met de datum erbij als het niet vandaag is.
+fn wanneer(ts: i64, nu: i64) -> String {
+    if middernacht(ts) == middernacht(nu) {
+        let d = Local.timestamp_opt(ts, 0).single().unwrap_or_default();
+        format!("{:02}:{:02}", d.hour(), d.minute())
+    } else {
+        datum(ts)
+    }
 }
 
 fn geleden(ts: i64, nu: i64) -> String {
@@ -610,35 +931,17 @@ fn lijn(punten: Vec<(f32, f32)>, dik: f32, kleur: Hsla, streep: Option<[f32; 2]>
     Vorm::Lijn { punten, dik, kleur, streep }
 }
 
-fn doel(x: f32, y: f32, r: f32, tip: Vec<(String, Soort)>, klik: Option<Klik>) -> Doel {
-    Doel { x, y, rx: r, ry: r, tip, klik }
+fn doel(x: f32, y: f32, r: f32, lane: usize, id: String, kaart: Vec<(String, Soort)>, klik: Option<Klik>) -> Doel {
+    Doel { x, y, rx: r, ry: r, lane: Some(lane), id, kaart, klik }
 }
 
-fn titel(c: &Commit) -> String {
-    match c.pr {
-        Some(pr) => format!("#{pr} {}", c.titel),
-        None => c.titel.clone(),
+/// Het kaartje van een branch: de naam, en hoeveel commits hij achterloopt op de hoofdbranch.
+fn branch_kaart(repo: &Repo, naam: &str, tov: Option<&[git::Tov]>) -> Vec<(String, Soort)> {
+    let mut kaart = vec![(naam.to_string(), Soort::Kop)];
+    if let Some(o) = tov.into_iter().flatten().find(|o| o.naam == repo.hoofd && o.mist > 0) {
+        kaart.push((format!("{} {} {}", o.mist, taal::t("achter op", "behind"), repo.hoofd), Soort::Gewoon));
     }
-}
-
-/// Wat een eindpunt extra heeft en mist ten opzichte van de andere lijnen.
-fn tov_tip(ind: &Indeling, naam: &str, lijst: &[Tov]) -> Vec<(String, Soort)> {
-    let rijen: Vec<&Tov> = lijst.iter().filter(|o| ind.in_l(o.naam.trim_start_matches("origin/"))).collect();
-    let w = rijen.iter().map(|o| o.naam.chars().count()).max().unwrap_or(0).min(26);
-    let mist = taal::t("mist", "missing");
-    let m = mist.chars().count();
-    let mut uit = vec![(naam.to_string(), Soort::Kop), (format!("{:w$}  extra  {mist}", ""), Soort::Mute)];
-    for o in rijen {
-        let n = kort(&o.naam);
-        let regel = if o.extra == 0 && o.mist == 0 {
-            format!("{n:w$}  {}", taal::t("gelijk", "same"))
-        } else {
-            let s = |v: u32| if v == 0 { "–".to_string() } else { v.to_string() };
-            format!("{n:w$}  {:>5}  {:>m$}", s(o.extra), s(o.mist))
-        };
-        uit.push((regel, Soort::Gewoon));
-    }
-    uit
+    kaart
 }
 
 /// Een pijl van een merge: van de lijn waar hij vandaan kwam naar de lijn waar hij in ging.
@@ -678,7 +981,12 @@ fn teken(repo: &Repo, staat: &Staat, wd: f32, hh: f32, th: &Thema) -> Tekening {
     let ind = Indeling::new(repo, staat);
     let mut tek = Tekening::default();
     teken_tijd(&mut tek, &ind, wd, hh, th);
-    let namen: Vec<Naam> = (0..ind.l.len()).map(|i| teken_branch(&mut tek, &ind, staat, i, hh, th)).collect();
+    let mut namen = Vec::new();
+    for i in 0..ind.l.len() {
+        let (o, b) = (tek.onder.len(), tek.boven.len());
+        namen.push(teken_branch(&mut tek, &ind, staat, i, hh, th));
+        tek.lanes.push((i, o..tek.onder.len(), b..tek.boven.len()));
+    }
     teken_namen(&mut tek, &ind, namen, th);
     teken_agents_knop(&mut tek, repo, staat, wd, th);
     tek
@@ -729,13 +1037,14 @@ fn teken_branch(tek: &mut Tekening, ind: &Indeling, staat: &Staat, i: usize, hh:
         Some(o) if o.behind > 0 => y(&o.h),
         _ => yt,
     };
-    let tip = tov_tip(ind, &b.naam, &b.tov);
+    let kaart = branch_kaart(repo, &b.naam, Some(&b.tov));
+    let origin_kaart = || branch_kaart(repo, &format!("origin/{}", b.naam), b.origin_tov.as_deref());
     // valt de hele branch onder de onderrand, dan een stompje onderaan met zijn naam en hoe oud hij is
     if hoogste > hh - 6.0 {
         onder.push(lijn(vec![(xi, hh), (xi, hh - 18.0)], LIJN, kleur(k, 1.0), Some([1.0, 5.0])));
         let rand = kleur(k, if leeg(b) { 0.4 } else { 1.0 });
         boven.push(Vorm::Hol { x: xi, y: hh - 18.0, z: (KOP - 2.0) * 0.9, rand: KOP_LIJN, kleur: rand, vul: bg });
-        doelen.push(doel(xi, hh - 18.0, 11.0, tip, None));
+        doelen.push(doel(xi, hh - 18.0, 11.0, i, format!("b:{}", b.naam), kaart, None));
         return Naam { i, xi, tot: hh - 18.0 - KOP, oud: Some(geleden(b.ts, repo.nu)), leeg: leeg(b) };
     }
     let soort = if b.alleen_origin {
@@ -756,9 +1065,7 @@ fn teken_branch(tek: &mut Tekening, ind: &Indeling, staat: &Staat, i: usize, hh:
     if yp > yt {
         onder.push(lijn(vec![(xi, yp), (xi, yt)], LIJN, kleur(k, 0.7), Some([2.0, 6.0])));
         boven.push(Vorm::Wolk { x: xi, y: yp, kleur: kleur(k, 1.0), vul: bg });
-        if let Some(ot) = &b.origin_tov {
-            doelen.push(doel(xi, yp, 10.0, tov_tip(ind, &format!("origin/{}", b.naam), ot), None));
-        }
+        doelen.push(doel(xi, yp, 10.0, i, format!("o:{}", b.naam), origin_kaart(), None));
     }
     if let Some(&j) = b.basis.as_deref().and_then(|n| ind.lane.get(n)) {
         let xj = x(j);
@@ -780,9 +1087,7 @@ fn teken_branch(tek: &mut Tekening, ind: &Indeling, staat: &Staat, i: usize, hh:
         let yo = y(&o.h);
         onder.push(lijn(vec![(xi, yt), (xi, yo)], LIJN, kleur(k, 0.7), Some([2.0, 6.0])));
         boven.push(Vorm::Wolk { x: xi, y: yo, kleur: kleur(k, 1.0), vul: bg });
-        if let Some(ot) = &b.origin_tov {
-            doelen.push(doel(xi, yo, 10.0, tov_tip(ind, &format!("origin/{}", b.naam), ot), None));
-        }
+        doelen.push(doel(xi, yo, 10.0, i, format!("o:{}", b.naam), origin_kaart(), None));
     }
 
     // één puntje per commit; een merge (PR) is hol; een wijziging die ook op de basis staat is klein
@@ -800,8 +1105,9 @@ fn teken_branch(tek: &mut Tekening, ind: &Indeling, staat: &Staat, i: usize, hh:
         } else {
             boven.push(Vorm::Vlak { x: xi, y: yy, z: if dub { DUB } else { PUNT } * 0.9, kleur: kleur(k, a) });
         }
-        let tip = vec![(datum(c.ts), Soort::Mute), (titel(c), Soort::Gewoon), (c.auteur.clone(), Soort::Mute)];
-        doelen.push(doel(xi, yy, 6.0, tip, key.map(Klik::Groep)));
+        // een losse commit uit een uitgeklapte groep klapt hem weer in; anders: wie en hoe laat
+        let kaart = if key.is_some() { Vec::new() } else { vec![(format!("{} · {}", c.auteur, wanneer(c.ts, repo.nu)), Soort::Gewoon)] };
+        doelen.push(doel(xi, yy, 6.0, i, format!("c:{}", c.h), kaart, key.map(Klik::Groep)));
     };
     for c in &v.vast {
         punt(onder, boven, doelen, c, y(&c.h), false, None);
@@ -825,12 +1131,7 @@ fn teken_branch(tek: &mut Tekening, ind: &Indeling, staat: &Staat, i: usize, hh:
                     boven.push(Vorm::Vlak { x: xi, y: yy, z: GROEP * 0.9, kleur: kleur(k, if licht { 0.6 } else { 1.0 }) });
                     let n = run.len();
                     boven.push(tekst(xi + GROEP + 5.0, yy - 9.0, n.to_string(), t::KLEIN, true, kleur(k, if licht { 0.7 } else { 1.0 }), false));
-                    let mut tip = vec![(format!("{n} commits"), Soort::Kop)];
-                    tip.extend(run.iter().take(8).map(|(c, _)| (format!("{}  {}", datum(c.ts), titel(c)), Soort::Gewoon)));
-                    if n > 8 {
-                        tip.push((format!("+{} {}", n - 8, taal::t("meer", "more")), Soort::Mute));
-                    }
-                    doelen.push(doel(xi, yy, 11.0, tip, Some(Klik::Groep(key))));
+                    doelen.push(doel(xi, yy, 11.0, i, format!("g:{key}"), Vec::new(), Some(Klik::Groep(key))));
                 }
                 Item::Groep { .. } => {}
                 Item::Los { c, vaag, key } => punt(onder, boven, doelen, c, yy, vaag, key),
@@ -845,13 +1146,14 @@ fn teken_branch(tek: &mut Tekening, ind: &Indeling, staat: &Staat, i: usize, hh:
     if b.hier {
         boven.push(Vorm::Vlak { x: xi, y: yt, z: HIER * 0.4 * 0.9, kleur: bg });
     }
-    doelen.push(doel(xi, yt, 13.0, tip, None));
+    doelen.push(doel(xi, yt, 13.0, i, format!("b:{}", b.naam), kaart, None));
     Naam { i, xi, tot: yt - rk - 1.0, oud: None, leeg: leeg(b) }
 }
 
 /// De namen, getrapt boven de lijnen: elke naam op een eigen regel, met de lijn er dun naartoe.
 fn teken_namen(tek: &mut Tekening, ind: &Indeling, namen: Vec<Naam>, th: &Thema) {
     for Naam { i, xi, tot, oud, leeg } in namen {
+        let (o, b) = (tek.onder.len(), tek.boven.len());
         let rn = 8.0 + i as f32 * RN;
         let k = lk(th, i);
         if tot > rn + 4.0 {
@@ -863,6 +1165,7 @@ fn teken_namen(tek: &mut Tekening, ind: &Indeling, namen: Vec<Naam>, th: &Thema)
         if let Some(oud) = oud {
             tek.boven.push(tekst(xi + 7.0 + breed + 7.0, rn + 1.0, oud, t::KLEIN, false, kleur(th.mute, 1.0), false));
         }
+        tek.lanes.push((i, o..tek.onder.len(), b..tek.boven.len()));
     }
 }
 
@@ -879,7 +1182,7 @@ fn teken_agents_knop(tek: &mut Tekening, repo: &Repo, staat: &Staat, wd: f32, th
     let vul = if staat.hover == Some(tek.doelen.len()) { kleur(th.sel, 1.0) } else { kleur(th.bg, 1.0) };
     tek.boven.push(Vorm::Knop { x: cx_ - w / 2.0, y: cy - 10.0, w, h: t::H_KNOP, rand: kleur(th.line_strong, 1.0), vul });
     tek.boven.push(tekst(cx_ - w / 2.0 + 8.0, cy - 9.0, label, t::KLEIN, false, kleur(th.ink, 1.0), false));
-    tek.doelen.push(Doel { x: cx_, y: cy, rx: w / 2.0, ry: 10.0, tip: Vec::new(), klik: Some(Klik::Agents) });
+    tek.doelen.push(Doel { x: cx_, y: cy, rx: w / 2.0, ry: 10.0, lane: None, id: "agents".into(), kaart: Vec::new(), klik: Some(Klik::Agents) });
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -928,11 +1231,24 @@ fn groepeer<'a>(b: &Branch, lijst: &[(&'a Commit, bool)], open: &HashSet<String>
     uit
 }
 
-fn verf(tek: &Tekening, hover: Option<usize>, bounds: Bounds<Pixels>, th: &Thema, window: &mut Window, cx: &mut App) {
+fn verf(tek: &Tekening, staat: &Staat, bounds: Bounds<Pixels>, th: &Thema, window: &mut Window, cx: &mut App) {
     let o = bounds.origin;
     let p = |x: f32, y: f32| point(o.x + px(x), o.y + px(y));
     window.paint_quad(fill(bounds, rgb(th.bg)));
-    for vorm in tek.onder.iter().chain(&tek.boven) {
+    // het aangewezen punt: de andere lijnen worden zwakker
+    let aangewezen = staat.hover.and_then(|i| tek.doelen.get(i)).filter(|d| d.lane.is_some());
+    let mut sterkte = (vec![1.0; tek.onder.len()], vec![1.0; tek.boven.len()]);
+    if let Some(lane) = aangewezen.and_then(|d| d.lane) {
+        for (_, onder, boven) in tek.lanes.iter().filter(|(i, _, _)| *i != lane) {
+            onder.clone().for_each(|k| sterkte.0[k] = 0.3);
+            boven.clone().for_each(|k| sterkte.1[k] = 0.3);
+        }
+    }
+    let bg: Hsla = rgb(th.bg).into();
+    let vormen = tek.onder.iter().zip(sterkte.0).chain(tek.boven.iter().zip(sterkte.1));
+    for (vorm, f) in vormen {
+        // de grond blijft heel: anders schijnen de lijnen door een hol vierkantje heen
+        let z = |k: Hsla| if f < 1.0 && k != bg { Hsla { a: k.a * f, ..k } } else { k };
         match vorm {
             Vorm::Lijn { punten, dik, kleur, streep } => {
                 let mut pad = PathBuilder::stroke(px(*dik));
@@ -944,17 +1260,17 @@ fn verf(tek: &Tekening, hover: Option<usize>, bounds: Bounds<Pixels>, th: &Thema
                     pad.line_to(p(x, y));
                 }
                 if let Ok(pad) = pad.build() {
-                    window.paint_path(pad, *kleur);
+                    window.paint_path(pad, z(*kleur));
                 }
             }
-            Vorm::Vlak { x, y, z, kleur } => {
-                window.paint_quad(fill(Bounds::new(p(x - z, y - z), size(px(2.0 * z), px(2.0 * z))), *kleur));
+            Vorm::Vlak { x, y, z: r, kleur } => {
+                window.paint_quad(fill(Bounds::new(p(x - r, y - r), size(px(2.0 * r), px(2.0 * r))), z(*kleur)));
             }
-            Vorm::Hol { x, y, z, rand, kleur, vul } => {
-                let zz = z + rand / 2.0;
+            Vorm::Hol { x, y, z: r, rand, kleur, vul } => {
+                let zz = r + rand / 2.0;
                 if zz > 0.0 {
                     let b = Bounds::new(p(x - zz, y - zz), size(px(2.0 * zz), px(2.0 * zz)));
-                    window.paint_quad(quad(b, px(0.0), *vul, px(*rand), *kleur, BorderStyle::default()));
+                    window.paint_quad(quad(b, px(0.0), z(*vul), px(*rand), z(*kleur), BorderStyle::default()));
                 }
             }
             Vorm::Knop { x, y, w, h, rand, vul } => {
@@ -967,14 +1283,14 @@ fn verf(tek: &Tekening, hover: Option<usize>, bounds: Bounds<Pixels>, th: &Thema
                 pad.line_to(p(punten[2].0, punten[2].1));
                 pad.close();
                 if let Ok(pad) = pad.build() {
-                    window.paint_path(pad, *kleur);
+                    window.paint_path(pad, z(*kleur));
                 }
             }
             Vorm::Wolk { x, y, kleur, vul } => {
                 // de stand op GitHub: een wolkje op de lijn
                 let s = 0.95;
                 let q = |a: f32, b: f32| p(x + a * s, y + 1.5 + b * s);
-                for (mut pad, k) in [(PathBuilder::fill(), *vul), (PathBuilder::stroke(px(KOP_LIJN)), *kleur)] {
+                for (mut pad, k) in [(PathBuilder::fill(), *vul), (PathBuilder::stroke(px(KOP_LIJN)), z(*kleur))] {
                     pad.move_to(q(-5.5, 4.5));
                     pad.arc_to(point(px(3.6 * s), px(3.6 * s)), px(0.0), false, true, q(-6.1, -2.65));
                     pad.arc_to(point(px(4.6 * s), px(4.6 * s)), px(0.0), false, true, q(2.7, -3.75));
@@ -986,36 +1302,43 @@ fn verf(tek: &Tekening, hover: Option<usize>, bounds: Bounds<Pixels>, th: &Thema
                 }
             }
             Vorm::Tekst { x, y, tekst, grootte, vet, kleur, rechts } => {
-                schrijf(tekst, *grootte, *vet, *kleur, p(*x, *y), *rechts, window, cx);
+                schrijf(tekst, *grootte, *vet, z(*kleur), p(*x, *y), *rechts, window, cx);
             }
         }
     }
-    // wat er onder de muis staat
-    let Some(d) = hover.and_then(|i| tek.doelen.get(i)).filter(|d| !d.tip.is_empty()) else { return };
+    // een kader van 18 px om het aangewezen punt
+    if let Some(d) = aangewezen {
+        let b = Bounds::new(p(d.x - 9.0, d.y - 9.0), size(px(18.0), px(18.0)));
+        window.paint_quad(quad(b, px(0.0), transparent_black(), px(1.0), rgb(th.ink), BorderStyle::default()));
+    }
+    // het kaartje van het gekozen punt, naast het punt, met de streep in accent
+    let Some(d) = staat.gekozen.as_ref().and_then(|id| tek.doelen.iter().find(|d| d.id == *id)).filter(|d| !d.kaart.is_empty()) else {
+        return;
+    };
     let (wd, hh) = (f32::from(bounds.size.width), f32::from(bounds.size.height));
-    let max_w = 340f32.min(wd - 16.0);
-    let max_tekens = ((max_w - 20.0) / (12.0 * TEKEN)) as usize;
+    let max_w = 290f32.min(wd - 16.0);
+    let max_tekens = ((max_w - 22.0) / (12.0 * TEKEN)) as usize;
     let regels: Vec<(String, Soort)> = d
-        .tip
+        .kaart
         .iter()
         .map(|(s, soort)| {
             let s = if s.chars().count() > max_tekens { s.chars().take(max_tekens - 1).chain(['…']).collect() } else { s.clone() };
             (s, *soort)
         })
         .collect();
-    let breed = regels.iter().map(|(s, _)| s.chars().count()).max().unwrap_or(0) as f32 * 12.0 * TEKEN + 20.0;
+    let breed = regels.iter().map(|(s, _)| s.chars().count()).max().unwrap_or(0) as f32 * 12.0 * TEKEN + 22.0;
     let hoog = regels.len() as f32 * 17.0 + 14.0;
     let left = (d.x + 16.0).min(wd - breed - 8.0).max(8.0);
     let top = if d.y + 14.0 + hoog > hh { d.y - 14.0 - hoog } else { d.y + 14.0 };
     let b = Bounds::new(p(left, top), size(px(breed), px(hoog)));
     window.paint_quad(quad(b, px(0.0), rgb(th.bg), px(1.0), rgb(th.line_strong), BorderStyle::default()));
+    window.paint_quad(fill(Bounds::new(p(left, top), size(px(t::STREEP), px(hoog))), rgb(th.accent)));
     for (n, (s, soort)) in regels.iter().enumerate() {
         let (k, vet) = match soort {
             Soort::Kop => (th.ink, true),
             Soort::Gewoon => (th.ink, false),
-            Soort::Mute => (th.mute, false),
         };
-        schrijf(s, 12.0, vet, kleur(k, 1.0), p(left + 10.0, top + 7.0 + n as f32 * 17.0), false, window, cx);
+        schrijf(s, 12.0, vet, kleur(k, 1.0), p(left + 12.0, top + 7.0 + n as f32 * 17.0), false, window, cx);
     }
 }
 

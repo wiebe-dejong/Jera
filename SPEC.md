@@ -93,6 +93,8 @@ Gemeten op 2026-11-04:
 | Git, branchnamen | De branchnamen staan boven de lijnen, getrapt: elke naam op een eigen regel | 2026-11-14 |
 | Git, stijl | Recht: commits, groepen en eindpunten zijn vierkantjes, een branch splitst af met een rechte hoek, lijnen van 2 px. Geen datumkolom: de dag en het moment van ophalen staan rechts op hun lijn. Gekozen uit drie | 2026-11-14 |
 | Git, inklappen | De knop git in de Render-regel klapt het paneel in en uit. Bij het openen van Jera is het ingeklapt | 2026-11-14 |
+| Git, acties | Boven de graaf een regel met alleen wat er te doen is: commit, update (rebase), push. Claude schrijft het commitbericht. Het paneel haalt zelf op, bij openen en elke 5 minuten. Een PR maak ik via Claude. Gekozen op het keuzebord, `stijl/git-acties/` | 2026-11-15 |
+| Git, muis en klik | Onder de muis een kader om het punt en de andere lijnen zwakker, zonder tekst. Een klik toont een kaartje: bij een commit wie en hoe laat, bij een branch hoeveel hij achterloopt op de hoofdbranch | 2026-11-15 |
 | Documenten | Geen viewers in de app. Een klik op een document opent het direct in een externe app, zoals Safari, Preview of GridCraft | 2026-11-14 |
 | Openen | `+ map` en ⌘O openen het scherm Openen. Het hangt direct onder de tab `+ map`, tegen de titelbalk aan. Bovenaan `open` (met een mapicoon, opent de mapkeuze van macOS) en `clone repository` (met het icoon van git), daaronder het zoekveld en de mappen die ik het laatst in Jera opende. Typen filtert op de naam en kiest de eerste die past, pijltjes en Enter kiezen. Zonder tabs staat Openen open | 2026-11-15 |
 | Openen, per regel | Eén kolom: de naam, en klein eronder het pad. Staat het project al als tab open, dan springt kiezen naar die tab | 2026-11-15 |

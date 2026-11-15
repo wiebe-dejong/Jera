@@ -212,7 +212,7 @@ impl Jera {
             None => {
                 // De branches staan klaar voordat ik het git-paneel open.
                 let git = cx.new(|cx| {
-                    let mut git = GitPaneel::new(root.clone());
+                    let mut git = GitPaneel::new(root.clone(), cx);
                     git.ververs(cx);
                     git
                 });
@@ -372,7 +372,11 @@ impl Jera {
             cx.notify();
         }
         if let Some(tab) = self.tabs.get(self.actief) {
-            tab.git.update(cx, |git, cx| git.ververs(cx));
+            let open = self.git_open;
+            tab.git.update(cx, |git, cx| {
+                git.zet_zichtbaar(open);
+                git.ververs(cx);
+            });
         }
     }
 

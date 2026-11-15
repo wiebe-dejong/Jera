@@ -1,0 +1,570 @@
+<meta charset="utf-8">
+<title>Git-paneel acties</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400;500&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* ================= BORD (niet aanpassen) =================
+   Het bord is de werkbank om de frames heen. Het object zelf leeft in .site met eigen tokens (BASE). */
+:root{
+  --c-bg:#F1F2EE; --c-fg:#18201B; --c-mute:#5F6862; --c-line:#D9DDD5; --c-card:#FFFFFF; --c-acc:#2D6A45; --c-sel:#1D3A2A; --c-on-sel:#FFFFFF;
+  --c-vast:#2D6A45; --c-vast-bg:#E3ECE2; --c-vast-line:#C3D6C4;
+  --c-ui:"Geist",system-ui,-apple-system,sans-serif; --c-mono:"Geist Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--c-bg:#111412;--c-fg:#E7EBE6;--c-mute:#97A099;--c-line:#2A302C;--c-card:#191D1A;--c-acc:#A8D5E5;--c-sel:#E7EBE6;--c-on-sel:#111412;--c-vast:#8FC79F;--c-vast-bg:#18251D;--c-vast-line:#2C4234;color-scheme:dark}}
+:root[data-theme="dark"]{--c-bg:#111412;--c-fg:#E7EBE6;--c-mute:#97A099;--c-line:#2A302C;--c-card:#191D1A;--c-acc:#A8D5E5;--c-sel:#E7EBE6;--c-on-sel:#111412;--c-vast:#8FC79F;--c-vast-bg:#18251D;--c-vast-line:#2C4234;color-scheme:dark}
+body{margin:0;background:var(--c-bg);color:var(--c-fg);font-family:var(--c-ui);padding-inline:24px;padding-block:28px 96px}
+@media (max-width:620px){body{padding-inline:16px}}
+.app{max-width:1480px;margin:0 auto;display:flex;flex-direction:column;gap:28px}
+.top{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 16px}
+.top h1{font-weight:500;font-size:26px;letter-spacing:-.02em;margin:0}
+.round{font-family:var(--c-mono);font-size:12px;padding:3px 8px;border:1px solid var(--c-line);border-radius:3px;color:var(--c-mute)}
+.tabs{display:flex;flex-wrap:wrap;gap:8px 22px;position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--c-bg);padding-block:10px;border-bottom:1px solid var(--c-line)}
+@media (max-width:900px){.tabs{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;margin-inline:-16px;padding-inline:16px}.tg{flex-wrap:nowrap}}
+.tab{flex:none;font:500 13px var(--c-ui);color:var(--c-fg);background:var(--c-card);border:1px solid var(--c-line);border-radius:3px;padding:6px 10px;cursor:pointer;display:flex;gap:6px;align-items:baseline}
+.tab span{font-family:var(--c-mono);font-size:11px;color:var(--c-mute)}
+/* Status: vast, deels, open, later. Overal hetzelfde tegeltje. */
+.tile{display:inline-block;flex:none;box-sizing:border-box;width:9px;height:9px;border:1.5px solid var(--tc);border-radius:1px;align-self:center}
+[data-st]{--tc:var(--c-mute)}
+[data-st="vast"],[data-st="deels"]{--tc:var(--c-vast)}
+[data-st="vast"] .tile,.tile[data-st="vast"]{background:var(--tc)}
+[data-st="deels"] .tile,.tile[data-st="deels"]{background:linear-gradient(135deg,var(--tc) 50%,transparent 50%)}
+[data-st="later"] .tile,.tile[data-st="later"]{background:linear-gradient(var(--tc),var(--tc)) center/100% 1.5px no-repeat}
+.tg{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.tgl{flex:none;font:500 11px var(--c-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--c-mute);padding-right:4px}
+.tgl b{font-weight:500;color:var(--c-fg)}
+.tab[data-st="vast"],.tab[data-st="deels"]{background:var(--c-vast-bg);border-color:var(--c-vast-line)}
+.tab[data-st="deels"]{border-style:dashed;border-color:var(--c-vast)}
+.tk{font:500 11px var(--c-mono);padding:1px 5px;border-radius:2px;background:var(--c-card);color:var(--c-vast);border:1px solid var(--c-vast-line);white-space:nowrap}
+.prog{display:flex;gap:3px;align-items:center;align-self:center;margin-left:auto}
+.prog .tile{width:11px;height:11px}
+.tab:hover{border-color:var(--c-fg)}
+.tab[aria-selected="true"]{background:var(--c-sel);color:var(--c-on-sel);border-color:var(--c-sel);--tc:currentColor}
+.tab[aria-selected="true"] span{color:inherit;opacity:.7}
+.tab[aria-selected="true"] .tk{background:transparent;color:inherit;border-color:currentColor}
+.tab:focus-visible,.replay:focus-visible{outline:2px solid var(--c-acc);outline-offset:2px}
+.panel{display:flex;flex-direction:column;gap:28px}
+.opts{display:flex;flex-direction:column;gap:64px}
+.phd{display:flex;flex-direction:column;gap:12px}
+.phd-t{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px}
+.phd-n{font:500 13px var(--c-mono);color:var(--c-mute)}
+.phd h2{font:500 32px/1.1 var(--c-ui);letter-spacing:-.02em;margin:0}
+.part{display:flex;flex-direction:column;gap:28px}
+.phd.sub{border-top:2px solid var(--c-fg);padding-top:20px}
+.phd.sub h2{font-size:24px}
+@media (max-width:620px){.phd h2{font-size:26px}}
+.stc{display:inline-flex;align-items:center;gap:7px;font:500 12px var(--c-mono);letter-spacing:.04em;text-transform:uppercase;padding:5px 9px;border-radius:3px;border:1px solid var(--c-line);color:var(--c-mute)}
+.stc[data-st="vast"],.stc[data-st="deels"]{background:var(--c-vast-bg);border-color:var(--c-vast-line);color:var(--c-vast)}
+.stc[data-st="deels"]{border-style:dashed;border-color:var(--c-vast)}
+.phd .notes{font-size:13px}
+.phd .notes dd{font-size:12px}
+.opt{display:flex;flex-direction:column;gap:14px}
+.opt-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 14px;border-top:1px solid var(--c-line);padding-top:18px}
+.opt-k{font:600 22px var(--c-ui);width:26px}
+.opt-n{font:400 22px var(--c-ui);margin:0;letter-spacing:-.01em}
+.replay{margin-left:auto;font:500 13px var(--c-ui);background:transparent;color:var(--c-fg);border:1px solid var(--c-line);border-radius:3px;padding:6px 12px;cursor:pointer}
+.replay:hover{border-color:var(--c-fg)}
+.spec{display:flex;flex-wrap:wrap;gap:6px 22px;font-size:12.5px;color:var(--c-mute);margin:0}
+.spec div{display:flex;gap:6px;align-items:center;min-width:0}
+.spec dt{font-weight:500;color:var(--c-fg)}
+.spec dd{margin:0;font-family:var(--c-mono);font-size:11.5px;font-variant-numeric:tabular-nums}
+.sw{display:inline-block;width:12px;height:12px;border-radius:2px;border:1px solid var(--c-line);vertical-align:-1px;margin-right:4px}
+.pass{color:#1F7A44}.fail{color:#C2361F}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .pass{color:#7FD19B}:root:not([data-theme="light"]) .fail{color:#FF8A73}}
+:root[data-theme="dark"] .pass{color:#7FD19B}:root[data-theme="dark"] .fail{color:#FF8A73}
+.stage{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px;align-items:start}
+.stage.duo-m{grid-template-columns:minmax(0,1fr) 340px 340px}
+@media (max-width:1180px){.stage.duo-m{grid-template-columns:minmax(0,1fr) 300px}.stage.duo-m .fr:last-child{grid-column:2}}
+@media (max-width:980px){.stage,.stage.duo-m{grid-template-columns:minmax(0,1fr)}.stage .fr.m,.stage.duo-m .fr:last-child{grid-column:auto;max-width:390px;width:100%}}
+.fr{background:var(--c-card);border:1px solid var(--c-line);border-radius:8px;overflow:hidden;min-width:0}
+.bar{height:28px;display:flex;align-items:center;gap:6px;padding-inline:10px;border-bottom:1px solid var(--c-line);font:11px var(--c-mono);color:var(--c-mute)}
+.bar i{width:8px;height:8px;border-radius:50%;background:var(--c-line);display:block}
+.bar b{font-weight:400;margin-left:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vp{overflow:hidden;position:relative}
+.vp.tall{max-height:960px;overflow-y:auto}
+.fr.m .vp.tall{max-height:720px}
+.fold{position:absolute;left:0;right:0;border-top:2px dashed var(--c-acc);z-index:9;pointer-events:none}
+.fold span{position:absolute;right:8px;top:4px;font:500 11px var(--c-mono);background:var(--c-acc);color:#fff;padding:2px 6px;letter-spacing:.05em;text-transform:uppercase}
+
+
+/* ================= OBJECT =================
+   Het git-paneel van Jera op ware grootte (360 px, de kolom rechts), in de kleuren van stijl/design-system/tokens.json.
+   Elk paneel werkt: muis erop, klikken, commit, push, update. */
+.stage2{display:flex;flex-wrap:wrap;gap:16px}
+.fr2{background:var(--c-card);border:1px solid var(--c-line);border-radius:8px;overflow:hidden;flex:none;max-width:100%}
+.jp{position:relative;display:flex;flex-direction:column;background:var(--bg);color:var(--ink);font:12.5px/1.3 "JetBrains Mono",ui-monospace,Menlo,monospace;overflow:hidden;max-width:100%;cursor:default;user-select:none}
+.jp.d{--bg:#0e1013;--line:#23272e;--ls:#333944;--ink:#d5d9e0;--mute:#8a93a2;--sel:#1c2129;--acc:#a8d5e5;--bad:#ff6b6b;--lane-1:#6e9eff;--lane-2:#e8935a;color-scheme:dark}
+.jp.l{--bg:#f6f6f2;--line:#d9d9d0;--ls:#c2c2b8;--ink:#1e2227;--mute:#5a616b;--sel:#e2e2da;--acc:#0a6b4b;--bad:#c9302c;--lane-1:#2f6feb;--lane-2:#b4531a;color-scheme:light}
+.jp svg{position:absolute;left:0;top:0;display:block}
+.gw{position:relative;flex:1;min-height:0;overflow:hidden}
+.gr{position:absolute;inset:0}
+.naam{position:absolute;font-weight:600;font-size:12px;line-height:18px;white-space:nowrap}
+.dag{position:absolute;right:8px;color:var(--mute);font-size:11px;white-space:nowrap;line-height:1.35}
+.dag.kb:hover{color:var(--ink)}
+.ar{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;min-height:34px;padding:7px 12px;box-sizing:border-box;border-bottom:1px solid var(--line);flex:none}
+.kn{height:20px;padding:0 8px;border:1px solid var(--ls);background:var(--bg);color:var(--ink);font:inherit;border-radius:0;cursor:default;white-space:nowrap}
+.kn:hover{background:var(--sel)}
+.kn.rood{color:var(--bad)}
+.mu{color:var(--mute)}
+.fout{flex-basis:100%}
+.ed{display:flex;gap:8px;width:100%}
+.in{flex:1;min-width:0;height:22px;box-sizing:border-box;border:1px solid var(--ls);background:var(--bg);color:var(--ink);font:inherit;padding:0 6px;border-radius:0;outline:none}
+.in::placeholder{color:var(--mute)}
+.fl{width:100%}
+.fi{display:flex;justify-content:space-between;gap:10px;height:22px;align-items:center;margin:0 -12px;padding:0 12px}
+.fi:hover{background:var(--sel)}
+.fi span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.fi span:last-child{color:var(--mute);flex:none}
+.vak{position:absolute;left:0;right:0;bottom:0;background:var(--bg);border-top:1px solid var(--line);padding:10px 12px 12px;display:flex;flex-direction:column;gap:6px;max-height:72%;overflow:auto;box-sizing:border-box}
+.pin{position:absolute;width:max-content;max-width:min(290px,calc(100% - 16px));background:var(--bg);border:1px solid var(--ls);border-left:2px solid var(--acc);padding:8px 10px;display:flex;flex-direction:column;gap:6px;box-sizing:border-box}
+.pin .fi{margin:0 -10px;padding:0 10px}
+.wis{position:absolute;inset:0;padding:8px 12px;display:flex;flex-direction:column;gap:6px;background:var(--bg);box-sizing:border-box}
+.terug{align-self:flex-start;background:none;border:0;color:var(--mute);font:inherit;padding:0;margin-bottom:4px;cursor:default}
+.terug:hover{color:var(--ink)}
+.x{position:absolute;right:6px;top:6px;width:20px;height:20px;display:grid;place-items:center;background:none;border:0;color:var(--mute);padding:0;cursor:default}
+.x:hover{color:var(--ink)}
+.dk{padding-right:22px}
+.tb{display:grid;grid-template-columns:auto 1fr;gap:2px 14px}
+.tl{display:grid;grid-template-columns:auto auto auto;gap:2px 16px;justify-content:start}
+.tl .r{text-align:right}
+.rij{display:flex;align-items:center;gap:10px}
+.ex,.ar2{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:4px}
+.vraag{display:flex;flex-direction:column;gap:6px;margin-top:4px}
+.hv{position:absolute;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:var(--bg);color:var(--ink);font-size:12px;line-height:18px;padding:0 4px;pointer-events:none}
+.kaart{position:absolute;background:var(--bg);border:1px solid var(--ls);padding:6px 10px;font-size:12px;line-height:17px;pointer-events:none;max-width:290px;box-sizing:border-box}
+.kr{flex:none;height:26px;line-height:26px;padding:0 12px 0 10px;border-bottom:1px solid var(--line);border-left:2px solid var(--acc);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.uit{position:absolute;left:80px;right:8px;border-left:2px solid var(--acc);padding:2px 10px 4px;display:flex;flex-direction:column;gap:6px;background:var(--bg);box-sizing:border-box}
+.uit .fi{margin:0 -10px;padding:0 10px}.uit .dk{padding-right:0}
+.vak>.fl:nth-child(2){padding-top:18px}
+.kaart div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+</style>
+<style id="optcss"></style>
+<div class="app">
+  <header class="top"><h1>Git-paneel acties</h1><span class="round">Ronde 5</span><span class="prog" id="prog" role="img"></span></header>
+  <nav class="tabs" id="tabs" role="tablist" aria-label="Beslisgebieden"></nav>
+  <main class="panel" id="panel" role="tabpanel"></main>
+</div>
+<script>
+/* ================= OBJECT: data ================= */
+const IMG = {};
+
+/* De basis: wat een tab niet zelf kiest. */
+const BASE = {};
+const BASECTX = {acties:'regel',bericht:'zelf',afw:'rebase',ophalen:'auto',hover:'band',tekst:'regel',klik:'onder',branch:'pijlen',commit:'kort',extra:'geen'};
+
+/* Jera met de branch poorten (de tab staat erop), uit de echte geschiedenis van de repo.
+   Begin: 3 gewijzigde bestanden, 1 commit nog niet op GitHub, 2 op GitHub nog niet lokaal. */
+const W=360,H=540,RY=26,X1=22,X2=65,LIJN=1.5,L1='var(--lane-1)',L2='var(--lane-2)',AUTEUR='Wiebe de Jong';
+const mk=(id,t,ts,f=[],merge=false)=>({id,t,ts,f,merge});
+const MAIN=[
+ mk('4527ac9','Accent op donker lichtblauw (#a8d5e5), zoals Hidden Harvest',1794742150,[['app/src/thema.rs',1,1],['stijl/design-system/tokens.json',1,1]]),
+ mk('825183d','Agents: één lijst, een subagent verdwijnt als hij klaar is, kaartje met opdracht en tool',1794741725,[['app/src/agents.rs',117,24],['app/src/venster/sessielijst.rs',32,69],['app/src/venster.rs',5,12]]),
+ mk('db896f4','Git laadt vooraf, sluiten vraagt het bij elke sessie',1794741431,[['app/src/venster.rs',11,6],['app/src/status.rs',0,5]]),
+ mk('2f042b5','Terminal: Tab gaat naar de sessie',1794709915,[['app/src/instellingen.rs',3,0],['app/src/terminal.rs',1,0],['SPEC.md',1,0]]),
+];
+const AF='db896f4';
+const REMOTE=[
+ mk('1ea876a','Poorten: drie kopjes, poorten, browsers en artifacts, met de sessie per regel',1794744993,[['app/src/venster/poortenpaneel.rs',68,82],['SPEC.md',3,3]]),
+ mk('2487415','Artifacts: in het paneel rechts onder de sessie die ze publiceerde, met Openen',1794743446,[['app/src/artifacts.rs',138,0],['app/src/venster.rs',10,1],['SPEC.md',1,0]]),
+];
+const LOCAL=[mk('d9d8a7f','Poorten: noem agent-browser in beeld gewoon browser',1794743626,[['app/src/venster/poortenpaneel.rs',3,3]])];
+const PUSHED=[
+ mk('d5465ba','Poorten: koppel op het sessie-id, zodat servers na hervatten bij hun gesprek blijven',1794743225,[['app/src/poorten.rs',26,22],['app/src/venster/poortenpaneel.rs',23,23],['research/poorten.md',4,3]]),
+ mk('745366d','Poorten en agent-browser: paneel per sessie, wezen en plaatje',1794742770,[['app/src/poorten.rs',298,0],['app/src/venster.rs',109,10],['app/Cargo.toml',2,2]]),
+];
+const WIJZ=[['app/src/poorten.rs',11,2],['app/src/venster.rs',5,2],['app/src/venster/poortenpaneel.rs',26,8]];
+const VOORSTEL='Poorten: een sessie stoppen of haar tab sluiten ruimt haar poorten en browsers op';
+const NU0=1794755249+600;
+const MND=['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
+const p2=n=>String(n).padStart(2,'0');
+const datum=ts=>{const d=new Date(ts*1000);return `${d.getDate()} ${MND[d.getMonth()]}, ${p2(d.getHours())}:${p2(d.getMinutes())}`};
+const tijd=ts=>{const d=new Date(ts*1000),n=new Date(NU0*1000);return d.toDateString()===n.toDateString()?`${p2(d.getHours())}:${p2(d.getMinutes())}`:datum(ts)};
+const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const hx=()=>Math.random().toString(16).slice(2,9);
+const pm=([p,a,d])=>`<div class="fi"><span>${p}</span><span>+${a} −${d}</span></div>`;
+
+const F = {};
+const TABS = [
+{id:'acties',name:'Plek van de acties',opts:[
+ {k:'A',name:'Regel bovenaan',ctx:{acties:'regel'},spec:[['Plek','regel boven de graaf, 34 px, lijn eronder'],['Toont','commit n · update ↓n · push ↑n'],['Niets te doen','geen regel'],['Push','pas als er niets te halen is']]},
+ {k:'B',name:'Eén volgende stap',ctx:{acties:'stap'},spec:[['Plek','regel boven de graaf'],['Toont','alleen de eerstvolgende'],['Volgorde','commit → update → push'],['Niets te doen','geen regel']]},
+ {k:'C',name:'Bij de branch',ctx:{acties:'eind'},spec:[['Plek','in het detail van de branch van deze tab'],['Bovenaan','niets'],['Openen','klik op het eindpunt van poorten']]},
+]},
+{id:'bericht',name:'Commitbericht',ctx:{start:{wijz:3,ahead:0,behind:0}},opts:[
+ {k:'A',name:'Zelf typen',ctx:{bericht:'zelf'},spec:[['Veld','leeg'],['Enter','commit alle gewijzigde bestanden'],['Escape','terug']]},
+ {k:'B',name:'Voorstel van Claude',ctx:{bericht:'claude'},spec:[['Veld','voorstel uit de diff, claude -p, ± 1 s'],['Enter','commit'],['Typen','past het voorstel aan']]},
+ {k:'C',name:'Bestanden erboven',ctx:{bericht:'bestanden'},spec:[['Boven het veld','gewijzigde bestanden, +n −n'],['Veld','leeg'],['Enter','commit alles']]},
+]},
+{id:'afw',name:'Update bij nieuw aan beide kanten',ctx:{start:{wijz:0,ahead:1,behind:2}},opts:[
+ {k:'A',name:'Alleen gelijk trekken',ctx:{afw:'ff'},spec:[['git','pull --ff-only'],['Afgeweken','één regel met wat te doen'],['Graaf','blijft']]},
+ {k:'B',name:'Rebase',ctx:{afw:'rebase'},spec:[['git','pull --rebase'],['Jouw commits','bovenop die van GitHub'],['Daarna','push ↑1']]},
+ {k:'C',name:'Merge',ctx:{afw:'merge'},spec:[['git','pull'],['Extra','een merge-commit, hol vierkantje'],['Daarna','push ↑2']]},
+]},
+{id:'ophalen',name:'Ophalen',ctx:{demo:'ophalen',start:{wijz:0,ahead:0,behind:2}},opts:[
+ {k:'A',name:'Vanzelf',ctx:{ophalen:'auto'},spec:[['Wanneer','bij openen en elke 5 min'],['opgehaald','alleen het tijdstip'],['Klik','niets']]},
+ {k:'B',name:'Vanzelf en met de hand',ctx:{ophalen:'klik'},spec:[['Wanneer','bij openen en elke 5 min'],['Klik op opgehaald','nu ophalen'],['Onder de muis','mute → ink']]},
+ {k:'C',name:'Alleen met de hand',ctx:{ophalen:'hand'},spec:[['Wanneer','na een klik op opgehaald'],['Tot dan','geen update']]},
+]},
+{id:'hover',name:'Onder de muis: aanwijzen',opts:[
+ {k:'A',name:'Vlak over de rij',ctx:{hover:'band'},spec:[['Vlak','sel, rand tot rand, 26 px'],['Punt','blijft']]},
+ {k:'B',name:'Andere lijn zwakker',ctx:{hover:'lijn'},spec:[['Andere lijn','30%'],['Punt','kader 1 px ink, 18 px'],['Raakvlak','dichtstbijzijnde punt, 30 px opzij, 20 px boven en onder'],['Loslaten','na 150 ms']]},
+ {k:'C',name:'Kader om het punt',ctx:{hover:'punt'},spec:[['Vlak','geen'],['Punt','kader 1 px ink, 18 px']]},
+]},
+{id:'tekst',name:'Onder de muis: tekst',opts:[
+ {k:'A',name:'Geen',ctx:{tekst:'geen'},spec:[['Tekst','geen'],['Alles','in het detail na een klik']]},
+ {k:'B',name:'Eén regel',ctx:{tekst:'regel'},spec:[['Commit','titel'],['Branch','GitHub ↑1 ↓2'],['Plek','rechts van het punt, op bg'],['Wanneer','meteen']]},
+ {k:'C',name:'Kort kaartje',ctx:{tekst:'kaart'},spec:[['Commit','titel; auteur · datum'],['Branch','naam; GitHub ↑1 ↓2'],['Wanneer','na 0,5 s'],['Kaartje','bg, rand line-strong']]},
+ {k:'D',name:'Alleen bij een verschil',ctx:{tekst:'afwijking'},spec:[['Toont','alleen wat niet gelijk is met GitHub'],['Commit','nog niet op GitHub · nog niet lokaal'],['Branch','GitHub ↑1 ↓2'],['Gewone commit','niets']]},
+ {k:'E',name:'Alleen commits',ctx:{tekst:'commits'},spec:[['Commit','titel'],['Branch, wolkje','niets'],['Wanneer','meteen']]},
+ {k:'F',name:'Pas na 1 s',ctx:{tekst:'traag'},spec:[['Commit','titel'],['Branch','GitHub ↑1 ↓2'],['Wanneer','na 1 s stilstaan'],['Langs bewegen','niets']]},
+]},
+{id:'klik',name:'Klikken: gekozen en details',opts:[
+ {k:'A',name:'Vak onderaan',ctx:{klik:'onder'},spec:[['Gekozen','vlak sel + streep accent 2 px'],['Details','vak onderaan, lijn erboven'],['Weg','Escape, kruis, klik op leeg vlak']]},
+ {k:'B',name:'Kaartje blijft staan',ctx:{klik:'pin'},spec:[['Gekozen','kaartje met streep accent 2 px'],['Details','naast het punt'],['Weg','Escape, klik op leeg vlak']]},
+ {k:'C',name:'Paneel wisselt',ctx:{klik:'wissel'},spec:[['Gekozen','details in plaats van de graaf'],['Terug','← graaf, Escape']]},
+ {k:'D',name:'Alleen een branch',ctx:{klik:'branch'},spec:[['Klikbaar','eindpunt van een branch, wolkje'],['Commit','niet klikbaar'],['Details','vak onderaan']]},
+ {k:'E',name:'Eén regel bovenaan',ctx:{klik:'regel'},spec:[['Gekozen','vlak sel + streep accent 2 px'],['Details','één regel onder de acties, 26 px'],['Weg','Escape, klik op leeg vlak']]},
+ {k:'F',name:'Uitklappen in de graaf',ctx:{klik:'uitklap'},spec:[['Details','onder het punt, rechts van de lijnen'],['Gekozen','streep accent 2 px langs het detail'],['Rijen eronder','schuiven op'],['Weg','Escape, nog een klik']]},
+]},
+{id:'branch',name:'Detail van een branch',ctx:{start:{sel:'b:poorten'}},opts:[
+ {k:'A',name:'Pijlen',ctx:{branch:'pijlen'},spec:[['GitHub','↑ te pushen, ↓ te halen'],['Basis','↑ voor, ↓ achter op main'],['Nul','gelijk']]},
+ {k:'B',name:'Woorden',ctx:{branch:'woorden'},spec:[['Regels','1 te pushen · 2 te halen · 2 achter op main'],['Nul','weggelaten']]},
+ {k:'C',name:'Tabel zoals nu',ctx:{branch:'tabel'},spec:[['Tegenover','elke lijn en origin'],['Kolommen','extra, mist']]},
+ {k:'D',name:'Alleen GitHub',ctx:{branch:'github'},spec:[['Toont','↑ te pushen, ↓ te halen'],['Gelijk','niets'],['main','niet']]},
+ {k:'E',name:'Alleen wat je mist',ctx:{branch:'achter'},spec:[['Toont','↓ tegenover GitHub en main'],['Niets te missen','niets']]},
+ {k:'F',name:'Alleen de naam',ctx:{branch:'naam'},spec:[['Toont','naam'],['Cijfers','staan al in de actieregel']]},
+ {k:'G',name:'Alleen achter op main',ctx:{branch:'main'},spec:[['Toont','naam; n achter op main'],['Niet achter','alleen de naam'],['GitHub','in de actieregel']]},
+]},
+{id:'commit',name:'Detail van een commit',ctx:{start:{sel:'c:d5465ba'}},opts:[
+ {k:'A',name:'Kort',ctx:{commit:'kort'},spec:[['Regels','titel; auteur · datum']]},
+ {k:'B',name:'Met bestanden',ctx:{commit:'bestanden'},spec:[['Erbij','gewijzigde bestanden, +n −n'],['Klik op bestand','diff in Documenten']]},
+ {k:'C',name:'Met hash',ctx:{commit:'hash'},spec:[['Erbij','hash, knop kopieer']]},
+ {k:'D',name:'Alleen titel',ctx:{commit:'titel'},spec:[['Regels','titel'],['Auteur','alleen als het niet jij bent']]},
+ {k:'E',name:'Titel en tijd',ctx:{commit:'tijd'},spec:[['Regels','titel; tijdstip'],['Dag','staat al op de lijn']]},
+ {k:'F',name:'Alleen bestanden',ctx:{commit:'alleenbestanden'},spec:[['Regels','gewijzigde bestanden, +n −n'],['Titel','in de tekst onder de muis']]},
+ {k:'G',name:'Wie en hoe laat',ctx:{commit:'wie'},spec:[['Regel','auteur · tijdstip'],['Andere dag','datum erbij'],['Titel, bestanden','niet']]},
+]},
+{id:'extra',name:'Meer dan commit, push, update',ctx:{start:{sel:'b:poorten'}},opts:[
+ {k:'A',name:'Niets extra',ctx:{extra:'geen'},spec:[['Acties','commit, push, update']]},
+ {k:'B',name:'PR maken',ctx:{extra:'pr'},spec:[['Knop','PR naar main'],['git','gh pr create --fill'],['Daarna','PR open']]},
+ {k:'C',name:'PR en verwijderen',ctx:{extra:'weg'},spec:[['Knop','PR naar main'],['Verwijderen','tekst bad, vraagt eerst'],['Waar','lokaal en op GitHub']]},
+ {k:'D',name:'PR als het kan',ctx:{extra:'regel',start:{wijz:0,ahead:1,behind:0}},spec:[['Plek','in de actieregel'],['Wanneer','alles gepusht, niets te halen'],['Daarna','PR open']]},
+]},
+];
+
+/* ================= Het paneel ================= */
+function nieuw(ctx){
+  const st=ctx.start||{},demo=ctx.demo==='ophalen';
+  return {wijz:st.wijz??3,local:LOCAL.slice(0,st.ahead??1),remote:REMOTE.slice(0,st.behind??2),pushed:PUSHED.slice(),
+    fetched:!demo,opgehaald:demo?(ctx.ophalen==='hand'?NU0-86400-21300:NU0-3600):NU0-300,
+    uitklap:ctx.klik==='uitklap',uh:0,hov:null,sel:st.sel||null,kaart:false,edit:false,msg:'',bezig:null,fout:false,pr:false,weg:false,vraag:false,kopie:false};
+}
+const nu=I=>Math.round(NU0+(Date.now()-I.t0)/1000);
+const later=(I,ms,f)=>I.timers.push(setTimeout(()=>{f();render(I)},ms));
+const alle=S=>[...S.remote,...S.local,...S.pushed,...MAIN];
+
+/* De rijen van boven naar beneden: ophalen, dan poorten, dan main. */
+function rijen(S){
+  const R=[{k:'fetch'}];
+  if(!S.weg){
+    const rem=S.fetched?S.remote:[];
+    rem.forEach((c,i)=>R.push({lane:2,c,soort:i===0?'wolk':'vaag',remote:true,t:i===0?'o:poorten':'c:'+c.id}));
+    [...S.local,...S.pushed].forEach((c,i)=>{
+      let soort='punt',t='c:'+c.id;
+      if(i===0){soort='eind';t='b:poorten'}
+      else if(!rem.length&&S.local.length&&i===S.local.length){soort='wolk';t='o:poorten'}
+      R.push({lane:2,c,soort,lokaal:i<S.local.length,t});
+    });
+  }
+  MAIN.forEach((c,i)=>R.push({lane:1,c,soort:i===0?'eind':'punt',af:c.id===AF,t:i===0?'b:main':'c:'+c.id}));
+  return R;
+}
+const ry=i=>84+i*RY;
+const sq=(x,y,s,fill,stroke,op=1)=>stroke?`<rect x="${x-s/2}" y="${y-s/2}" width="${s}" height="${s}" stroke-width="2" opacity="${op}" style="stroke:${stroke};fill:${fill}"/>`:`<rect x="${x-s/2}" y="${y-s/2}" width="${s}" height="${s}" opacity="${op}" style="fill:${fill}"/>`;
+const ln=(x1,y1,x2,y2,col,w=LIJN,ex='')=>`<path d="M${x1} ${y1}L${x2} ${y2}" fill="none" stroke-width="${w}" style="stroke:${col}" ${ex}/>`;
+const wolk=(x,y)=>`<path transform="translate(${x} ${y+1.5}) scale(.95)" d="M-5.5 4.5a3.6 3.6 0 0 1-.6-7.15a4.6 4.6 0 0 1 8.8-1.1a3.9 3.9 0 0 1 2.3 8.25z" stroke-width="2" stroke-linejoin="miter" style="stroke:${L2};fill:var(--bg)"/>`;
+const STIP='stroke-dasharray="2 6" opacity=".7"';
+
+function Y(S,R,i){const y=84+i*RY;if(!S.uitklap||!S.sel)return y;const s=R.findIndex(r=>r.t===S.sel);return s>=0&&i>s?y+S.uh+8:y}
+function plekken(S){const R=rijen(S),pos={},ry=i=>Y(S,R,i);R.forEach((r,i)=>{if(r.t)pos[r.t]={x:r.lane===1?X1:X2,y:ry(i),lane:r.lane,r}});return {R,pos}}
+
+function graaf(I){
+  const {S,ctx}=I,{R,pos}=plekken(S),ry=i=>Y(S,R,i);
+  let bg='',g1='',g2='',top='',html='';
+  const band=(t,acc)=>{const p=pos[t];if(!p)return '';return `<rect x="0" y="${p.y-13}" width="${W}" height="26" style="fill:var(--sel)"/>`+(acc?`<rect x="0" y="${p.y-13}" width="2" height="26" style="fill:var(--acc)"/>`:'')};
+  const hov=S.hov&&pos[S.hov]?S.hov:null;
+  if(S.sel&&['onder','branch','regel'].includes(ctx.klik))bg+=band(S.sel,true);
+  if(hov&&ctx.hover==='band'&&!(S.sel===hov&&ctx.klik==='onder'))bg+=band(hov,false);
+  bg+=ln(0,52.5,W,52.5,'var(--line)',1)+ln(0,ry(0)+.5,W,ry(0)+.5,'var(--ls)',1,'stroke-dasharray="3 4"');
+  // main
+  const i1=R.findIndex(r=>r.lane===1),iaf=R.findIndex(r=>r.af);
+  g1+=ln(X1,12,X1,ry(i1)-8,L1,LIJN,'opacity=".4"')+ln(X1,ry(i1),X1,H,L1);
+  R.forEach((r,i)=>{if(r.lane!==1)return;const y=ry(i);g1+=r.soort==='eind'?sq(X1,y,11.7,'var(--bg)',L1):sq(X1,y,5.4,L1)});
+  // poorten
+  const i2=R.map((r,i)=>r.lane===2?i:-1).filter(i=>i>=0);
+  if(i2.length){
+    g2+=ln(X2,30,X2,ry(i2[0])-9,L2,LIJN,'opacity=".4"');
+    for(let k=0;k<i2.length-1;k++){const a=R[i2[k]];g2+=ln(X2,ry(i2[k]),X2,ry(i2[k+1]),L2,LIJN,(a.remote||a.lokaal)?STIP:'')}
+    const last=i2[i2.length-1];
+    g2+=ln(X2,ry(last),X2,ry(iaf),L2)+ln(X1,ry(iaf),X2+LIJN/2,ry(iaf),L2)+sq(X1,ry(iaf),5.04,L1);
+    i2.forEach(i=>{const r=R[i],y=ry(i);
+      if(r.soort==='wolk')g2+=wolk(X2,y);
+      else if(r.soort==='vaag')g2+=sq(X2,y,6.12,'var(--bg)',L2,.6);
+      else if(r.soort==='eind')g2+=sq(X2,y,14.4,L2,L2)+sq(X2,y,5.76,'var(--bg)');
+      else g2+=r.c.merge?sq(X2,y,6.12,'var(--bg)',L2):sq(X2,y,5.4,L2);
+    });
+  }
+  // aanwijzen
+  let d1=1,d2=1;
+  if(hov&&(ctx.hover==='lijn'||ctx.hover==='punt')){
+    const p=pos[hov];top+=`<rect x="${p.x-9}" y="${p.y-9}" width="18" height="18" fill="none" stroke-width="1" style="stroke:var(--ink)"/>`;
+    if(ctx.hover==='lijn'){if(p.lane===1)d2=.3;else d1=.3}
+  }
+  html+=`<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${bg}<g opacity="${d1}">${g1}</g><g opacity="${d2}">${g2}</g>${top}</svg>`;
+  html+=`<span class="naam" style="left:29px;top:8px;color:${L1};opacity:${d1}">main</span>`;
+  if(!S.weg)html+=`<span class="naam" style="left:72px;top:26px;color:${L2};opacity:${d2}">poorten</span>`;
+  html+=`<span class="dag" style="top:56px">vandaag</span>`;
+  const kb=ctx.ophalen!=='auto'&&S.bezig!=='ophalen';
+  html+=`<span class="dag${kb?' kb':''}" ${kb?'data-a="fetch"':''} style="top:${ry(0)+3}px">${S.bezig==='ophalen'?'ophalen':'opgehaald '+tijd(S.opgehaald)}</span>`;
+  // tekst onder de muis
+  const vast=S.sel===hov&&ctx.klik!=='wissel';
+  if(hov&&!vast&&ctx.tekst!=='geen'){
+    const p=pos[hov],[r,a,b]=tip(S,hov);
+    const regel=ctx.tekst==='regel'?r:ctx.tekst==='commits'?(hov.startsWith('c:')?r:null):ctx.tekst==='traag'?(S.kaart?r:null):ctx.tekst==='afwijking'?afwijking(S,hov,p.r):null;
+    if(regel){const x=p.x+13;html+=`<span class="hv" style="left:${x}px;top:${p.y-9}px;max-width:${W-x-8}px">${esc(regel)}</span>`}
+    else if(ctx.tekst==='kaart'&&S.kaart){const l=Math.min(p.x+16,W-298),tp=p.y>300?`top:${p.y-14}px;transform:translateY(-100%)`:`top:${p.y+14}px`;
+      html+=`<div class="kaart" style="left:${Math.max(8,l)}px;${tp}"><div>${esc(a)}</div><div class="mu">${esc(b)}</div></div>`}
+  }
+  return html;
+}
+function gh(S){const a=S.local.length,b=S.fetched?S.remote.length:0;return a||b?`GitHub ${a?'↑'+a:''}${a&&b?' ':''}${b?'↓'+b:''}`:'gelijk met GitHub'}
+/* Alleen bij een punt dat niet gelijk is met GitHub. */
+function afwijking(S,t,r){
+  if(t==='b:poorten'){const a=S.local.length,b=S.fetched?S.remote.length:0;return a||b?gh(S):null}
+  if(t==='o:poorten')return gh(S);
+  if(r.remote)return 'nog niet lokaal';
+  if(r.lokaal&&r.soort!=='eind')return 'nog niet op GitHub';
+  return null;
+}
+/* [regel, kaart boven, kaart onder] */
+function tip(S,t){
+  const [k,id]=t.split(':');
+  if(t==='b:poorten')return [gh(S),'poorten',gh(S)];
+  if(t==='b:main')return ['gelijk met GitHub','main','gelijk met GitHub'];
+  if(k==='o'){const c=S.fetched&&S.remote[0]||S.pushed[0];return ['GitHub','origin/poorten',c.t]}
+  const c=alle(S).find(c=>c.id===id);return [c.t,c.t,`${AUTEUR} · ${datum(c.ts)}`];
+}
+
+/* De acties: commit, update, push, of het veld voor het bericht. */
+function acties(I){
+  const {S,ctx}=I;
+  if(S.weg)return '';
+  if(S.edit){
+    let h='';
+    if(ctx.bericht==='bestanden')h+=`<div class="fl">${WIJZ.map(pm).join('')}</div>`;
+    const w=S.bezig==='schrijven';
+    h+=`<div class="ed"><input class="in" data-in aria-label="commitbericht" placeholder="${w?'…':'bericht'}" value="${esc(S.msg)}" ${w?'disabled':''}><button class="kn" data-a="ok">commit</button></div>`;
+    return h;
+  }
+  if(['pushen','updaten'].includes(S.bezig))return `<span class="mu">${S.bezig}</span>`;
+  if(ctx.extra==='regel'&&S.bezig==='pr')return `<span class="mu">PR maken</span>`;
+  const b=[],achter=S.fetched?S.remote.length:0,voor=S.local.length;
+  if(S.wijz)b.push(['commit',`commit ${S.wijz}`]);
+  if(achter)b.push(['update',`update ↓${achter}`]);
+  if(voor&&!achter)b.push(['push',`push ↑${voor}`]);
+  if(ctx.extra==='regel'&&!b.length)b.push(S.pr?null:['pr','PR naar main']);
+  let h=(ctx.acties==='stap'?b.slice(0,1):b).filter(Boolean).map(([a,l])=>`<button class="kn" data-a="${a}">${l}</button>`).join('');
+  if(ctx.extra==='regel'&&S.pr&&!h)h=`<span class="mu">PR open</span>`;
+  if(S.fout)h+=`<span class="fout">afgeweken van GitHub · vraag Claude om samen te voegen</span>`;
+  return h;
+}
+
+function cijfers(v,rijen){
+  const pijl=(e,m)=>e||m?`${e?'↑'+e:''}${e&&m?' ':''}${m?'↓'+m:''}`:'gelijk';
+  if(v==='naam')return '';
+  if(v==='main'){const r=rijen.filter(x=>x[3]==='br'&&x[0]==='main'&&x[2]);return r.map(([n,e,m])=>`<div>${m} achter op ${n}</div>`).join('')}
+  if(v==='github'||v==='achter'){const r=rijen.filter(x=>v==='github'?(x[3]!=='br'&&(x[1]||x[2])):x[2]);
+    return r.length?`<div class="tb">${r.map(([n,e,m])=>`<span class="mu">${n}</span><span>${v==='github'?pijl(e,m):'↓'+m}</span>`).join('')}</div>`:''}
+  if(v==='pijlen')return `<div class="tb">${rijen.map(([n,e,m])=>`<span class="mu">${n}</span><span>${pijl(e,m)}</span>`).join('')}</div>`;
+  if(v==='woorden'){const w=[];for(const [n,e,m,s] of rijen){
+    if(s==='gh'){if(e)w.push(`${e} te pushen`);if(m)w.push(`${m} te halen`);if(!e&&!m)w.push('gelijk met GitHub')}
+    else if(s==='lok'){if(e)w.push(`${e} nog niet lokaal`);if(m)w.push(`${m} nog niet op GitHub`);if(!e&&!m)w.push('gelijk met lokaal')}
+    else{if(m)w.push(`${m} achter op ${n}`);if(e)w.push(`${e} voor op ${n}`)}}
+    return `<div>${w.map(x=>`<div>${x}</div>`).join('')}</div>`}
+  const s=x=>x?x:'–';
+  return `<div class="tl"><span></span><span class="mu r">extra</span><span class="mu r">mist</span>${rijen.flatMap(([n,e,m,k,tn])=>[`<span>${tn||n}</span>`,...(e||m?[`<span class="r">${s(e)}</span>`,`<span class="r">${s(m)}</span>`]:[`<span class="mu">gelijk</span>`,'<span></span>'])]).join('')}</div>`;
+}
+
+function detail(I,t){
+  const {S,ctx}=I,[k,id]=t.split(':');
+  if(k==='c'){
+    const c=alle(S).find(c=>c.id===id);if(!c)return '';
+    if(ctx.commit==='wie')return `<div>${AUTEUR} · ${tijd(c.ts)}</div>`;
+    if(ctx.commit==='titel')return `<div class="dk">${esc(c.t)}</div>`;
+    if(ctx.commit==='tijd')return `<div class="dk">${esc(c.t)}</div><div class="mu">${tijd(c.ts)}</div>`;
+    if(ctx.commit==='alleenbestanden')return `<div class="fl">${c.f.map(pm).join('')}</div>`;
+    let h=`<div class="dk">${esc(c.t)}</div><div class="mu">${AUTEUR} · ${datum(c.ts)}</div>`;
+    if(ctx.commit==='bestanden'&&c.f.length)h+=`<div class="fl">${c.f.map(pm).join('')}</div>`;
+    if(ctx.commit==='hash')h+=`<div class="rij"><span>${c.id}</span><button class="kn" data-a="kopie">${S.kopie?'gekopieerd':'kopieer'}</button></div>`;
+    return h;
+  }
+  const voor=S.local.length,achter=S.fetched?S.remote.length:0,eigen=S.local.length+S.pushed.length,nieuwMain=2;
+  let naam,kl,rows;
+  if(t==='b:main'){naam='main';kl=L1;rows=[['GitHub',0,0,'gh','origin/main'],['poorten',nieuwMain,eigen,'br']]}
+  else if(k==='b'){naam='poorten';kl=L2;rows=[['GitHub',voor,achter,'gh','origin/poorten'],['main',eigen,nieuwMain,'br'],...(ctx.branch==='tabel'?[['origin/main',eigen,nieuwMain,'br']]:[])]}
+  else{naam='origin/poorten';kl=L2;rows=[['lokaal',achter,voor,'lok','poorten'],['main',S.pushed.length+achter,nieuwMain,'br']]}
+  let h=`<div class="dk" style="color:${kl};font-weight:600">${naam}</div>`+cijfers(ctx.branch,rows);
+  if(t==='b:poorten'){
+    if(ctx.acties==='eind'){const a=acties(I);if(a)h+=`<div class="ar2" style="${S.edit?'flex-direction:column;align-items:stretch':''}">${a}</div>`}
+    if(ctx.extra!=='geen'&&ctx.extra!=='regel')h+=extra(I);
+  }
+  return h;
+}
+function extra(I){
+  const {S,ctx}=I;
+  if(S.vraag)return `<div class="vraag"><span>poorten verwijderen, lokaal en op GitHub?</span><div class="ex"><button class="kn rood" data-a="weg-ok">verwijderen</button><button class="kn" data-a="weg-nee">annuleren</button></div></div>`;
+  let h=S.pr?`<span class="mu">PR open</span>`:S.bezig==='pr'?`<span class="mu">PR maken</span>`:`<button class="kn" data-a="pr">PR naar main</button>`;
+  if(ctx.extra==='weg')h+=`<button class="kn rood" data-a="weg">verwijderen</button>`;
+  return `<div class="ex">${h}</div>`;
+}
+
+function kortDetail(S,t){const [r,a,b]=tip(S,t);return t.startsWith('c:')?a:`${a} · ${b}`}
+const KRUIS='<svg width="10" height="10" viewBox="0 0 10 10" style="position:static"><path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
+function detailVak(I){
+  const {S,ctx}=I;if(!S.sel)return '';
+  const {pos}=plekken(S),p=pos[S.sel];if(!p){S.sel=null;return ''}
+  const inh=detail(I,S.sel);
+  if(ctx.klik==='regel')return '';
+  if(ctx.klik==='uitklap')return `<div class="uit" style="top:${p.y+14}px">${inh}</div>`;
+  if(ctx.klik==='onder'||ctx.klik==='branch')return `<div class="vak"><button class="x" data-a="sluit" aria-label="sluiten">${KRUIS}</button>${inh}</div>`;
+  if(ctx.klik==='pin'){const l=Math.max(8,Math.min(p.x+16,W-298)),tp=p.y>240?`top:${p.y-14}px;transform:translateY(-100%)`:`top:${p.y+14}px`;return `<div class="pin" style="left:${l}px;${tp}">${inh}</div>`}
+  return `<div class="wis"><button class="terug" data-a="sluit">← graaf</button>${inh}</div>`;
+}
+
+function render(I,alleenGraaf){
+  const {S,ctx,el}=I;
+  if(!alleenGraaf){
+    const a=ctx.acties==='eind'?'':acties(I);
+    el.innerHTML=`<div class="jp ${I.th}" style="width:${W}px;height:${H}px">${a?`<div class="ar" style="${S.edit?'flex-direction:column;align-items:stretch':''}">${a}</div>`:''}${S.sel&&ctx.klik==='regel'?`<div class="kr">${esc(kortDetail(S,S.sel))}</div>`:''}<div class="gw"><div class="gr"></div><div class="dv">${detailVak(I)}</div></div></div>`;
+    const u=el.querySelector('.uit');S.uh=u?u.offsetHeight:0;
+    const inp=el.querySelector('[data-in]');
+    if(inp&&!inp.disabled&&I.focus!==false){inp.focus({preventScroll:true});if(S.msg)inp.select()}
+  }
+  const gr=el.querySelector('.gr');
+  gr.style.display=S.sel&&ctx.klik==='wissel'?'none':'';
+  gr.innerHTML=graaf(I);
+}
+
+function doe(I,a){
+  const {S,ctx}=I;
+  switch(a){
+    case 'commit':S.edit=true;S.msg='';if(ctx.bericht==='claude'){S.bezig='schrijven';later(I,900,()=>{S.bezig=null;S.msg=VOORSTEL})}break;
+    case 'ok':{const v=((I.el.querySelector('[data-in]')||{}).value||'').trim();if(!v)return;S.local.unshift(mk(hx(),v,nu(I),WIJZ));S.wijz=0;S.edit=false;S.msg='';break}
+    case 'push':S.bezig='pushen';later(I,700,()=>{S.bezig=null;S.pushed=[...S.local,...S.pushed];S.local=[]});break;
+    case 'update':S.bezig='updaten';later(I,700,()=>{S.bezig=null;const af=S.local.length&&S.remote.length;
+      if(af&&ctx.afw==='ff'){S.fout=true;return}
+      S.pushed=[...S.remote,...S.pushed];S.remote=[];S.fout=false;
+      if(af&&ctx.afw==='merge')S.local.unshift(mk(hx(),'Merge origin/poorten in poorten',nu(I),[],true))});break;
+    case 'fetch':S.bezig='ophalen';later(I,700,()=>{S.bezig=null;S.fetched=true;S.opgehaald=nu(I)});break;
+    case 'sluit':S.sel=null;S.vraag=false;break;
+    case 'pr':S.bezig='pr';later(I,900,()=>{S.bezig=null;S.pr=true});break;
+    case 'weg':S.vraag=true;break;
+    case 'weg-nee':S.vraag=false;break;
+    case 'weg-ok':S.weg=true;S.vraag=false;S.sel=null;break;
+    case 'kopie':try{navigator.clipboard.writeText(S.sel.split(':')[1])}catch(e){}S.kopie=true;later(I,1500,()=>{S.kopie=false});break;
+  }
+  render(I);
+}
+
+let ACTIEF=null;
+function mount(el){
+  if(el._i)el._i.timers.forEach(clearTimeout);
+  const ctx=JSON.parse(el.dataset.ctx),I={el,ctx,th:el.dataset.th,S:nieuw(ctx),timers:[],t0:Date.now(),focus:false};
+  el._i=I;render(I);I.focus=true;
+  const S=I.S;
+  /* Het raakvlak: het dichtstbijzijnde punt binnen 30 px opzij en 20 px boven of onder. Punten op een lijn liggen 26 px uit elkaar, dus langs een lijn zit er geen gat tussen. */
+  const doelOp=e=>{
+    if(e.target.closest('.vak,.pin,.wis,.uit,.ar,.kr,[data-a]'))return null;
+    const gr=el.querySelector('.gr');if(!gr||gr.style.display==='none')return null;
+    const b=gr.getBoundingClientRect(),x=e.clientX-b.left,y=e.clientY-b.top,{pos}=plekken(S);
+    let best=null,bd=Infinity;
+    for(const t in pos){const p=pos[t],dx=Math.abs(x-p.x),dy=Math.abs(y-p.y);if(dx<=30&&dy<=20&&dx*dx+2*dy*dy<bd){bd=dx*dx+2*dy*dy;best=t}}
+    return best;
+  };
+  const zet=t=>{S.hov=t;S.kaart=false;clearTimeout(I.kt);if(t&&(ctx.tekst==='kaart'||ctx.tekst==='traag'))I.kt=setTimeout(()=>{S.kaart=true;render(I,true)},ctx.tekst==='traag'?1000:500);render(I,true)};
+  /* Loslaten pas na 150 ms: wie langs de punten beweegt, ziet niets knipperen. */
+  el.onmousemove=e=>{ACTIEF=I;const t=doelOp(e);
+    if(t===S.hov){clearTimeout(I.lt);I.lt=null;return}
+    if(t===null){if(!I.lt)I.lt=setTimeout(()=>{I.lt=null;zet(null)},150);return}
+    clearTimeout(I.lt);I.lt=null;zet(t)};
+  el.onmouseleave=()=>{clearTimeout(I.kt);clearTimeout(I.lt);I.lt=null;if(S.hov){S.hov=null;render(I,true)}};
+  el.onclick=e=>{ACTIEF=I;
+    const a=e.target.closest('[data-a]');if(a){doe(I,a.dataset.a);return}
+    if(e.target.closest('input'))return;
+    let t=doelOp(e);
+    if(t&&ctx.klik==='branch'&&t.startsWith('c:'))t=null;
+    if(t){S.sel=S.sel===t?null:t;S.kopie=false;S.vraag=false;render(I);return}
+    if(e.target.closest('.vak,.pin,.wis,.uit,.ar,.kr'))return;
+    if(S.sel){S.sel=null;S.vraag=false;render(I)}};
+  el.oninput=e=>{if(e.target.matches('[data-in]'))S.msg=e.target.value};
+  el.onkeydown=e=>{if(e.target.matches('[data-in]')&&e.key==='Enter'){e.preventDefault();doe(I,'ok')}};
+  if(ctx.demo==='ophalen'&&ctx.ophalen!=='hand')later(I,1500,()=>{S.bezig='ophalen';later(I,800,()=>{S.bezig=null;S.fetched=true;S.opgehaald=nu(I)})});
+}
+document.addEventListener('keydown',e=>{if(e.key!=='Escape'||!ACTIEF)return;const S=ACTIEF.S;if(S.edit){S.edit=false;S.bezig=S.bezig==='schrijven'?null:S.bezig}else if(S.sel){S.sel=null;S.vraag=false}else return;render(ACTIEF)});
+
+/* ================= STAND (per ronde bijwerken) ================= */
+const CHOSEN  = {acties:'A',bericht:'B',afw:'B',ophalen:'A',hover:'B',tekst:'A',klik:'B',branch:'G',commit:'G',extra:'A'};
+const PARTIAL = {};
+const LATER   = {};
+const PCHOSEN = {};
+const NOTES   = {afw:[['Wanneer','branch is lokaal én op GitHub verder gegaan'],['Bron','een andere Mac, een andere sessie, een PR-merge op GitHub'],['Conflict','bij alle drie: stoppen, vraag Claude']]};
+
+/* ================= ENGINE ================= */
+const state = id => LATER[id]?'later':PARTIAL[id]?'deels':CHOSEN[id]?'vast':'open';
+const STATE_L = {vast:'Vast',deels:'Deels',open:'Open',later:'Later'};
+const pick = id => CHOSEN[id]+(PARTIAL[id]?' · '+PARTIAL[id]:'');
+let UID=0; const STY=[];
+function baseFor(tabId){
+  let v={...BASE},c={...BASECTX},cls='',css=[];
+  for(const [t,k] of Object.entries(CHOSEN)){if(t===tabId)continue;const o=TABS.find(x=>x.id===t).opts.find(x=>x.k===k);if(!o)continue;Object.assign(v,o.vars||{});Object.assign(c,o.ctx||{});cls+=' '+(o.cls||'');if(o.css)css.push(o.css)}
+  return {v,c,cls,css};
+}
+const NUM = Object.fromEntries(TABS.map((t,i)=>[t.id,String(i+1).padStart(2,'0')]));
+function panelHead(tab){
+  const s=state(tab.id);
+  const notes=NOTES[tab.id]?`<dl class="spec notes">${NOTES[tab.id].map(([a,b])=>`<div><dt>${a}</dt><dd>${b}</dd></div>`).join('')}</dl>`:'';
+  return `<header class="phd"><div class="phd-t"><span class="phd-n">${NUM[tab.id]}</span><h2>${tab.name}</h2><span class="stc" data-st="${s}"><i class="tile"></i>${STATE_L[s]}${CHOSEN[tab.id]?' · '+CHOSEN[tab.id]:''}</span></div>${notes}</header>`;
+}
+function renderTab(tab){
+  if(LATER[tab.id])return panelHead(tab);
+  const B=baseFor(tab.id);
+  const opts = CHOSEN[tab.id]?tab.opts.filter(o=>o.k===CHOSEN[tab.id]):tab.opts;
+  return panelHead(tab)+'<div class="opts">'+opts.map(o=>renderOpt(tab,o,B)).join('')+'</div>';
+}
+function renderOpt(tab,o,B){
+  const ctx={...B.c,...(tab.ctx||{}),...(o.ctx||{})},data=esc(JSON.stringify(ctx));
+  const frames=`<div class="stage2">${[['d','donker'],['l','licht']].map(([th,lab])=>`<div class="fr2"><div class="bar"><b>${lab}</b></div><div class="jpm" data-th="${th}" data-ctx="${data}"></div></div>`).join('')}</div>`;
+  return `<section class="opt" data-opt="${o.k}"><div class="opt-head"><span class="opt-k">${o.k}</span><h2 class="opt-n">${o.name}</h2><button class="replay" type="button">Opnieuw</button></div>
+    <dl class="spec">${(o.spec||[]).map(([a,b])=>`<div><dt>${a}</dt><dd>${b}</dd></div>`).join('')}</dl>${frames}</section>`;
+}
+function play(opt){opt.querySelectorAll('.jpm').forEach(mount)}
+const tabsEl=document.getElementById('tabs'),panel=document.getElementById('panel');
+const tabBtn=t=>`<button class="tab" role="tab" type="button" id="t-${t.id}" aria-controls="panel" aria-selected="false" data-tab="${t.id}" data-st="${state(t.id)}"><i class="tile"></i><span>${NUM[t.id]}</span>${t.name}${CHOSEN[t.id]?`<b class="tk">${pick(t.id)}</b>`:''}</button>`;
+tabsEl.innerHTML=['open','deels','later','vast'].map(g=>{const ts=TABS.filter(t=>state(t.id)===g);return ts.length?`<div class="tg" role="presentation"><span class="tgl">${STATE_L[g]} <b>${ts.length}</b></span>${ts.map(tabBtn).join('')}</div>`:''}).join('');
+const prog=document.getElementById('prog');
+prog.innerHTML=TABS.map(t=>`<i class="tile" data-st="${state(t.id)}" title="${NUM[t.id]} ${t.name}"></i>`).join('');
+prog.setAttribute('aria-label',['vast','deels','open','later'].map(g=>`${TABS.filter(t=>state(t.id)===g).length} ${g}`).join(', '));
+const STORE='stijl-tab-git-acties';
+function show(id,push){
+  const tab=TABS.find(t=>t.id===id)||TABS[0];
+  ACTIEF=null;panel.innerHTML=renderTab(tab);
+  tabsEl.querySelectorAll('.tab').forEach(b=>b.setAttribute('aria-selected',b.dataset.tab===tab.id));
+  panel.querySelectorAll('.opt').forEach(play);
+  if(push){try{history.replaceState(null,'','#'+tab.id)}catch(e){}try{localStorage.setItem(STORE,tab.id)}catch(e){}}
+}
+tabsEl.addEventListener('click',e=>{const b=e.target.closest('.tab');if(!b)return;show(b.dataset.tab,true);b.scrollIntoView({block:'nearest',inline:'nearest'});window.scrollTo({top:0})});
+tabsEl.addEventListener('keydown',e=>{if(!['ArrowRight','ArrowLeft'].includes(e.key))return;const bs=[...tabsEl.querySelectorAll('.tab')];const i=bs.indexOf(document.activeElement);if(i<0)return;const n=bs[(i+(e.key==='ArrowRight'?1:-1)+bs.length)%bs.length];n.focus();n.click()});
+panel.addEventListener('click',e=>{const r=e.target.closest('.replay');if(r)play(r.closest('.opt'))});
+let start=(location.hash||'').slice(1);if(!TABS.some(t=>t.id===start)){try{start=localStorage.getItem(STORE)||''}catch(e){start=''}}
+show(start||TABS[0].id,false);
+</script>

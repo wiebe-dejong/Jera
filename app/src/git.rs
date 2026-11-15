@@ -1,10 +1,12 @@
-//! De branches van een repo, voor het git-paneel. Alleen lezen.
-//! Zonder `gh`: de titel van een PR staat in de merge-commit.
+//! De branches van een repo, voor het git-paneel, en wat het paneel ermee doet:
+//! commit, push, update (rebase) en ophalen.
+//! Zonder `gh`: de branch van een PR staat in de merge-commit.
 
 use std::{
     collections::{HashMap, HashSet},
+    io::Write,
     path::Path,
-    process::Command,
+    process::{Command, Stdio},
     sync::{LazyLock, Mutex},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -15,8 +17,6 @@ const VAST: [&str; 6] = ["main", "master", "staging", "develop", "development", 
 pub struct Commit {
     pub h: String,
     pub ts: i64,
-    pub pr: Option<u32>,
-    pub titel: String,
     /// De branch waar een merge vandaan kwam.
     pub van: Option<String>,
     pub auteur: String,
@@ -36,10 +36,9 @@ pub struct Origin {
     pub behind: u32,
 }
 
-/// Hoeveel echte commits een eindpunt extra heeft en mist ten opzichte van een ander.
+/// Hoeveel echte commits een eindpunt mist ten opzichte van een ander.
 pub struct Tov {
     pub naam: String,
-    pub extra: u32,
     pub mist: u32,
 }
 
@@ -154,26 +153,21 @@ pub fn lees(map: &Path) -> Option<Repo> {
             None => a.to_string(),
         };
         let aantal = format!("-n{n}");
-        let uit = g(&["log", "--first-parent", &aantal, "--format=%H%x00%ct%x00%P%x00%an%x00%s%x00%b%x1e", &bereik]);
+        let uit = g(&["log", "--first-parent", &aantal, "--format=%H%x00%ct%x00%P%x00%an%x00%s%x1e", &bereik]);
         uit.split('\x1e')
             .filter_map(|rec| {
-                let mut v = rec.trim_start_matches('\n').splitn(6, '\0');
-                let (h, ts, p, an, s, body) = (v.next()?, v.next()?, v.next()?, v.next()?, v.next()?, v.next().unwrap_or(""));
+                let mut v = rec.trim_start_matches('\n').splitn(5, '\0');
+                let (h, ts, p, an, s) = (v.next()?, v.next()?, v.next()?, v.next()?, v.next()?);
                 if h.is_empty() {
                     return None;
                 }
                 let ouders: Vec<&str> = p.split_whitespace().collect();
-                // "Merge pull request #12 from eigenaar/branch"; de titel van de PR staat eronder
+                // "Merge pull request #12 from eigenaar/branch"
                 let pr_merge = s.strip_prefix("Merge pull request #").and_then(|rest| {
                     let (nr, rest) = rest.split_once(" from ")?;
                     Some((nr.parse::<u32>().ok()?, rest.split_once('/').map_or(rest, |(_, b)| b).to_string()))
                 });
-                let pr = pr_merge.as_ref().map(|(nr, _)| *nr);
                 let mut van = pr_merge.map(|(_, b)| b);
-                let titel = match (pr, body.lines().next().filter(|l| !l.trim().is_empty())) {
-                    (Some(_), Some(eerste)) => eerste.trim().to_string(),
-                    _ => s.to_string(),
-                };
                 if ouders.len() > 1 {
                     if let Some(c) = namen.iter().find(|c| *c != zelf && hoofdlijn[c.as_str()].contains(ouders[1])) {
                         van = Some(c.clone());
@@ -189,7 +183,7 @@ pub fn lees(map: &Path) -> Option<Repo> {
                 } else {
                     0
                 };
-                Some(Commit { h: h.to_string(), ts: ts.parse().unwrap_or(0), pr, titel, van, auteur: an.to_string(), n })
+                Some(Commit { h: h.to_string(), ts: ts.parse().unwrap_or(0), van, auteur: an.to_string(), n })
             })
             .collect()
     };
@@ -320,8 +314,8 @@ pub fn lees(map: &Path) -> Option<Repo> {
             .enumerate()
             .filter(|(j, _)| *j != i)
             .map(|(j, (n, _))| {
-                let (extra, mist) = if i < j { paren[&(i, j)] } else { (paren[&(j, i)].1, paren[&(j, i)].0) };
-                Tov { naam: n.clone(), extra, mist }
+                let mist = if i < j { paren[&(i, j)].1 } else { paren[&(j, i)].0 };
+                Tov { naam: n.clone(), mist }
             })
             .collect()
     };
@@ -343,3 +337,127 @@ pub fn lees(map: &Path) -> Option<Repo> {
     Some(Repo { nu, opgehaald, hoofd, branches })
 }
 
+
+/// Wat er in de map te doen is: gewijzigde bestanden, en commits voor en achter op GitHub.
+#[derive(Clone, Copy, Default, PartialEq)]
+pub struct Stand {
+    pub wijz: u32,
+    pub voor: u32,
+    pub achter: u32,
+    /// Zonder upstream gaat push met `-u origin HEAD`.
+    pub upstream: bool,
+    /// Een branch met een remote: alleen dan kan er gepusht en bijgewerkt worden.
+    pub remote: bool,
+}
+
+pub fn stand(map: &Path) -> Stand {
+    let g = |args: &[&str]| git(map, args);
+    let tel = |args: &[&str]| g(args).parse().unwrap_or(0);
+    let wijz = g(&["status", "--porcelain"]).lines().filter(|l| !l.is_empty()).count() as u32;
+    let remote = g(&["rev-parse", "--abbrev-ref", "HEAD"]) != "HEAD" && !g(&["remote"]).is_empty();
+    let upstream = remote && !g(&["rev-parse", "--abbrev-ref", "@{u}"]).is_empty();
+    let (voor, achter) = if upstream {
+        (tel(&["rev-list", "--count", "@{u}..HEAD"]), tel(&["rev-list", "--count", "HEAD..@{u}"]))
+    } else if remote {
+        (tel(&["rev-list", "--count", "HEAD", "--not", "--remotes"]), 0)
+    } else {
+        (0, 0)
+    };
+    Stand { wijz, voor, achter, upstream, remote }
+}
+
+/// Een git-commando dat iets verandert. Bij een fout: de eerste regel van wat git zei.
+fn doe(map: &Path, args: &[&str]) -> Result<(), String> {
+    let uit = Command::new("git")
+        // nooit wachten op een wachtwoord: dan hangt het paneel
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .arg("-C")
+        .arg(map)
+        .args(args)
+        .output()
+        .map_err(|e| e.to_string())?;
+    if uit.status.success() {
+        return Ok(());
+    }
+    let tekst = [uit.stderr, uit.stdout].map(|b| String::from_utf8_lossy(&b).into_owned()).join("\n");
+    Err(tekst.lines().map(str::trim).find(|l| !l.is_empty() && !l.starts_with("hint:")).unwrap_or("").to_string())
+}
+
+/// Commit alles wat gewijzigd is, ook nieuwe bestanden.
+pub fn commit(map: &Path, bericht: &str) -> Result<(), String> {
+    doe(map, &["add", "-A"])?;
+    doe(map, &["commit", "-q", "-m", bericht])
+}
+
+pub fn push(map: &Path, upstream: bool) -> Result<(), String> {
+    if upstream { doe(map, &["push", "-q"]) } else { doe(map, &["push", "-q", "-u", "origin", "HEAD"]) }
+}
+
+pub enum UpdateFout {
+    /// Dezelfde regels aan beide kanten veranderd. De rebase is teruggedraaid.
+    Conflict,
+    Anders(String),
+}
+
+/// Haalt binnen wat op GitHub staat en zet mijn commits erbovenop. Bij een conflict blijft alles zoals het was.
+pub fn update(map: &Path) -> Result<(), UpdateFout> {
+    doe(map, &["pull", "-q", "--rebase", "--autostash"]).map_err(|fout| {
+        let bezig = ["rebase-merge", "rebase-apply"].iter().any(|d| Path::new(&git(map, &["rev-parse", "--path-format=absolute", "--git-path", d])).exists());
+        if bezig {
+            let _ = doe(map, &["rebase", "--abort"]);
+            UpdateFout::Conflict
+        } else {
+            UpdateFout::Anders(fout)
+        }
+    })
+}
+
+pub fn haal_op(map: &Path) -> Result<(), String> {
+    doe(map, &["fetch", "-q", "origin"])
+}
+
+/// Een commitbericht van één regel voor de wijzigingen, geschreven door Claude (`claude -p`).
+/// Claude draait buiten de repo, zodat er geen sessie bij dit project bijkomt.
+pub fn bericht(map: &Path) -> Option<String> {
+    let mut diff = git(map, &["diff", "HEAD"]);
+    if diff.is_empty() {
+        diff = git(map, &["diff"]);
+    }
+    if diff.len() > 40_000 {
+        let mut eind = 40_000;
+        while !diff.is_char_boundary(eind) {
+            eind -= 1;
+        }
+        diff.truncate(eind);
+    }
+    let prompt = format!(
+        "Schrijf het commitbericht voor deze wijzigingen: één regel, in dezelfde taal en stijl als de eerdere berichten. \
+         Geef alleen het bericht, zonder aanhalingstekens.\n\nEerdere berichten:\n{}\n\nGewijzigd:\n{}\n\nDiff:\n{diff}",
+        git(map, &["log", "-8", "--format=%s"]),
+        git(map, &["status", "--short"]),
+    );
+    let eigen = std::env::home_dir().map(|h| h.join(".local/bin/claude")).filter(|p| p.exists());
+    let mut cmd = match eigen {
+        Some(pad) => Command::new(pad),
+        None => {
+            let mut c = Command::new("/bin/zsh");
+            c.args(["-ilc", "claude \"$@\"", "claude"]);
+            c
+        }
+    };
+    let mut kind = cmd
+        .args(["-p", "--model", "haiku"])
+        .current_dir(std::env::temp_dir())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .ok()?;
+    kind.stdin.take()?.write_all(prompt.as_bytes()).ok()?;
+    let uit = kind.wait_with_output().ok()?;
+    if !uit.status.success() {
+        return None;
+    }
+    let regel = String::from_utf8_lossy(&uit.stdout).lines().map(str::trim).find(|l| !l.is_empty())?.trim_matches(['"', '`', '\'']).to_string();
+    (!regel.is_empty()).then_some(regel)
+}
