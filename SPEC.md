@@ -56,6 +56,13 @@ Gemeten op 2026-11-04:
 | Paden in de terminal | Een pad in de terminal is aan te klikken en opent het bestand | 2026-11-14 |
 | Poorten | Een lijst van alle poorten waarop iets luistert, voor de hele computer. Per poort: stoppen en openen | 2026-11-14 |
 | Poorten, welke | Standaard alleen de poorten van een proces dat vanuit een map in mijn thuismap is gestart, ook als Claude het startte. De eigen poorten van Claude Code staan er niet bij. Een knop Alles toont de rest. Het getal op de knop in de tabbalk telt alleen de standaardlijst | 2026-11-14 |
+| Poorten, per sessie | In het paneel staan de poorten en agent-browsers gegroepeerd onder de sessie die ze startte. Wat geen sessie startte, staat onder "zonder sessie" | 2026-11-15 |
+| Poorten, commando | Per poort staat het commando dat luistert, zoals `next dev` of `uvicorn app:main`, niet alleen de procesnaam | 2026-11-15 |
+| Sessie met server of browser | In de sessieregel staat een klein icoon achter de titel zolang de sessie een poort open heeft of een agent-browser draait | 2026-11-15 |
+| Stoppen met de sessie | Stopt een sessie, of sluit ik Jera, dan stopt Jera niets vanzelf. Jera weet alleen welke sessie iets startte, niet wie het nu gebruikt; een gedeelde server zou anders uitgaan terwijl een andere sessie hem nog gebruikt | 2026-11-15 |
+| Wezen | Een server of agent-browser waarvan de sessie niet meer bestaat, staat in het paneel onder "wezen". De knop Stop alle stopt ze allemaal | 2026-11-15 |
+| agent-browser, plaatje | In het paneel staat bij elke agent-browser een klein plaatje van wat die op dat moment toont | 2026-11-15 |
+| Rechts van de terminal | Het git-paneel en het paneel met poorten en agent-browser delen één kolom van 360 px: git boven, poorten onder, helft om helft, met een lijn van 1 px ertussen. Staat er één open, dan neemt die de hele hoogte. Gekozen uit vier, https://claude.ai/artifact/Uf5cfrCSJqn3dqCbS8yRqn | 2026-11-15 |
 | Startcommando | Jera start elke sessie via mijn eigen shell met `claude`. Het is één vast commando, op één plek aan te passen | 2026-11-14 |
 | Paneel voor de hele computer | Poorten en agent-browser staan samen in één paneel, los van de tabs. Een knop rechts in de tabbalk opent het en toont de aantallen | 2026-11-14 |
 | Render | Per service van het project: de naam, de link naar de live app, de deploystatus en de commit die live staat. Een klik op een mislukte deploy opent de logs bij Render in Safari. Jera koppelt een service aan een tab via de repo | 2026-11-14 |
@@ -126,16 +133,16 @@ Schakelaar op Bestanden:
 Schakelaar op Sessies, met het blok oud open en het paneel rechts open:
 
 ```
- [ Sessies ]  Bestanden                  │            │ agent-browser  1
- webshop/                           [+]  │            │   default          [Sluiten]
-   ● kpi cards                           │            │
-                                         │  terminal  │ Poorten  4
-─────────────────────────────────────────│            │   3000  node    [Openen] [Stoppen]
- ▾ oud  3                                │            │   8000  python  [Openen] [Stoppen]
- gisteren                            ▾  │            │
-   supabase migratie                     │            │
- 11 nov                              ▾  │            │
-   login flow                            │            │
+ [ Sessies ]  Bestanden                  │            │ kpi cards
+ webshop/                           [+]  │            │   3000  next dev        [Openen] [Stoppen]
+   ● kpi cards                     ◫ ⌁  │            │   agent-browser default         [Sluiten]
+                                         │  terminal  │   ┌──────────────┐
+─────────────────────────────────────────│            │   │   plaatje    │
+ ▾ oud  3                                │            │   └──────────────┘
+ gisteren                            ▾  │            │ zonder sessie
+   supabase migratie                     │            │   8000  uvicorn app     [Openen] [Stoppen]
+ 11 nov                              ▾  │            │ wezen                      [Stop alle]
+   login flow                            │            │   5173  vite            [Openen] [Stoppen]
    tabel sorteren                        │            │
 ```
 
@@ -143,7 +150,6 @@ De schermen staan ook in het artifact https://claude.ai/artifact/7yXL3y5ykQbPFcZ
 
 ## Open
 
-- **Rechts van de terminal:** het git-paneel en het paneel met poorten en agent-browser openen allebei daar. Hoe ze die plek delen.
 - **Render:** later misschien: logs en belasting in Jera zelf, en knoppen om te deployen of te herstarten.
 - **Terminal:** tekent Claude Code goed (zie `research/native.md`); selecteren en kopiëren werken. Nog te bouwen: een pad aanklikken, letters met een accent, en bloktekens zonder naad.
 
