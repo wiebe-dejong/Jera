@@ -65,7 +65,7 @@ Uit `research/werkwijze.md`:
 | Git | Een smal git-paneel per repo. Het ontwerp staat als werkend voorbeeld in `git-graaf/`. De logica staat vast | 2026-11-14 |
 | Git, plek | Rechts naast de terminal, als paneel dat open en dicht klapt. Het wisselt mee met de tab | 2026-11-14 |
 | Thema | Een donker en een licht thema | 2026-11-14 |
-| Uiterlijk, grond | Bijna zwart, één vlak, met lijnen van 1 px tussen de panelen. De terminal heeft dezelfde grond. De waarden staan in `stijl/cockpit/keuzes.md` | 2026-11-14 |
+| Uiterlijk, grond | Bijna zwart, één vlak, met lijnen van 1 px tussen de panelen. De terminal heeft dezelfde grond. De waarden staan in `stijl/jera/keuzes.md` | 2026-11-14 |
 | Uiterlijk, tab | Een vlak in de titelbalk, met een streep boven de actieve tab | 2026-11-14 |
 | Uiterlijk, status | Een icoon per sessie, zonder woorden: bezig is een groen draaiend boogje, wacht op antwoord een geel vraagteken, wacht op toestemming een rood slot, net klaar een groen vinkje, idle een grijs streepje | 2026-11-14 |
 | Uiterlijk, letter | JetBrains Mono overal, 12.5 px | 2026-11-14 |
@@ -82,14 +82,15 @@ Uit `research/werkwijze.md`:
 | Git, stijl | Recht: commits, groepen en eindpunten zijn vierkantjes, een branch splitst af met een rechte hoek, lijnen van 2 px. Geen datumkolom: de dag en het moment van ophalen staan rechts op hun lijn. Gekozen uit drie, https://claude.ai/artifact/LfeunM49x3iSRWZrLbtZLT | 2026-11-14 |
 | Git, inklappen | De knop git in de Render-regel klapt het paneel in en uit. Bij het openen van Jera is het ingeklapt | 2026-11-14 |
 | Documenten | Geen viewers in de app. Een klik op een document opent het direct in een externe app, zoals Safari, Preview of GridCraft | 2026-11-14 |
-| Openen | `+ map` en ⌘O openen het scherm Openen: een zoekveld, dan `open` (met een mapicoon, opent de mapkeuze van macOS) en `clone repository` (met het icoon van git), en daaronder de mappen die ik het laatst in Cockpit opende. Typen filtert, pijltjes en Enter kiezen. Zonder tabs staat Openen open | 2026-11-15 |
+| Openen | `+ map` en ⌘O openen het scherm Openen. Het hangt direct onder de tab `+ map`, tegen de titelbalk aan. Bovenaan `open` (met een mapicoon, opent de mapkeuze van macOS) en `clone repository` (met het icoon van git), daaronder het zoekveld en de mappen die ik het laatst in Jera opende. Typen filtert op de naam en kiest de eerste die past, pijltjes en Enter kiezen. Zonder tabs staat Openen open | 2026-11-15 |
 | Openen, per regel | Eén kolom: de naam, en klein eronder het pad. Staat het project al als tab open, dan springt kiezen naar die tab | 2026-11-15 |
-| Openen, klonen | `clone repository` toont mijn repo's op GitHub, met een zoekveld. Cockpit kloont de gekozen repo in een map die ik elke keer kies, en start er daarna een sessie. Escape gaat terug | 2026-11-15 |
-| Nieuw project | Alleen met ⌘N en in de menubalk: ik typ een naam en kies daarna de map waarin het komt. Cockpit maakt de map, doet `git init` en start een sessie. Alleen lokaal | 2026-11-15 |
+| Openen, klonen | `clone repository` toont onder het zoekveld mijn repo's op GitHub in plaats van de recente mappen. Jera kloont de gekozen repo in een map die ik elke keer kies, en start er daarna een sessie. Escape of nog een klik op `clone repository` gaat terug | 2026-11-15 |
+| Nieuw project | Alleen met ⌘N en in de menubalk: ik typ een naam en kies daarna de map waarin het komt. Jera maakt de map, doet `git init` en start een sessie. Alleen lokaal | 2026-11-15 |
 | Op GitHub | Heeft een repo geen remote, dan toont het git-paneel de eigenaar (een klik wisselt) en de knop Op GitHub. Die maakt een privé repo en zet de code erop | 2026-11-15 |
 | Naam | Jera, naar de rune ᛃ voor oogst: een knipoog naar Hidden Harvest. Het teken is het icoon van de app | 2026-11-15 |
+| Icoon | Het teken ᛃ met rechte uiteinden. Donker: wit `#F4F5F0` op het groen van Hidden Harvest `#1D3A2A`. Licht: omgekeerd. Staat in `stijl/icoon/`. In het Dock wisselt het mee met macOS; rechtsboven in de titelbalk staat het teken in `ink` | 2026-11-15 |
 
-Het design system staat in `stijl/design-system/` en op https://claude.ai/artifact/QKTtDToW7LYRivNM1vYG88: de tokens en een voorbeeld per onderdeel. De keuzes zelf staan in `stijl/cockpit/keuzes.md`; het keuzebord staat op https://claude.ai/artifact/6M7pWS1JLMd6jWtFqZkoj3. De feiten bij de stack en de terminal staan in `research/native.md`. De sessiestatus leest Jera uit het sessiebestand van Claude Code; de meting staat in `research/zelf-bouwen.md`.
+Het design system staat in `stijl/design-system/` en op https://claude.ai/artifact/QKTtDToW7LYRivNM1vYG88: de tokens en een voorbeeld per onderdeel. De keuzes zelf staan in `stijl/jera/keuzes.md`; het keuzebord staat op https://claude.ai/artifact/6M7pWS1JLMd6jWtFqZkoj3. De feiten bij de stack en de terminal staan in `research/native.md`. De sessiestatus leest Jera uit het sessiebestand van Claude Code; de meting staat in `research/zelf-bouwen.md`.
 
 ### Indeling
 

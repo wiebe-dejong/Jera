@@ -14,9 +14,9 @@ pub const GAP: f32 = 9.0;
 pub const INSPRING: f32 = 14.0;
 
 pub const H_RIJ: f32 = 26.0;
-pub const H_TITELBALK: f32 = 34.0;
+pub const H_TITELBALK: f32 = 40.0;
 pub const H_SCHAKELAAR: f32 = 30.0;
-pub const H_RENDER: f32 = 26.0;
+pub const H_RENDER: f32 = 30.0;
 pub const B_KOLOM: f32 = 290.0;
 
 pub const ICOON: f32 = 14.0;
@@ -90,10 +90,16 @@ pub const LICHT: Thema = Thema {
     ],
 };
 
+/// De cursor van een invoerveld krijgt zijn kleur van GPUI Kit, dat van zichzelf licht is.
+/// Hier volgt die `ink`.
+pub fn zet_kit(window: &Window, cx: &mut App) {
+    base::Theme::global_mut(cx).tokens.colors.foreground = rgb(thema(window).ink).into();
+}
+
 /// Het thema volgt macOS.
 pub fn thema(window: &Window) -> &'static Thema {
     #[cfg(feature = "schermafdruk")]
-    match std::env::var("COCKPIT_THEMA").as_deref() {
+    match std::env::var("JERA_THEMA").as_deref() {
         Ok("licht") => return &LICHT,
         Ok("donker") => return &DONKER,
         _ => {}

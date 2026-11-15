@@ -1,4 +1,4 @@
-Cockpit is een Mac-app waarin één persoon zijn Claude Code-sessies draait en overziet. Het venster moet in één blik zeggen welke sessie op hem wacht. Alles hieronder dient dat.
+Jera is een Mac-app waarin één persoon zijn Claude Code-sessies draait en overziet. Het venster moet in één blik zeggen welke sessie op hem wacht. Alles hieronder dient dat.
 
 ## Taal
 
@@ -10,7 +10,7 @@ Cockpit is een Mac-app waarin één persoon zijn Claude Code-sessies draait en o
 ## Kleur
 
 - Het venster is één vlak in `bg`. Scheid panelen met een lijn van `lijn-dikte` in `line`, nooit met een ander vlak of een schaduw.
-- Alleen de titelbalk (`bar`) en de gekozen rij (`sel`) hebben een eigen vlak.
+- Alleen de titelbalk (`bar`), de gekozen rij en wat onder de muis staat (`sel`) hebben een eigen vlak.
 - Tekst is `ink`. Wat minder telt is `mute`: mapnamen, tellers, niet-actieve tabs, idle sessies.
 - `accent` is alleen een streep van `streep` dik. Die zegt wat actief of gekozen is. Maak er nooit een vlak of tekst van.
 - `ok`, `warn` en `bad` zijn alleen status. Gebruik ze nergens als versiering.
@@ -61,6 +61,16 @@ Elke sessie toont één icoon van `icoon` groot, voor de titel, zonder woord. He
 
 - Alleen het boogje van bezig draait, 1,1 s per rondje.
 - Bij "verminder beweging" in macOS staat het stil.
+- De cursor knippert waar ik typ, in de terminal en in een invoerveld: een halve seconde aan, een halve seconde uit. Tijdens het typen en zonder focus knippert hij niet.
+
+## Onder de muis
+
+- Een rij die aan te klikken is krijgt het vlak `sel`, zonder streep en zonder vet: een sessieregel, een teamlid, het kopje `team`, de kop `oud`, een dag en een sessie in het blok oud, een regel in de bestandsboom, in Openen en in het Contextmenu.
+- Een woord of teken in `mute` dat aan te klikken is wordt `ink`: een niet-actieve tab, `+ map`, `sessies` en `bestanden`, `git`, het plusteken bij een map, het pijltje van agents.
+- Een knop met een rand krijgt het vlak `sel`. De eigenaar in het git-paneel ook, zo hoog als de knop ernaast.
+- Het statusicoon van een sessie toont na een halve seconde zijn woord in een kaartje: `bg` met een rand in `line-strong`, zoals het kaartje in het git-paneel.
+- De gekozen rij en het actieve woord veranderen niet. Wat niet aan te klikken is ook niet.
+- De muisaanwijzer blijft een pijl.
 
 ## Onderdelen
 

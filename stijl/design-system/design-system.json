@@ -5,8 +5,8 @@
   "v": 1,
   "at": "2026-11-14T19:30:00Z"
  },
- "title": "Cockpit",
- "namespace": "Cockpit",
+ "title": "Jera",
+ "namespace": "Jera",
  "libraries": [],
  "sections": {},
  "groups": [],
@@ -15,5 +15,5 @@
  "docs": {
   "sections": []
  },
- "lastChange":{"by":"Claude","at":"2026-11-14T23:57:47Z","via":"Claude Code","note":"Agents: een klik op een teamlid kiest zijn sessie"}
+ "lastChange":{"by":"Wiebe de Jong","at":"2026-11-15T00:57:45Z","via":"Claude Code","note":"Onder de muis: hover states en de tooltip van het statusicoon; de cursor knippert"}
 }

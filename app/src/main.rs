@@ -1,4 +1,4 @@
-//! Cockpit: Claude Code-sessies draaien en overzien.
+//! Jera: Claude Code-sessies draaien en overzien.
 //!
 //! Gebruik: cargo run -- [map ...]. Elke map krijgt een sessie; zonder map staat Openen open.
 
@@ -21,7 +21,7 @@ use std::{borrow::Cow, path::PathBuf};
 
 use gpui_kit::*;
 
-use venster::Cockpit;
+use venster::Jera;
 
 const LETTERS: [&[u8]; 5] = [
     include_bytes!("../fonts/JetBrainsMono-Regular.ttf"),
@@ -32,7 +32,7 @@ const LETTERS: [&[u8]; 5] = [
 ];
 
 fn main() {
-    // Start Cockpit vanuit een Claude-sessie, dan erven de sessies de kenmerken van die sessie,
+    // Start Jera vanuit een Claude-sessie, dan erven de sessies de kenmerken van die sessie,
     // en bewaart Claude Code hun gesprek niet.
     for (naam, _) in std::env::vars() {
         if naam == "CLAUDECODE" || naam.starts_with("CLAUDE_CODE_") {
@@ -52,9 +52,9 @@ fn main() {
 
         #[allow(unused_mut)]
         let mut maat = size(px(1280.0), px(800.0));
-        // COCKPIT_START=900x700 opent het venster op die maat.
+        // JERA_START=900x700 opent het venster op die maat.
         #[cfg(feature = "schermafdruk")]
-        if let Some((w, h)) = std::env::var("COCKPIT_START").ok().and_then(|m| {
+        if let Some((w, h)) = std::env::var("JERA_START").ok().and_then(|m| {
             let (w, h) = m.split_once('x')?;
             Some((w.parse().ok()?, h.parse().ok()?))
         }) {
@@ -72,18 +72,25 @@ fn main() {
         };
         gpui_kit::open_window(options, cx, |window, cx| {
             cx.new(|cx| {
-                cx.observe_window_appearance(window, |_, _, cx| cx.notify()).detach();
-                let mut cockpit = Cockpit::new(window, cx);
+                dock_icoon(window);
+                thema::zet_kit(window, cx);
+                cx.observe_window_appearance(window, |_, window, cx| {
+                    dock_icoon(window);
+                    thema::zet_kit(window, cx);
+                    cx.notify();
+                })
+                .detach();
+                let mut jera = Jera::new(window, cx);
                 if mappen.is_empty() {
-                    cockpit.toon_openen(false, window, cx);
+                    jera.toon_openen(false, window, cx);
                 }
                 for map in mappen {
-                    cockpit.start(map, window, cx);
+                    jera.start(map, window, cx);
                 }
-                Cockpit::volg(window, cx);
+                Jera::volg(window, cx);
                 #[cfg(feature = "schermafdruk")]
                 testhulp(window, cx);
-                cockpit
+                jera
             })
         })
         .expect("venster openen");
@@ -92,24 +99,44 @@ fn main() {
     });
 }
 
-/// COCKPIT_SHOT=pad bewaart elke seconde het venster als afbeelding.
-/// COCKPIT_TYPE=stap|stap typt de stappen een voor een in de gekozen sessie, vanaf acht seconden.
+/// Het icoon in het Dock, donker of licht zoals macOS.
+#[allow(deprecated)]
+fn dock_icoon(window: &Window) {
+    use cocoa::{
+        appkit::{NSApp, NSApplication, NSImage},
+        base::nil,
+        foundation::NSData,
+    };
+    let png: &[u8] = match window.appearance() {
+        WindowAppearance::Light | WindowAppearance::VibrantLight => include_bytes!("../iconen/dock-licht.png"),
+        WindowAppearance::Dark | WindowAppearance::VibrantDark => include_bytes!("../iconen/dock.png"),
+    };
+    // Veilig: de bytes leven zo lang als het programma, en NSData kopieert ze.
+    unsafe {
+        let data = NSData::dataWithBytes_length_(nil, png.as_ptr().cast(), png.len() as u64);
+        NSApp().setApplicationIconImage_(NSImage::initWithData_(NSImage::alloc(nil), data));
+    }
+}
+
+/// JERA_SHOT=pad bewaart elke seconde het venster als afbeelding.
+/// JERA_TYPE=stap|stap typt de stappen een voor een in de gekozen sessie, vanaf acht seconden.
 /// In een stap staat \\r voor Enter en \\e voor Escape. Een stap met @ ervoor gaat naar
-/// `Cockpit::test_stap`. "muis x y" zet de muis op die plek.
+/// `Jera::test_stap`. "muis x y" zet de muis op die plek, "klik x y" klikt daar en "toets x"
+/// drukt die toets in zoals het toetsenbord.
 #[cfg(feature = "schermafdruk")]
-fn testhulp(window: &mut Window, cx: &mut Context<Cockpit>) {
+fn testhulp(window: &mut Window, cx: &mut Context<Jera>) {
     use std::time::Duration;
-    let shot = std::env::var("COCKPIT_SHOT").ok();
-    let typed = std::env::var("COCKPIT_TYPE").unwrap_or_default();
+    let shot = std::env::var("JERA_SHOT").ok();
+    let typed = std::env::var("JERA_TYPE").unwrap_or_default();
     let mut steps: Vec<String> = typed
         .split('|')
         .filter(|step| !step.is_empty())
         .map(|step| step.replace("\\r", "\r").replace("\\e", "\x1b"))
         .rev()
         .collect();
-    // COCKPIT_GROOTTE=900x700|1300x800 zet het venster na het typen op die maten, 30 ms na elkaar,
-    // zoals bij slepen aan de rand. COCKPIT_GROOTTE_NA=seconden: wanneer, standaard 8.
-    let mut maten: Vec<Size<Pixels>> = std::env::var("COCKPIT_GROOTTE")
+    // JERA_GROOTTE=900x700|1300x800 zet het venster na het typen op die maten, 30 ms na elkaar,
+    // zoals bij slepen aan de rand. JERA_GROOTTE_NA=seconden: wanneer, standaard 8.
+    let mut maten: Vec<Size<Pixels>> = std::env::var("JERA_GROOTTE")
         .unwrap_or_default()
         .split('|')
         .filter_map(|maat| {
@@ -119,7 +146,7 @@ fn testhulp(window: &mut Window, cx: &mut Context<Cockpit>) {
         .rev()
         .collect();
     let maten_na: usize =
-        std::env::var("COCKPIT_GROOTTE_NA").ok().and_then(|na| na.parse().ok()).unwrap_or(8);
+        std::env::var("JERA_GROOTTE_NA").ok().and_then(|na| na.parse().ok()).unwrap_or(8);
     cx.spawn_in(window, async move |this, cx| {
         for tick in 1.. {
             cx.background_executor().timer(Duration::from_millis(1000)).await;
@@ -143,12 +170,33 @@ fn testhulp(window: &mut Window, cx: &mut Context<Cockpit>) {
                 }
                 None => step,
             };
+            let step = match step {
+                Some(stap) if stap.starts_with("toets ") => {
+                    if let Ok(toets) = Keystroke::parse(Box::leak(stap[6..].to_string().into_boxed_str())) {
+                        let _ = cx.update(|window, cx| window.dispatch_keystroke(toets, cx));
+                    }
+                    None
+                }
+                Some(stap) if stap.starts_with("klik ") => {
+                    if let Some((x, y)) = stap[5..].split_once(' ').and_then(|(x, y)| Some((x.parse().ok()?, y.parse().ok()?))) {
+                        let _ = cx.update(|window, cx| {
+                            let position = point(px(x), px(y));
+                            let neer = MouseDownEvent { button: MouseButton::Left, position, modifiers: Modifiers::default(), click_count: 1, first_mouse: false };
+                            window.dispatch_event(PlatformInput::MouseDown(neer), cx);
+                            let op = MouseUpEvent { button: MouseButton::Left, position, modifiers: Modifiers::default(), click_count: 1 };
+                            window.dispatch_event(PlatformInput::MouseUp(op), cx);
+                        });
+                    }
+                    None
+                }
+                step => step,
+            };
             let shot = shot.clone();
-            let gedaan = this.update_in(cx, |cockpit, window, cx| {
+            let gedaan = this.update_in(cx, |jera, window, cx| {
                 match step {
-                    Some(step) if step.starts_with('@') => cockpit.test_stap(&step[1..], window, cx),
+                    Some(step) if step.starts_with('@') => jera.test_stap(&step[1..], window, cx),
                     Some(step) => {
-                        if let Some(terminal) = cockpit.gekozen_terminal() {
+                        if let Some(terminal) = jera.gekozen_terminal() {
                             terminal.read(cx).write(step.into_bytes());
                         }
                     }

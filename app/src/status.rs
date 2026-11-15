@@ -18,9 +18,25 @@ impl Status {
     pub fn wacht(self) -> bool {
         matches!(self, Status::Antwoord | Status::Toestemming | Status::NetKlaar)
     }
+
+    /// Claude werkt, of wacht midden in het werk op mij.
+    pub fn bezig(self) -> bool {
+        matches!(self, Status::Bezig | Status::Antwoord | Status::Toestemming)
+    }
+
+    /// Het woord van de status, voor onder de muis.
+    pub fn woord(self) -> &'static str {
+        match self {
+            Status::Bezig => "bezig",
+            Status::Antwoord => "wacht op antwoord",
+            Status::Toestemming => "wacht op toestemming",
+            Status::NetKlaar => "net klaar",
+            Status::Idle => "idle",
+        }
+    }
 }
 
-/// Wat het sessiebestand zegt. Of ik een klare sessie al gezien heb, weet alleen Cockpit.
+/// Wat het sessiebestand zegt. Of ik een klare sessie al gezien heb, weet alleen Jera.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Gelezen {
     Bezig,
@@ -37,7 +53,7 @@ pub struct Bestand {
 }
 
 /// Leest de sessiebestanden. De sleutel is het pid van de ouder van Claude,
-/// bij een sessie van Cockpit de shell die de terminal start.
+/// bij een sessie van Jera de shell die de terminal start.
 #[derive(Default)]
 pub struct Lezer {
     ouders: HashMap<u32, u32>,

@@ -1,6 +1,6 @@
-//! Het scherm Openen: bovenaan "open" en "clone repository", daaronder de mappen
-//! die ik het laatst in Cockpit opende. Een nieuw project gaat via ⌘N.
-//! De recente mappen staan in `~/Library/Application Support/Cockpit/recent.json`,
+//! Het scherm Openen: bovenaan "open" en "clone repository", daaronder het zoekveld en de
+//! mappen die ik het laatst in Jera opende. Een nieuw project gaat via ⌘N.
+//! De recente mappen staan in `~/Library/Application Support/Jera/recent.json`,
 //! de repo's van GitHub komen uit `gh`.
 
 use std::{
@@ -19,13 +19,16 @@ use crate::bestandsicoon;
 use crate::thema::{self as t, Thema};
 use crate::venster::naam;
 
-actions!(cockpit, [OpenProject, NieuwProject]);
+actions!(jera, [OpenProject, NieuwProject]);
 
-/// Een invoerveld neemt de hoogte van zijn vak: één regel tekst.
-const VELD: f32 = t::TEKST * t::REGEL + 2.0;
+/// De regelhoogte van het invoerveld. Met een regelhoogte in verhouding tot de letter tekent
+/// het veld zijn tekst te laag.
+const REGEL: f32 = t::TEKST * t::REGEL;
 /// Een regel met de naam en klein het pad eronder.
 const H_REGEL: f32 = 42.0;
-/// Zoveel mappen onthoudt Cockpit.
+/// De twee regels boven het zoekveld: "open" en "clone repository".
+const VAST: usize = 2;
+/// Zoveel mappen onthoudt Jera.
 const MAX_RECENT: usize = 30;
 
 pub enum OpenenEvent {
@@ -73,7 +76,7 @@ impl Openen {
         let veld = cx.new(|cx| InputState::new(window, cx));
         let volg = cx.subscribe_in(&veld, window, |this, _, event, window, cx| match event {
             InputEvent::Change => {
-                this.gekozen = 0;
+                this.gekozen = VAST;
                 this.fout = None;
                 this.scroll.scroll_to_item(0);
                 cx.notify();
@@ -104,7 +107,7 @@ impl Openen {
 
     fn zet_stand(&mut self, stand: Stand, window: &mut Window, cx: &mut Context<Self>) {
         self.stand = stand;
-        self.gekozen = 0;
+        self.gekozen = VAST;
         self.fout = None;
         let plaats = match stand {
             Stand::Recent => "zoek",
@@ -140,28 +143,30 @@ impl Openen {
         .detach();
     }
 
-    /// De regels die nu te zien zijn, gefilterd op wat er in het zoekveld staat.
+    /// De regels die nu te zien zijn: de twee vaste, en de lijst met alleen de namen waar elk
+    /// woord uit het zoekveld in staat.
     fn regels(&self, cx: &App) -> Vec<Regel> {
         let zoek = self.veld.read(cx).value().to_lowercase();
         let woorden: Vec<&str> = zoek.split_whitespace().collect();
-        let past = |tekst: &str| {
-            let tekst = tekst.to_lowercase();
-            woorden.iter().all(|w| tekst.contains(w))
+        let past = |naam: &str| {
+            let naam = naam.to_lowercase();
+            woorden.iter().all(|w| naam.contains(w))
         };
-        match self.stand {
-            Stand::Recent => [Regel::AndereMap, Regel::Github]
-                .into_iter()
-                .chain(self.recent.iter().filter(|p| past(&p.to_string_lossy())).cloned().map(Regel::Map))
-                .collect(),
-            Stand::Github => self.repos.iter().filter(|r| past(r)).cloned().map(Regel::Repo).collect(),
-            Stand::Nieuw => Vec::new(),
-        }
+        let lijst: Vec<Regel> = match self.stand {
+            Stand::Recent => self.recent.iter().filter(|p| past(&naam(p))).cloned().map(Regel::Map).collect(),
+            Stand::Github => self.repos.iter().filter(|r| past(repo_naam(r))).cloned().map(Regel::Repo).collect(),
+            Stand::Nieuw => return Vec::new(),
+        };
+        [Regel::AndereMap, Regel::Github].into_iter().chain(lijst).collect()
     }
 
     fn kies(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
         let Some(regel) = self.regels(cx).into_iter().nth(index) else { return };
         match regel {
-            Regel::Github => self.zet_stand(Stand::Github, window, cx),
+            Regel::Github => {
+                let stand = if self.stand == Stand::Github { Stand::Recent } else { Stand::Github };
+                self.zet_stand(stand, window, cx)
+            }
             Regel::AndereMap => cx.emit(OpenenEvent::AndereMap),
             Regel::Map(map) => cx.emit(OpenenEvent::Gekozen(map)),
             Regel::Repo(repo) => self.kloon(repo, cx),
@@ -215,7 +220,7 @@ impl Openen {
         let ouder = kies_plek("Kloon hier", cx);
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
             let Some(ouder) = ouder.await else { return };
-            let map = ouder.join(repo.rsplit('/').next().unwrap_or(&repo));
+            let map = ouder.join(repo_naam(&repo));
             let _ = this.update(cx, |this, cx| {
                 this.klonen.insert(repo.clone(), None);
                 cx.notify();
@@ -258,7 +263,7 @@ impl Openen {
             return;
         }
         self.gekozen = (self.gekozen as isize + stap).clamp(0, aantal as isize - 1) as usize;
-        self.scroll.scroll_to_item(self.gekozen);
+        self.scroll.scroll_to_item(self.gekozen.saturating_sub(VAST));
         cx.notify();
     }
 
@@ -274,7 +279,7 @@ impl Openen {
                     Some(Some(fout)) => fout.to_string(),
                     None => repo.clone(),
                 };
-                (repo.rsplit('/').next().unwrap_or(repo).to_string(), Some(onder))
+                (repo_naam(repo).to_string(), Some(onder))
             }
         };
         let icoon = match regel {
@@ -283,6 +288,8 @@ impl Openen {
             Regel::Map(_) | Regel::Repo(_) => None,
         };
         let gekozen = index == self.gekozen;
+        // In de lijst van GitHub is "clone repository" de actieve regel.
+        let actief = matches!(regel, Regel::Github) && self.stand == Stand::Github;
         if let Some(icoon) = icoon {
             return div()
                 .id(("regel", index))
@@ -294,7 +301,8 @@ impl Openen {
                 .pr(px(t::PAD))
                 .border_l(px(t::STREEP))
                 .border_color(transparent_black())
-                .when(gekozen, |d| d.bg(rgb(th.sel)).font_weight(FontWeight::BOLD).border_color(rgb(th.accent)))
+                .when(gekozen || actief, |d| d.font_weight(FontWeight::BOLD))
+                .when(gekozen, |d| d.bg(rgb(th.sel)).border_color(rgb(th.accent)))
                 .when(!gekozen, |d| d.hover(|d| d.bg(rgb(th.sel))))
                 .child(icoon)
                 .child(titel)
@@ -319,29 +327,47 @@ impl Openen {
             .into_any_element()
     }
 
-    /// Het scherm zelf. Het venster tekent het, boven de rest.
+    /// Het scherm zelf. Het venster hangt het onder de tab "+ map".
     pub fn vak(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let th = t::thema(window);
         let regels = self.regels(cx);
+        let mut boven = div().flex_none();
         let mut lijst = div().id("openen-lijst").flex_1().min_h_0().overflow_y_scroll().track_scroll(&self.scroll);
         for (index, regel) in regels.iter().enumerate() {
-            lijst = lijst.child(self.regel(index, regel, th, cx));
-            // Een lijn tussen de twee keuzes bovenaan en de recente mappen.
-            if matches!(regel, Regel::Github) && regels.len() > 2 {
-                lijst = lijst.child(div().h(px(t::LIJN)).bg(rgb(th.line)));
+            let rij = self.regel(index, regel, th, cx);
+            if index < VAST {
+                boven = boven.child(rij);
+            } else {
+                lijst = lijst.child(rij);
             }
         }
-        let leeg = |tekst: &'static str| div().h(px(t::H_RIJ)).px(px(t::PAD)).text_color(rgb(th.mute)).child(tekst);
-        match self.stand {
+        let leeg = match self.stand {
+            _ if regels.len() > VAST => None,
             Stand::Github if self.github_fout && self.repos.is_empty() => {
-                lijst = lijst.child(leeg("GitHub niet bereikbaar. Log in met gh auth login."))
+                Some("GitHub niet bereikbaar. Log in met gh auth login.")
             }
-            Stand::Github if regels.is_empty() => lijst = lijst.child(leeg("Geen repo met deze naam.")),
-            _ => {}
-        }
+            Stand::Github => Some("Geen repo met deze naam."),
+            Stand::Recent if !self.veld.read(cx).value().trim().is_empty() => Some("Geen map met deze naam."),
+            _ => None,
+        };
+        let lijst = lijst.children(leeg.map(|tekst| {
+            div().flex().items_center().h(px(t::H_RIJ)).px(px(t::PAD)).text_color(rgb(th.mute)).child(tekst)
+        }));
+        let lijn = || div().flex_none().h(px(t::LIJN)).bg(rgb(th.line));
+        let veld = div()
+            .flex_none()
+            .flex()
+            .items_center()
+            .gap(px(6.0))
+            .h(px(t::H_RIJ + 8.0))
+            .px(px(t::PAD))
+            .child(div().flex_1().min_w_0().h_full().line_height(px(REGEL)).child(Input::new(&self.veld)))
+            .children(self.fout.map(|fout| div().flex_none().text_color(rgb(th.mute)).child(fout)));
 
+        let lijst_open = self.stand != Stand::Nieuw;
+        let onder = lijst_open && (regels.len() > VAST || leeg.is_some());
         let hoogte = f32::from(window.viewport_size().height) - 2.0 * 64.0;
-        let vak = div()
+        div()
             .id("openen")
             .flex()
             .flex_col()
@@ -350,31 +376,8 @@ impl Openen {
             .bg(rgb(th.bg))
             .border(px(t::LIJN))
             .border_color(rgb(th.line_strong))
+            .text_color(rgb(th.ink))
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-            .child(
-                div()
-                    .flex_none()
-                    .flex()
-                    .items_center()
-                    .gap(px(6.0))
-                    .h(px(t::H_RIJ + 8.0))
-                    .px(px(t::PAD))
-                    .when(self.stand != Stand::Nieuw, |d| d.border_b(px(t::LIJN)).border_color(rgb(th.line)))
-                    .child(div().flex_1().min_w_0().h(px(VELD)).child(Input::new(&self.veld)))
-                    .children(self.fout.map(|fout| div().flex_none().text_color(rgb(th.mute)).child(fout))),
-            )
-            .when(self.stand != Stand::Nieuw, |d| d.child(lijst));
-
-        div()
-            .id("openen-achter")
-            .absolute()
-            .inset_0()
-            .flex()
-            .justify_center()
-            .items_start()
-            .pt(px(64.0))
-            .occlude()
-            .on_mouse_down(MouseButton::Left, cx.listener(|_, _, _, cx| cx.emit(OpenenEvent::Sluit)))
             .capture_key_down(cx.listener(|this, e: &KeyDownEvent, window, cx| {
                 match e.keystroke.key.as_str() {
                     "escape" if this.stand == Stand::Github => this.zet_stand(Stand::Recent, window, cx),
@@ -385,16 +388,29 @@ impl Openen {
                 }
                 cx.stop_propagation();
             }))
-            .child(vak)
+            .when(lijst_open, |d| d.child(boven).child(lijn()))
+            .child(veld)
+            .when(onder, |d| d.child(lijn()).child(lijst))
+            .into_any_element()
+    }
+
+    /// Het vlak achter het scherm: een klik ernaast sluit het.
+    pub fn achter(&self, cx: &mut Context<Self>) -> AnyElement {
+        div()
+            .id("openen-achter")
+            .absolute()
+            .inset_0()
+            .occlude()
+            .on_mouse_down(MouseButton::Left, cx.listener(|_, _, _, cx| cx.emit(OpenenEvent::Sluit)))
             .into_any_element()
     }
 }
 
 fn recent_pad() -> PathBuf {
-    PathBuf::from(std::env::var("HOME").unwrap_or_default()).join("Library/Application Support/Cockpit/recent.json")
+    PathBuf::from(std::env::var("HOME").unwrap_or_default()).join("Library/Application Support/Jera/recent.json")
 }
 
-/// De mappen die ik in Cockpit opende, de laatste eerst. Een map die er niet meer is, valt weg.
+/// De mappen die ik in Jera opende, de laatste eerst. Een map die er niet meer is, valt weg.
 fn lees_recent() -> Vec<PathBuf> {
     let tekst = std::fs::read_to_string(recent_pad()).unwrap_or_default();
     let paden: Vec<String> = serde_json::from_str(&tekst).unwrap_or_default();
@@ -431,10 +447,15 @@ fn kies_plek(knop: &'static str, cx: &mut App) -> impl std::future::Future<Outpu
     async move { paden.await.ok()?.ok()??.into_iter().next() }
 }
 
-/// `gh`, ook als Cockpit buiten de shell start en Homebrew niet in het PATH staat.
+/// `gh`, ook als Jera buiten de shell start en Homebrew niet in het PATH staat.
 pub(crate) fn gh() -> Command {
     let pad = ["/opt/homebrew/bin/gh", "/usr/local/bin/gh"].into_iter().find(|p| Path::new(p).exists()).unwrap_or("gh");
     Command::new(pad)
+}
+
+/// De naam uit eigenaar/naam.
+fn repo_naam(repo: &str) -> &str {
+    repo.rsplit('/').next().unwrap_or(repo)
 }
 
 /// eigenaar/naam van de origin op GitHub.
@@ -454,7 +475,7 @@ pub struct GitHub {
 }
 
 fn cache_pad() -> PathBuf {
-    PathBuf::from(std::env::var("HOME").unwrap_or_default()).join("Library/Application Support/Cockpit/github.json")
+    PathBuf::from(std::env::var("HOME").unwrap_or_default()).join("Library/Application Support/Jera/github.json")
 }
 
 impl GitHub {

@@ -78,7 +78,7 @@ fn kop(pad: &Path) -> Option<(PathBuf, String)> {
     Some((map?, titel?))
 }
 
-/// De sessies die nu draaien, in Cockpit of elders.
+/// De sessies die nu draaien, in Jera of elders.
 fn draaiend(home: &Path) -> HashSet<String> {
     let Ok(map) = std::fs::read_dir(home.join(".claude/sessions")) else { return HashSet::new() };
     map.flatten()

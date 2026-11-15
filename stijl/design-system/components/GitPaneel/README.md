@@ -7,7 +7,7 @@ Geef de branches met hun commits, de dagen, en het moment waarop voor het laatst
 - De branchnamen staan boven de lijnen, getrapt: elke naam op een eigen regel in `branchnaam`, de hoofdbranch bovenaan, in de kleur van zijn lijn.
 - Van elke naam loopt een dunne lijn naar het punt van de branch.
 - Er is geen datumkolom. Elke dag begint met een lijn in `line`; de naam van de dag staat rechts eronder in `klein` en `mute`. `opgehaald` met het tijdstip staat rechts op een gestippelde lijn in `line-strong`, in `warn` als het langer dan een dag geleden is.
-- Alles is recht, net als de rest van Cockpit: een commit is een vierkantje van 6 px, een groep van drie of meer commits een vierkantje van 10 px met het aantal ernaast, het eindpunt van een branch een hol vierkant van 13 px. Een merge is een hol vierkantje. Een branch splitst af met een rechte hoek. De lijnen zijn 2 px.
+- Alles is recht, net als de rest van Jera: een commit is een vierkantje van 6 px, een groep van drie of meer commits een vierkantje van 10 px met het aantal ernaast, het eindpunt van een branch een hol vierkant van 13 px. Een merge is een hol vierkantje. Een branch splitst af met een rechte hoek. De lijnen zijn 2 px.
 - De lijnen gebruiken `lane-1` tot `lane-4`, in die volgorde.
 - De breedte volgt uit het aantal lijnen en de langste naam.
 - De knop `git` in de Render-regel klapt het paneel in. Dan krijgt de terminal de volle breedte.

@@ -10,7 +10,7 @@ use gpui_kit::*;
 
 use crate::openen::{NieuwProject, OpenProject};
 
-actions!(cockpit, [IconenKleur, IconenZed, Stop]);
+actions!(jera, [IconenKleur, IconenZed, Stop]);
 
 /// De iconen in de bestandsboom: van Zed (de standaard) of in kleur (GitLab en Catppuccin).
 static ZED: AtomicBool = AtomicBool::new(true);

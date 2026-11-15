@@ -68,6 +68,9 @@ struct Metrics {
 /// tientallen keren gebeuren, en de tussenversies blijven dan in beeld staan.
 const RUST_NA_SLEPEN: Duration = Duration::from_millis(150);
 
+/// Zo lang staat de cursor aan, en zo lang uit.
+const KNIPPER: Duration = Duration::from_millis(500);
+
 pub enum TerminalEvent {
     /// Het programma heeft een andere titel gezet.
     Titel,
@@ -87,6 +90,11 @@ pub struct TerminalView {
     scroll_rest: f32,
     /// Het thema van de laatste keer tekenen, voor antwoorden op kleurvragen.
     thema: &'static Thema,
+    /// De terminal heeft de focus in een actief venster: de cursor knippert.
+    knippert: bool,
+    /// De cursor is nu te zien.
+    cursor_aan: bool,
+    _knipper: Task<()>,
 }
 
 impl EventEmitter<TerminalEvent> for TerminalView {}
@@ -134,7 +142,36 @@ impl TerminalView {
             pid,
             scroll_rest: 0.0,
             thema: &thema::DONKER,
+            knippert: false,
+            cursor_aan: true,
+            _knipper: Task::ready(()),
         }
+    }
+
+    /// Zet de cursor aan. Met de focus knippert hij vanaf nu opnieuw, zonder staat hij stil.
+    fn knipper(&mut self, cx: &mut Context<Self>) {
+        self.cursor_aan = true;
+        if !self.knippert {
+            self._knipper = Task::ready(());
+            return;
+        }
+        self._knipper = cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
+            loop {
+                cx.background_executor().timer(KNIPPER).await;
+                let wissel = this.update(cx, |view, cx| {
+                    view.cursor_aan = !view.cursor_aan;
+                    cx.notify();
+                });
+                if wissel.is_err() {
+                    break;
+                }
+            }
+        });
+    }
+
+    /// Stopt het programma: de pty gaat dicht en de shell krijgt SIGHUP.
+    pub fn stop(&self) {
+        let _ = self.pty.send(Msg::Shutdown);
     }
 
     pub fn write(&self, bytes: Vec<u8>) {
@@ -200,6 +237,9 @@ impl TerminalView {
             term.selection = None;
         }
         self.write(bytes);
+        // Tijdens het typen blijft de cursor aan.
+        self.knipper(cx);
+        cx.notify();
         cx.stop_propagation();
     }
 
@@ -263,6 +303,12 @@ impl Render for TerminalView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let thema = thema::thema(window);
         self.thema = thema;
+        let knippert = self.focus.is_focused(window) && window.is_window_active();
+        if knippert != self.knippert {
+            self.knippert = knippert;
+            self.knipper(cx);
+        }
+        let cursor_aan = self.cursor_aan;
         let term = self.term.clone();
         let pty = self.pty.clone();
         let metrics = self.metrics.clone();
@@ -278,7 +324,7 @@ impl Render for TerminalView {
                 canvas(
                     |_, _, _| (),
                     move |bounds, _, window, cx| {
-                        paint(bounds, &term, &pty, &metrics, thema, window, cx)
+                        paint(bounds, &term, &pty, &metrics, thema, cursor_aan, window, cx)
                     },
                 )
                 .size_full(),
@@ -324,6 +370,7 @@ fn paint(
     pty: &EventLoopSender,
     metrics: &Mutex<Metrics>,
     thema: &'static Thema,
+    cursor_aan: bool,
     window: &mut Window,
     cx: &mut App,
 ) {
@@ -458,7 +505,7 @@ fn paint(
             let _ = line.paint(cell_origin(batch.row, batch.col), cell_h, TextAlign::Left, None, window, cx);
         }
 
-        if content.cursor.shape != CursorShape::Hidden {
+        if cursor_aan && content.cursor.shape != CursorShape::Hidden {
             let origin = cell_origin(content.cursor.point.line.0 + offset, content.cursor.point.column.0);
             let color = Rgba { a: 0.5, ..default_fg };
             window.paint_quad(fill(Bounds::new(origin, size(cell_w, cell_h)), color));

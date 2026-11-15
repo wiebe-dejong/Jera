@@ -25,7 +25,7 @@ use crate::thema::{self as t, Thema};
 /// Het commando waarmee elke sessie start, via de eigen shell.
 pub const STARTCOMMANDO: &str = "claude";
 
-/// Zo vaak leest Cockpit de sessiebestanden.
+/// Zo vaak leest Jera de sessiebestanden.
 const STATUS_ELKE: Duration = Duration::from_millis(500);
 /// Zonder sessiebestand na deze tijd staat Claude Code op een scherm bij de start, zoals
 /// de vraag of ik de map vertrouw. Daarvoor is het nog aan het starten.
@@ -51,6 +51,8 @@ struct Sessie {
     /// Agents onder de sessieregel open of dicht. Zolang ik niets koos, is alleen de gekozen sessie open.
     agents_open: Option<bool>,
     team_dicht: bool,
+    /// De naam die ik de sessie gaf, in plaats van de titel van Claude.
+    naam: Option<String>,
 }
 
 /// Een map of bestand in de bestandsboom.
@@ -129,6 +131,8 @@ struct NaamVeld {
 
 enum Doel {
     Hernoem(PathBuf),
+    /// De naam van de sessie met dit id.
+    Sessie(usize),
     /// Een map, of een bestand met deze extensie.
     Nieuw { map: PathBuf, ext: Option<&'static str> },
 }
@@ -142,7 +146,7 @@ enum Keuze {
     Prullenmand,
 }
 
-pub struct Cockpit {
+pub struct Jera {
     tabs: Vec<Tab>,
     actief: usize,
     stand: Stand,
@@ -150,12 +154,18 @@ pub struct Cockpit {
     volgende_id: usize,
     lezer: Lezer,
     menu: Option<Menu>,
+    /// Het menu van een twee-vingerklik op de sessie met dit id, op die plek.
+    sessie_menu: Option<(usize, Point<Pixels>)>,
+    /// De tab met deze hoofdmap wacht op het antwoord of hij dicht mag.
+    sluiten: Option<PathBuf>,
+    /// De tab onder de muis: die toont een kruisje in plaats van het aantal.
+    tab_hover: Option<usize>,
     naam_veld: Option<NaamVeld>,
     openen: Entity<Openen>,
     openen_open: bool,
 }
 
-impl Cockpit {
+impl Jera {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let openen = cx.new(|cx| Openen::new(window, cx));
         cx.observe(&openen, |_, _, cx| cx.notify()).detach();
@@ -190,6 +200,9 @@ impl Cockpit {
             volgende_id: 0,
             lezer: Lezer::default(),
             menu: None,
+            sessie_menu: None,
+            sluiten: None,
+            tab_hover: None,
             naam_veld: None,
             openen,
             openen_open: false,
@@ -241,6 +254,7 @@ impl Cockpit {
             agents: Vec::new(),
             agents_open: None,
             team_dicht: false,
+            naam: None,
         });
         tab.gekozen = tab.sessies.len() - 1;
         self.actief = index;
@@ -360,7 +374,8 @@ impl Cockpit {
     /// daarin, "naam tekst" typt die naam in het veld en drukt op Enter. "openen" opent het scherm
     /// Openen, "nieuw" opent het met het naamveld, "zoek tekst" typt in het veld, "github" toont de
     /// repo's van GitHub. "agents" klapt
-    /// de agents van de gekozen sessie open of dicht, "team" het team daarvan.
+    /// de agents van de gekozen sessie open of dicht, "team" het team daarvan. "sessiemenu" opent
+    /// het menu van de gekozen sessie, "sluit" sluit de actieve tab, of vraagt dat eerst.
     #[cfg(feature = "schermafdruk")]
     pub fn test_stap(&mut self, stap: &str, window: &mut Window, cx: &mut Context<Self>) {
         match stap {
@@ -375,6 +390,12 @@ impl Cockpit {
                 match stap {
                     "agents" => self.wissel_agents(id, sessie.agents_open.unwrap_or(true), cx),
                     _ => self.wissel_team(id, cx),
+                }
+            }
+            "sessiemenu" => self.sessie_menu = self.gekozen_id().map(|id| (id, point(px(160.0), px(110.0)))),
+            "sluit" => {
+                if let Some(root) = self.tabs.get(self.actief).map(|tab| tab.root.clone()) {
+                    self.sluit_tab(root, window, cx);
                 }
             }
             "openen" => self.toon_openen(false, window, cx),
@@ -478,6 +499,38 @@ impl Cockpit {
         cx.notify();
     }
 
+    /// Stopt de sessie `id`. Daarna staat hij bij oud.
+    fn stop_sessie(&mut self, id: usize, window: &mut Window, cx: &mut Context<Self>) {
+        self.sessie_menu = None;
+        if let Some(sessie) = self.tabs.iter().flat_map(|tab| &tab.sessies).find(|s| s.id == id) {
+            sessie.terminal.read(cx).stop();
+        }
+        self.verwijder(id, cx);
+        self.focus(window, cx);
+    }
+
+    /// Sluit de tab met `root`. Werkt er een sessie of wacht die op mij, dan vraagt Jera het eerst.
+    fn sluit_tab(&mut self, root: PathBuf, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(index) = self.tabs.iter().position(|tab| tab.root == root) else { return };
+        let vragen = self.sluiten.is_none() && self.tabs[index].sessies.iter().any(|s| s.status.bezig());
+        if vragen {
+            self.sluiten = Some(root);
+            cx.notify();
+            return;
+        }
+        self.sluiten = None;
+        self.tab_hover = None;
+        let tab = self.tabs.remove(index);
+        for sessie in &tab.sessies {
+            sessie.terminal.read(cx).stop();
+        }
+        if self.actief > index || self.actief >= self.tabs.len() {
+            self.actief = self.actief.saturating_sub(1);
+        }
+        self.focus(window, cx);
+        cx.notify();
+    }
+
     fn kies_map(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let paden = cx.prompt_for_paths(PathPromptOptions {
             files: false,
@@ -493,13 +546,48 @@ impl Cockpit {
         .detach();
     }
 
-    fn titelbalk(&self, th: &Thema, cx: &mut Context<Self>) -> impl IntoElement {
+    fn titelbalk(&self, th: &Thema, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let tabs = self.tabs.iter().enumerate().map(|(index, tab)| {
             let actief = index == self.actief;
+            // De slechtste status van de sessies in de tab: rood boven geel boven groen.
+            let slechtste = tab.sessies.iter().map(|s| s.status).min_by_key(|s| *s as u8);
+            let root = tab.root.clone();
+            // Onder de muis staat een kruisje op de plek van het aantal.
+            let rechts = match self.tab_hover == Some(index) {
+                true => div()
+                    .id(("sluit", index))
+                    .flex()
+                    .justify_center()
+                    .w(px(t::ICOON))
+                    .text_color(rgb(th.mute))
+                    .hover(|d| d.text_color(rgb(th.ink)))
+                    .child("×")
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        cx.stop_propagation();
+                        this.sluit_tab(root.clone(), window, cx);
+                    }))
+                    .into_any_element(),
+                false => div().text_color(rgb(th.mute)).child(tab.sessies.len().to_string()).into_any_element(),
+            };
             tab_vak(th, actief)
                 .id(("tab", index))
+                .children(slechtste.map(|status| {
+                    let woord = status.woord();
+                    div()
+                        .id(("tabstatus", index))
+                        .flex_none()
+                        .child(icoon(status, ("tabdraai", index), th))
+                        .tooltip(move |_, cx| cx.new(|_| Tip(woord)).into())
+                }))
                 .child(naam(&tab.root))
-                .child(div().font_weight(FontWeight::NORMAL).text_color(rgb(th.mute)).child(tab.sessies.len().to_string()))
+                .child(div().flex().justify_center().min_w(px(t::ICOON)).font_weight(FontWeight::NORMAL).child(rechts))
+                .on_hover(cx.listener(move |this, hover: &bool, _, cx| {
+                    let nu = if *hover { Some(index) } else { this.tab_hover.filter(|i| *i != index) };
+                    if nu != this.tab_hover {
+                        this.tab_hover = nu;
+                        cx.notify();
+                    }
+                }))
                 .on_click(cx.listener(move |this, _, window, cx| {
                     this.actief = index;
                     this.focus(window, cx);
@@ -520,9 +608,29 @@ impl Cockpit {
                 tab_vak(th, false)
                     .id("map")
                     .child("+ map")
-                    .on_click(cx.listener(|this, _, window, cx| this.toon_openen(false, window, cx))),
+                    .on_click(cx.listener(|this, _, window, cx| this.toon_openen(false, window, cx)))
+                    // Openen hangt onder deze tab. De randen vallen samen met de lijnen van de titelbalk.
+                    .when(self.openen_open, |d| {
+                        let vak = self.openen.update(cx, |openen, cx| openen.vak(window, cx));
+                        d.child(
+                            div()
+                                .absolute()
+                                .top_full()
+                                .left(px(-t::LIJN))
+                                .mt(px(-t::LIJN))
+                                .child(deferred(anchored().snap_to_window().child(vak)).with_priority(2)),
+                        )
+                    }),
             )
             .child(lijn(th))
+            .child(div().flex_1())
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .px(px(t::PAD))
+                    .child(svg().data(LOGO).size(px(t::ICOON)).text_color(rgb(th.ink))),
+            )
     }
 
     fn kolom(&self, th: &Thema, cx: &mut Context<Self>) -> impl IntoElement {
@@ -547,6 +655,7 @@ impl Cockpit {
                 .when(actief, |d| {
                     d.text_color(rgb(th.ink)).font_weight(FontWeight::BOLD).border_color(rgb(th.accent))
                 })
+                .when(!actief, |d| d.hover(|d| d.text_color(rgb(th.ink))))
                 .gap(px(6.0))
                 .child(label)
                 .children(stip.map(|kleur| div().size(px(6.0)).rounded_full().bg(rgb(kleur))))
@@ -620,6 +729,7 @@ impl Cockpit {
                         .justify_center()
                         .w(px(32.0))
                         .h_full()
+                        .hover(|d| d.text_color(rgb(th.ink)))
                         .child("+")
                         .on_click(cx.listener(move |this, _, window, cx| {
                             this.start(map_buf.clone(), window, cx)
@@ -644,8 +754,21 @@ impl Cockpit {
                         .when(gekozen, |d| {
                             d.bg(rgb(th.sel)).font_weight(FontWeight::BOLD).border_color(rgb(th.accent))
                         })
-                        .child(icoon(sessie.status, ("draai", sessie.id), th))
-                        .child(div().flex_1().min_w_0().truncate().child(titel(sessie, cx)))
+                        .when(!gekozen, |d| d.hover(|d| d.bg(rgb(th.sel))))
+                        // Zolang het menu van deze sessie open is, heeft de regel het vlak `sel`.
+                        .when(self.sessie_menu.is_some_and(|(m, _)| m == id), |d| d.bg(rgb(th.sel)))
+                        .child({
+                            let woord = sessie.status.woord();
+                            div()
+                                .id(("status", sessie.id))
+                                .flex_none()
+                                .child(icoon(sessie.status, ("draai", sessie.id), th))
+                                .tooltip(move |_, cx| cx.new(|_| Tip(woord)).into())
+                        })
+                        .child(match self.naam_veld.as_ref().filter(|v| matches!(v.doel, Doel::Sessie(s) if s == id)) {
+                            Some(veld) => self.naam_invoer(veld, th, cx),
+                            None => div().flex_1().min_w_0().truncate().child(titel(sessie, cx)).into_any_element(),
+                        })
                         .when(!sessie.agents.is_empty(), |d| {
                             let bezig = sessie.agents.iter().filter(|a| a.stand == agents::Stand::Bezig).count();
                             d.child(
@@ -653,7 +776,10 @@ impl Cockpit {
                                     .id(("agents", id))
                                     .flex()
                                     .flex_none()
-                                    .child(pijl(if open { PIJL_OPEN } else { PIJL_DICHT }, th))
+                                    .child(
+                                        pijl(if open { PIJL_OPEN } else { PIJL_DICHT }, th)
+                                            .hover(|d| d.text_color(rgb(th.ink))),
+                                    )
                                     .on_click(cx.listener(move |this, _, _, cx| {
                                         cx.stop_propagation();
                                         this.wissel_agents(id, open, cx);
@@ -669,6 +795,13 @@ impl Cockpit {
                                 )
                             })
                         })
+                        .on_mouse_down(
+                            MouseButton::Right,
+                            cx.listener(move |this, e: &MouseDownEvent, _, cx| {
+                                this.sessie_menu = Some((id, e.position));
+                                cx.notify();
+                            }),
+                        )
                         .on_click(cx.listener(move |this, _, window, cx| this.kies_sessie(index, window, cx)));
                     div().child(regel).when(open, |d| d.children(agent_rijen(sessie, index, th, cx)))
                 },
@@ -717,6 +850,7 @@ impl Cockpit {
             .h(px(t::H_RIJ))
             .pl(px(t::PAD))
             .text_color(rgb(th.mute))
+            .hover(|d| d.bg(rgb(th.sel)))
             .child(pijl(if tab.oud_open { PIJL_OPEN } else { PIJL_DICHT }, th))
             .child("oud")
             .child(div().ml(px(2.0)).child(tab.oud.len().to_string()))
@@ -740,6 +874,7 @@ impl Cockpit {
                             .pl(px(t::PAD))
                             .text_size(px(11.0))
                             .text_color(rgb(th.mute))
+                            .hover(|d| d.bg(rgb(th.sel)))
                             .child(div().flex_1().child(dag.clone()))
                             // Rechts, onder de + van de mappen in de sessielijst.
                             .child(
@@ -896,6 +1031,15 @@ impl Cockpit {
         let Some(veld) = self.naam_veld.as_mut() else { return };
         let naam = veld.invoer.read(cx).value().trim().to_string();
         let uitkomst = match &veld.doel {
+            // Leeg zet de titel van Claude terug.
+            Doel::Sessie(id) => {
+                let id = *id;
+                if let Some(sessie) = self.tabs.iter_mut().flat_map(|tab| &mut tab.sessies).find(|s| s.id == id) {
+                    sessie.naam = (!naam.is_empty()).then_some(naam);
+                }
+                self.stop_naam(window, cx);
+                return;
+            }
             Doel::Nieuw { ext, .. } if naam == ext.unwrap_or("") => Err("geen naam"),
             Doel::Hernoem(pad) => bewerk::hernoem(pad, &naam).map(|nieuw| (pad.clone(), nieuw)),
             Doel::Nieuw { map, ext } => bewerk::maak(map, &naam, ext.is_none()).map(|nieuw| (nieuw.clone(), nieuw)),
@@ -1024,6 +1168,150 @@ impl Cockpit {
             ),
         )
         .with_priority(1)
+    }
+
+    /// Het menu van een twee-vingerklik op een sessie: hoe lang hij loopt, dan naam wijzigen en stoppen.
+    fn sessie_menu_vak(&self, id: usize, plek: Point<Pixels>, th: &Thema, cx: &mut Context<Self>) -> Option<impl IntoElement> {
+        let sessie = self.tabs.iter().flat_map(|tab| &tab.sessies).find(|s| s.id == id)?;
+        let regel = |label: &'static str| div().id(label).flex().items_center().gap(px(t::GAP)).h(px(t::H_RIJ)).px(px(t::PAD));
+        let info = |label: &'static str, waarde: String| {
+            regel(label).child(div().flex_1().text_color(rgb(th.mute)).child(label)).child(waarde)
+        };
+        let titel = titel(sessie, cx);
+        Some(
+            deferred(
+                anchored().position(plek).snap_to_window_with_margin(px(8.0)).child(
+                    div()
+                        .id("sessiemenu")
+                        .flex()
+                        .flex_col()
+                        .min_w(px(200.0))
+                        .py(px(4.0))
+                        .bg(rgb(th.bg))
+                        .border(px(t::LIJN))
+                        .border_color(rgb(th.line_strong))
+                        .occlude()
+                        .on_mouse_down_out(cx.listener(|this, _, _, cx| {
+                            this.sessie_menu = None;
+                            cx.notify();
+                        }))
+                        .child(info("looptijd", duur(sessie.gestart.elapsed())))
+                        .child(div().h(px(t::LIJN)).my(px(4.0)).bg(rgb(th.line)))
+                        .child(
+                            regel("naam wijzigen")
+                                .hover(|d| d.bg(rgb(th.sel)))
+                                .child(actie_icoon(HERNOEM, th))
+                                .child("naam wijzigen")
+                                .on_click(cx.listener(move |this, _, window, cx| {
+                                    this.sessie_menu = None;
+                                    let lengte = titel.len();
+                                    this.start_naam(Doel::Sessie(id), &titel, 0..lengte, window, cx);
+                                })),
+                        )
+                        .child(
+                            regel("stoppen")
+                                .hover(|d| d.bg(rgb(th.sel)))
+                                .text_color(rgb(th.bad))
+                                .child(actie_icoon(STOP, th))
+                                .child("stoppen")
+                                .on_click(cx.listener(move |this, _, window, cx| this.stop_sessie(id, window, cx))),
+                        ),
+                ),
+            )
+            .with_priority(1),
+        )
+    }
+
+    /// De vraag of de tab dicht mag terwijl er een sessie werkt, met de sessies waar het om gaat.
+    fn sluit_vraag(&self, root: &Path, th: &Thema, cx: &mut Context<Self>) -> Option<impl IntoElement> {
+        let tab = self.tabs.iter().find(|tab| tab.root == root)?;
+        let rijen = tab.sessies.iter().filter(|s| s.status.bezig()).map(|sessie| {
+            div()
+                .flex()
+                .items_center()
+                .gap(px(t::GAP))
+                .h(px(t::H_RIJ))
+                .px(px(t::PAD))
+                .child(icoon(sessie.status, ("vraagdraai", sessie.id), th))
+                .child(div().flex_1().min_w_0().truncate().child(titel(sessie, cx)))
+        });
+        let root = root.to_path_buf();
+        Some(
+            deferred(
+                div()
+                    .id("sluit-achter")
+                    .absolute()
+                    .inset_0()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .occlude()
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(|this, _, _, cx| {
+                            this.sluiten = None;
+                            cx.notify();
+                        }),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .w(px(420.0))
+                            .bg(rgb(th.bg))
+                            .border(px(t::LIJN))
+                            .border_color(rgb(th.line_strong))
+                            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .h(px(t::H_TITELBALK))
+                                    .px(px(t::PAD))
+                                    .bg(rgb(th.bar))
+                                    .border_b(px(t::LIJN))
+                                    .border_color(rgb(th.line))
+                                    .font_weight(FontWeight::BOLD)
+                                    .child(format!("{} sluiten?", naam(&tab.root))),
+                            )
+                            .child(div().py(px(8.0)).children(rijen))
+                            .child(
+                                div()
+                                    .flex()
+                                    .justify_end()
+                                    .gap(px(8.0))
+                                    .p(px(t::PAD))
+                                    .border_t(px(t::LIJN))
+                                    .border_color(rgb(th.line))
+                                    .child(knop_vak(th).id("annuleren").child("Annuleren").on_click(cx.listener(
+                                        |this, _, _, cx| {
+                                            this.sluiten = None;
+                                            cx.notify();
+                                        },
+                                    )))
+                                    .child(
+                                        // De hoofdknop: vlak in `ink`, tekst in `bg`.
+                                        div()
+                                            .id("toch-sluiten")
+                                            .flex()
+                                            .items_center()
+                                            .h(px(20.0))
+                                            .px(px(8.0))
+                                            .border(px(t::LIJN))
+                                            .bg(rgb(th.ink))
+                                            .border_color(rgb(th.ink))
+                                            .text_color(rgb(th.bg))
+                                            .font_weight(FontWeight::BOLD)
+                                            .child("Toch sluiten")
+                                            .on_click(cx.listener(move |this, _, window, cx| {
+                                                this.sluit_tab(root.clone(), window, cx)
+                                            })),
+                                    ),
+                            ),
+                    ),
+            )
+            .with_priority(3),
+        )
     }
 
     /// Het veld waarin ik een naam typ, met rechts wat er mis is.
@@ -1183,6 +1471,7 @@ impl Cockpit {
                         .w(px(32.0))
                         .h_full()
                         .text_color(rgb(th.mute))
+                        .hover(|d| d.text_color(rgb(th.ink)))
                         .child("+")
                         .on_click(cx.listener(move |this, _, window, cx| {
                             cx.stop_propagation();
@@ -1219,6 +1508,7 @@ impl Cockpit {
                     .border_color(transparent_black())
                     .text_color(rgb(th.mute))
                     .when(self.git_open, |d| d.text_color(rgb(th.ink)).border_color(rgb(th.accent)))
+                    .when(!self.git_open, |d| d.hover(|d| d.text_color(rgb(th.ink))))
                     .child("git")
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.git_open = !this.git_open;
@@ -1228,7 +1518,7 @@ impl Cockpit {
     }
 }
 
-impl Render for Cockpit {
+impl Render for Jera {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let th = t::thema(window);
         if let Some(tab) = self.tabs.get(self.actief) {
@@ -1248,7 +1538,7 @@ impl Render for Cockpit {
             .text_size(px(t::TEKST))
             .line_height(relative(t::REGEL))
             .whitespace_nowrap()
-            .child(self.titelbalk(th, cx))
+            .child(self.titelbalk(th, window, cx))
             .child(
                 div()
                     .flex()
@@ -1282,8 +1572,10 @@ impl Render for Cockpit {
                     ),
             )
             .children(self.menu.as_ref().map(|menu| self.menu_vak(menu, th, cx)))
+            .children(self.sessie_menu.and_then(|(id, plek)| self.sessie_menu_vak(id, plek, th, cx)))
+            .children(self.sluiten.as_deref().and_then(|root| self.sluit_vraag(root, th, cx)))
             .when(self.openen_open, |d| {
-                d.child(deferred(self.openen.update(cx, |openen, cx| openen.vak(window, cx))).with_priority(2))
+                d.child(deferred(self.openen.update(cx, |openen, cx| openen.achter(cx))).with_priority(1))
             })
     }
 }
@@ -1302,8 +1594,10 @@ fn tab_vak(th: &Thema, actief: bool) -> Div {
         .when(actief, |d| {
             d.bg(rgb(th.bg)).text_color(rgb(th.ink)).font_weight(FontWeight::BOLD).border_color(rgb(th.accent))
         })
+        .when(!actief, |d| d.hover(|d| d.text_color(rgb(th.ink))))
 }
 
+const LOGO: &[u8] = include_bytes!("../iconen/jera.svg");
 const BOOG: &[u8] = include_bytes!("../iconen/bezig.svg");
 const SLOT: &[u8] = include_bytes!("../iconen/toestemming.svg");
 const VINK: &[u8] = include_bytes!("../iconen/klaar.svg");
@@ -1316,6 +1610,7 @@ const KOPIEER: &[u8] = include_bytes!("../iconen/kopieer.svg");
 const PLAK: &[u8] = include_bytes!("../iconen/plak.svg");
 const HERNOEM: &[u8] = include_bytes!("../iconen/hernoem.svg");
 const PRULLENMAND: &[u8] = include_bytes!("../iconen/prullenmand.svg");
+const STOP: &[u8] = include_bytes!("../iconen/stop.svg");
 
 /// Het icoon van een actie in het menu, in `mute`.
 fn actie_icoon(data: &'static [u8], th: &Thema) -> AnyElement {
@@ -1383,7 +1678,7 @@ fn icoon(status: Status, id: impl Into<ElementId>, th: &Thema) -> AnyElement {
 /// De agents onder een sessieregel: het team onder een kopje dat dichtklapt, met elk teamlid,
 /// en daaronder een kopje met alleen het aantal subagents. Een klik op een teamlid kiest de sessie,
 /// die op plek `plek` van de tab staat.
-fn agent_rijen(sessie: &Sessie, plek: usize, th: &Thema, cx: &mut Context<Cockpit>) -> Vec<AnyElement> {
+fn agent_rijen(sessie: &Sessie, plek: usize, th: &Thema, cx: &mut Context<Jera>) -> Vec<AnyElement> {
     let id = sessie.id;
     let inspring = px(t::PAD + t::ICOON + t::GAP);
     let kopje = |label: &'static str| {
@@ -1405,6 +1700,7 @@ fn agent_rijen(sessie: &Sessie, plek: usize, th: &Thema, cx: &mut Context<Cockpi
         rijen.push(
             kopje("team")
                 .id(("team", id))
+                .hover(|d| d.bg(rgb(th.sel)))
                 .child(pijl(if dicht { PIJL_DICHT } else { PIJL_OPEN }, th))
                 .child(team.len().to_string())
                 .on_click(cx.listener(move |this, _, _, cx| this.wissel_team(id, cx)))
@@ -1421,6 +1717,7 @@ fn agent_rijen(sessie: &Sessie, plek: usize, th: &Thema, cx: &mut Context<Cockpi
                         .h(px(t::H_RIJ))
                         .pl(inspring)
                         .pr(px(t::PAD))
+                        .hover(|d| d.bg(rgb(th.sel)))
                         .child(agent_icoon(agent.stand, SharedString::from(format!("draai-{id}-{index}")), th))
                         .child(
                             div()
@@ -1496,9 +1793,30 @@ pub(crate) fn knop_vak(th: &Thema) -> Div {
         .border(px(t::LIJN))
         .border_color(rgb(th.line_strong))
         .text_color(rgb(th.ink))
+        .hover(|d| d.bg(rgb(th.sel)))
 }
 
-fn lege_staat(th: &Thema, cx: &mut Context<Cockpit>) -> impl IntoElement {
+/// Het kaartje met één woord dat onder de muis verschijnt, zoals het kaartje in het git-paneel.
+struct Tip(&'static str);
+
+impl Render for Tip {
+    fn render(&mut self, window: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        let th = t::thema(window);
+        div()
+            .px(px(10.0))
+            .py(px(7.0))
+            .bg(rgb(th.bg))
+            .border(px(t::LIJN))
+            .border_color(rgb(th.line_strong))
+            .text_color(rgb(th.ink))
+            .font_family(t::LETTER)
+            .text_size(px(t::TEKST))
+            .line_height(relative(t::REGEL))
+            .child(self.0)
+    }
+}
+
+fn lege_staat(th: &Thema, cx: &mut Context<Jera>) -> impl IntoElement {
     div()
         .flex()
         .flex_col()
@@ -1515,11 +1833,24 @@ fn lege_staat(th: &Thema, cx: &mut Context<Cockpit>) -> impl IntoElement {
         )
 }
 
-/// De titel die Claude Code zet, zonder het tekentje ervoor.
+/// De naam die ik gaf, of de titel die Claude Code zet, zonder het tekentje ervoor.
 /// Zolang die "Claude Code" is, de naam van de map.
 fn titel(sessie: &Sessie, cx: &App) -> String {
+    if let Some(naam) = &sessie.naam {
+        return naam.clone();
+    }
     let titel = sessie.terminal.read(cx).title.trim_start_matches(|c: char| !c.is_alphanumeric());
     if titel.is_empty() || titel == "Claude Code" { naam(&sessie.map) } else { titel.to_string() }
+}
+
+/// Hoe lang iets loopt: `40 s`, `12 min`, `1 u 12 min`.
+fn duur(tijd: Duration) -> String {
+    let minuten = tijd.as_secs() / 60;
+    match minuten {
+        0 => format!("{} s", tijd.as_secs()),
+        1..60 => format!("{minuten} min"),
+        _ => format!("{} u {} min", minuten / 60, minuten % 60),
+    }
 }
 
 /// De map waar `map` in staat, met ~ voor de thuismap.

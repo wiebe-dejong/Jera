@@ -1,4 +1,4 @@
-/* Cockpit: de stijl van alle onderdelen. Elke waarde komt uit tokens.css. */
+/* Jera: de stijl van alle onderdelen. Elke waarde komt uit tokens.css. */
 body{margin:0;background:var(--bg);color:var(--ink);font:400 12.5px/1.3 var(--font-mono);-webkit-font-smoothing:antialiased}
 *,*::before,*::after{box-sizing:border-box}
 button{font:inherit;letter-spacing:inherit;text-transform:inherit;color:inherit;background:none;border:0;padding:0;margin:0;cursor:pointer;text-align:left}
@@ -93,3 +93,8 @@ button:focus-visible{outline:var(--streep) solid var(--ink);outline-offset:-2px}
 .ck-dialoog .ck-voet{display:flex;justify-content:flex-end;gap:8px;padding:var(--pad);border-top:var(--lijn-dikte) solid var(--line)}
 .ck-leeg{display:flex;flex-direction:column;align-items:flex-start;gap:var(--pad);padding:var(--pad);color:var(--mute)}
 .ck-vak{padding:var(--pad)}
+
+/* onder de muis: een rij of knop krijgt het vlak sel, een woord of teken in mute wordt ink */
+button.ck-row:hover,.ck-row.ck-ag:hover,button.ck-agkop:hover,.ck-knop:not(.is-hoofd):hover{background:var(--sel)}
+.ck-tab:hover,.ck-sw button:hover,.ck-gitknop:hover,.ck-grp button:hover,.ck-plus:hover{color:var(--ink)}
+.ck-pijl:hover .s-mute{stroke:var(--ink)}

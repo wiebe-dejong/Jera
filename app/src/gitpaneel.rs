@@ -174,10 +174,16 @@ impl GitPaneel {
             .child(
                 div()
                     .id("eigenaar")
+                    .flex()
                     .flex_1()
                     .min_w_0()
-                    .truncate()
-                    .child(eigenaar)
+                    .items_center()
+                    // Onder de muis een vlak zo hoog als de knop ernaast; het woord blijft op `pad` van de rand.
+                    .h(px(20.0))
+                    .px(px(8.0))
+                    .ml(px(-8.0))
+                    .when(self.eigenaars.len() > 1 && self.maak != Maak::Bezig, |d| d.hover(|d| d.bg(rgb(th.sel))))
+                    .child(div().flex_1().min_w_0().truncate().child(eigenaar))
                     .on_click(cx.listener(|p, _, _, cx| {
                         if !p.eigenaars.is_empty() && p.maak != Maak::Bezig {
                             p.eigenaar = (p.eigenaar + 1) % p.eigenaars.len();
@@ -783,7 +789,9 @@ fn teken(repo: &Repo, staat: &Staat, wd: f32, hh: f32, th: &Thema) -> Tekening {
         let label = format!("{n_agent} agents {}", if staat.agents { "▾" } else { "▸" });
         let w = label.chars().count() as f32 * 11.0 * TEKEN + 16.0;
         let (cx_, cy) = (wd - 8.0 - w / 2.0, 6.0 + 10.0);
-        boven.push(Vorm::Knop { x: cx_ - w / 2.0, y: cy - 10.0, w, h: 20.0, rand: kleur(th.line_strong, 1.0), vul: bg });
+        // Onder de muis krijgt de knop het vlak `sel`. Zijn doel komt hierna op deze plek in de lijst.
+        let vul = if staat.hover == Some(doelen.len()) { kleur(th.sel, 1.0) } else { bg };
+        boven.push(Vorm::Knop { x: cx_ - w / 2.0, y: cy - 10.0, w, h: 20.0, rand: kleur(th.line_strong, 1.0), vul });
         boven.push(tekst(cx_ - w / 2.0 + 8.0, cy - 9.0, label, 11.0, false, kleur(th.ink, 1.0), false));
         doelen.push(Doel { x: cx_, y: cy, rx: w / 2.0, ry: 10.0, tip: Vec::new(), klik: Some(Klik::Agents) });
     }

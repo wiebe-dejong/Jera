@@ -2,7 +2,7 @@ De agents van een sessie, onder haar sessieregel: de teamleden met hun stand, en
 
 **Status:** gekozen op het keuzebord, ronde 4 (15 november 2026).
 
-Geef per sessie haar agents: van een teamlid de naam, de kleur die Claude Code hem gaf en de stand, en het aantal subagents. Waar Cockpit dat leest, staat in `research/agents.md`.
+Geef per sessie haar agents: van een teamlid de naam, de kleur die Claude Code hem gaf en de stand, en het aantal subagents. Waar Jera dat leest, staat in `research/agents.md`.
 
 - Ze staan direct onder de sessieregel, ingesprongen tot onder de titel: `pad` plus `icoon` plus `gap`. Elke regel is `h-rij` hoog.
 - Het pijltje rechts in de sessieregel klapt ze open en dicht. De gekozen sessie begint open. Dicht toont de sessieregel bezig en totaal, zie Sessieregel.

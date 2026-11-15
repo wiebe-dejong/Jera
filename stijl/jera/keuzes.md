@@ -1,4 +1,4 @@
-# Stijl Cockpit: keuzes
+# Stijl Jera: keuzes
 
 Bord: https://claude.ai/artifact/6M7pWS1JLMd6jWtFqZkoj3 (bron: `keuzebord.html`)
 Ronde 4, 2026-11-15. Vast 19, open 0, deels 0, later 0.

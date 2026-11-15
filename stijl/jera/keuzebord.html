@@ -1,5 +1,5 @@
 <meta charset="utf-8">
-<title>Stijl Cockpit</title>
+<title>Stijl Jera</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400;500&family=JetBrains+Mono:wght@400;600;700&family=IBM+Plex+Mono:wght@400;600;700&display=swap">
@@ -87,7 +87,7 @@ body{margin:0;background:var(--c-bg);color:var(--c-fg);font-family:var(--c-ui);p
 .fold span{position:absolute;right:8px;top:4px;font:500 11px var(--c-mono);background:var(--c-acc);color:#fff;padding:2px 6px;letter-spacing:.05em;text-transform:uppercase}
 
 /* ================= OBJECT =================
-   Cockpit: een uitsnede van het Mac-venster, links donker en rechts licht.
+   Jera: een uitsnede van het Mac-venster, links donker en rechts licht.
    Alles wat een beslisgebied kan veranderen is een token (var(--x)) met zijn basiswaarde in BASE.
    Het lichte venster neemt de tokens met -l over. */
 .stage{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -192,7 +192,7 @@ body{margin:0;background:var(--c-bg);color:var(--c-fg);font-family:var(--c-ui);p
 </style>
 <style id="optcss"></style>
 <div class="app">
-  <header class="top"><h1>Stijl Cockpit</h1><span class="round">Ronde 4</span><span class="prog" id="prog" role="img"></span></header>
+  <header class="top"><h1>Stijl Jera</h1><span class="round">Ronde 4</span><span class="prog" id="prog" role="img"></span></header>
   <nav class="tabs" id="tabs" role="tablist" aria-label="Beslisgebieden"></nav>
   <main class="panel" id="panel" role="tabpanel"></main>
 </div>
@@ -538,7 +538,7 @@ function renderTab(tab){
     return `<div class="part"><header class="phd sub"><div class="phd-t"><h2>${p.name}</h2><span class="stc" data-st="${s}"><i class="tile"></i>${STATE_L[s]}${ch?' · '+ch:''}</span></div></header><div class="opts">${(ch?p.opts.filter(o=>o.k===ch):p.opts).map(o=>renderOpt(tab,o,B,bid,p.frags,p.url)).join('')}</div></div>`}).join('');
   return panelHead(tab)+'<div class="opts">'+opts.map(o=>renderOpt(tab,o,B,bid,tab.frags)).join('')+parts+'</div>';
 }
-function renderOpt(tab,o,B,bid,frags,url='Cockpit'){
+function renderOpt(tab,o,B,bid,frags,url='Jera'){
   const id='o'+(++UID);const ctx={...B.c,...(tab.ctx||{}),...(o.ctx||{})};const cls=`${B.cls} ${bid} ${o.cls||''} ${id}`;
   if(o.css)STY.push(o.css.replaceAll('&','.'+id));
   const pages=o.pages||[{url,frags:o.frags||frags}];

@@ -122,7 +122,7 @@ impl TerminalView {
             term,
             pty,
             focus,
-            title: "Cockpit: terminalproef".into(),
+            title: "Jera: terminalproef".into(),
             scroll_rest: 0.0,
         }
     }
@@ -267,14 +267,14 @@ impl Render for TerminalView {
     }
 }
 
-/// COCKPIT_SHOT=pad bewaart elke twee seconden het venster als afbeelding.
-/// COCKPIT_TYPE=stap|stap typt de stappen een voor een in, vanaf acht seconden.
+/// JERA_SHOT=pad bewaart elke twee seconden het venster als afbeelding.
+/// JERA_TYPE=stap|stap typt de stappen een voor een in, vanaf acht seconden.
 /// In een stap staat \\r voor Enter en \\e voor Escape.
 #[cfg(feature = "schermafdruk")]
 fn proef_hulp(pty: EventLoopSender, window: &mut Window, cx: &mut Context<TerminalView>) {
     use std::time::Duration;
-    let shot = std::env::var("COCKPIT_SHOT").ok();
-    let typed = std::env::var("COCKPIT_TYPE").unwrap_or_default();
+    let shot = std::env::var("JERA_SHOT").ok();
+    let typed = std::env::var("JERA_TYPE").unwrap_or_default();
     let mut steps: Vec<String> = typed
         .split('|')
         .filter(|step| !step.is_empty())

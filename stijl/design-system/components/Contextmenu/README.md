@@ -15,3 +15,9 @@ Geef het pad waarop geklikt is en wat er op het klembord van macOS staat.
 - Nieuw en plakken gaan in de map zelf, of in de map waar het bestand in staat.
 - Kopiëren en plakken gaan via het klembord van macOS, dus ook van en naar Finder. Een naam die er al is krijgt `kopie` erachter, zoals in Finder. Plakken loopt op de achtergrond. Zolang het loopt, draait het boogje van bezig (`ok`) rechts in de regel van de map, voor het plusteken; daarna ververst de map.
 - Het naamveld staat in de regel zelf, met een rand in `line-strong`. Bij naam wijzigen is de naam zonder extensie gekozen; bij een nieuw bestand staat de extensie er al en staat de cursor ervoor. Enter of ergens anders klikken bevestigt, Escape annuleert. Wat er mis is staat rechts in `mute`: `bestaat al`, `geen naam`, `geen / in een naam`.
+
+**Bij een sessie** (voorstel, 15 november 2026): een twee-vingerklik op een sessieregel.
+
+- Bovenaan wat er over de sessie te weten is, een regel per feit: het woord in `mute` links, de waarde rechts in `ink`. Nu alleen `looptijd` (`40 s`, `12 min`, `1 u 12 min`).
+- Een lijn in `line`, dan `naam wijzigen` (potlood) en `stoppen` (vierkantje), `stoppen` in `bad`.
+- Naam wijzigen opent het naamveld in de sessieregel, met de titel gekozen. Stoppen stopt Claude meteen; de sessie staat daarna bij oud.
