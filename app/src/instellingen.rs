@@ -9,8 +9,9 @@ use std::{
 use gpui_kit::*;
 
 use crate::openen::{NieuwProject, OpenProject};
+use crate::taal::{self, t};
 
-actions!(jera, [IconenKleur, IconenZed, Stop]);
+actions!(jera, [IconenKleur, IconenZed, TaalNederlands, TaalEngels, Stop]);
 
 /// De iconen in de bestandsboom: van Zed (de standaard) of in kleur (GitLab en Catppuccin).
 static ZED: AtomicBool = AtomicBool::new(true);
@@ -23,8 +24,14 @@ fn bestand() -> PathBuf {
     crate::thuis().join("Library/Application Support/Jera/instellingen.json")
 }
 
-fn bewaar() {
-    let json = serde_json::json!({ "iconen": if zed() { "zed" } else { "kleur" } });
+fn lees() -> serde_json::Value {
+    std::fs::read_to_string(bestand()).ok().and_then(|tekst| serde_json::from_str(&tekst).ok()).unwrap_or_default()
+}
+
+/// Zet `sleutel` op `waarde`; de andere instellingen blijven staan.
+fn bewaar(sleutel: &str, waarde: &str) {
+    let mut json = lees();
+    json[sleutel] = waarde.into();
     let pad = bestand();
     if let Some(map) = pad.parent() {
         let _ = std::fs::create_dir_all(map);
@@ -34,13 +41,17 @@ fn bewaar() {
 
 /// Leest de instellingen en zet het menu.
 pub fn init(cx: &mut App) {
-    if let Ok(tekst) = std::fs::read_to_string(bestand()) {
-        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&tekst) {
-            ZED.store(json["iconen"] != "kleur", Ordering::Relaxed);
-        }
-    }
+    let json = lees();
+    ZED.store(json["iconen"] != "kleur", Ordering::Relaxed);
+    taal::zet_engels(match json["taal"].as_str() {
+        Some("nl") => false,
+        Some("en") => true,
+        _ => taal::macos_engels(),
+    });
     cx.on_action(|_: &IconenKleur, cx| kies_iconen(false, cx));
     cx.on_action(|_: &IconenZed, cx| kies_iconen(true, cx));
+    cx.on_action(|_: &TaalNederlands, cx| kies_taal(false, cx));
+    cx.on_action(|_: &TaalEngels, cx| kies_taal(true, cx));
     cx.on_action(|_: &Stop, cx| cx.quit());
     cx.bind_keys([
         KeyBinding::new("cmd-q", Stop, None),
@@ -52,7 +63,14 @@ pub fn init(cx: &mut App) {
 
 fn kies_iconen(zed: bool, cx: &mut App) {
     ZED.store(zed, Ordering::Relaxed);
-    bewaar();
+    bewaar("iconen", if zed { "zed" } else { "kleur" });
+    menu(cx);
+    cx.refresh_windows();
+}
+
+fn kies_taal(engels: bool, cx: &mut App) {
+    taal::zet_engels(engels);
+    bewaar("taal", if engels { "en" } else { "nl" });
     menu(cx);
     cx.refresh_windows();
 }
@@ -63,14 +81,18 @@ fn keuze(naam: &str, action: impl Action, checked: bool) -> MenuItem {
 
 fn menu(cx: &mut App) {
     cx.set_menus([Menu::new("Jera").items([
-        MenuItem::action("Openen…", OpenProject),
-        MenuItem::action("Nieuw project", NieuwProject),
+        MenuItem::action(t("Openen…", "Open…"), OpenProject),
+        MenuItem::action(t("Nieuw project", "New project"), NieuwProject),
         MenuItem::separator(),
-        MenuItem::submenu(Menu::new("Iconen").items([
-            keuze("Kleur", IconenKleur, !zed()),
-            keuze("Zwartwit", IconenZed, zed()),
+        MenuItem::submenu(Menu::new(t("Iconen", "Icons")).items([
+            keuze(t("Kleur", "Color"), IconenKleur, !zed()),
+            keuze(t("Zwartwit", "Monochrome"), IconenZed, zed()),
+        ])),
+        MenuItem::submenu(Menu::new(t("Taal", "Language")).items([
+            keuze("Nederlands", TaalNederlands, !taal::engels()),
+            keuze("English", TaalEngels, taal::engels()),
         ])),
         MenuItem::separator(),
-        MenuItem::action("Stop Jera", Stop),
+        MenuItem::action(t("Stop Jera", "Quit Jera"), Stop),
     ])]);
 }

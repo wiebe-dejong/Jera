@@ -59,7 +59,7 @@ impl Jera {
                 self.stop_naam(window, cx);
                 return;
             }
-            Doel::Nieuw { ext, .. } if naam == ext.unwrap_or("") => Err("geen naam"),
+            Doel::Nieuw { ext, .. } if naam == ext.unwrap_or("") => Err(t("geen naam", "no name")),
             Doel::Hernoem(pad) => bewerk::hernoem(pad, &naam).map(|nieuw| (pad.clone(), nieuw)),
             Doel::Nieuw { map, ext } => bewerk::maak(map, &naam, ext.is_none()).map(|nieuw| (nieuw.clone(), nieuw)),
         };

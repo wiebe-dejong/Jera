@@ -3,6 +3,8 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use crate::taal::t;
+
 /// Zet `pad` op het klembord van macOS, zoals Kopieer in Finder.
 pub fn kopieer(pad: &Path) {
     let _ = Command::new("osascript")
@@ -44,9 +46,9 @@ pub fn hernoem(pad: &Path, naam: &str) -> Result<PathBuf, &'static str> {
     }
     // Alleen hoofdletters anders is op macOS hetzelfde bestand.
     if nieuw.exists() && !naam.eq_ignore_ascii_case(&pad.file_name().unwrap_or_default().to_string_lossy()) {
-        return Err("bestaat al");
+        return Err(t("bestaat al", "already exists"));
     }
-    std::fs::rename(pad, &nieuw).map_err(|_| "lukt niet")?;
+    std::fs::rename(pad, &nieuw).map_err(|_| t("lukt niet", "failed"))?;
     Ok(nieuw)
 }
 
@@ -54,19 +56,19 @@ pub fn hernoem(pad: &Path, naam: &str) -> Result<PathBuf, &'static str> {
 pub fn maak(map: &Path, naam: &str, is_map: bool) -> Result<PathBuf, &'static str> {
     let nieuw = map.join(geldig(naam)?);
     if nieuw.exists() {
-        return Err("bestaat al");
+        return Err(t("bestaat al", "already exists"));
     }
     let gelukt = match is_map {
         true => std::fs::create_dir(&nieuw).is_ok(),
         false => std::fs::File::create_new(&nieuw).is_ok(),
     };
-    if gelukt { Ok(nieuw) } else { Err("lukt niet") }
+    if gelukt { Ok(nieuw) } else { Err(t("lukt niet", "failed")) }
 }
 
 fn geldig(naam: &str) -> Result<&str, &'static str> {
     match naam {
-        "" | "." | ".." => Err("geen naam"),
-        _ if naam.contains('/') => Err("geen / in een naam"),
+        "" | "." | ".." => Err(t("geen naam", "no name")),
+        _ if naam.contains('/') => Err(t("geen / in een naam", "no / in a name")),
         _ => Ok(naam),
     }
 }
@@ -80,8 +82,8 @@ fn vrije_naam(map: &Path, naam: &str) -> PathBuf {
     (0..)
         .map(|n| match n {
             0 => naam.to_string(),
-            1 => format!("{stam} kopie{ext}"),
-            _ => format!("{stam} kopie {n}{ext}"),
+            1 => format!("{stam} {}{ext}", t("kopie", "copy")),
+            _ => format!("{stam} {} {n}{ext}", t("kopie", "copy")),
         })
         .map(|naam| map.join(naam))
         .find(|pad| !pad.exists())

@@ -1,6 +1,7 @@
 //! De sessies van een tab in de linkerkolom, met hun agents, het menu van een sessie en het blok oud.
 
 use super::*;
+use crate::taal;
 
 /// De agents onder een sessieregel: het team onder een kopje dat dichtklapt, met elk teamlid,
 /// en daaronder een kopje met alleen het aantal subagents. Een klik op een teamlid kiest de sessie,
@@ -89,18 +90,16 @@ pub(super) fn map_label(map: &Path, root: &Path) -> String {
 /// Zoveel regels van het blok oud zijn tegelijk te zien, onder de kop.
 pub(super) const OUD_ZICHTBAAR: usize = 8;
 
-pub(super) const MAANDEN: [&str; 12] = ["jan", "feb", "mrt", "apr", "mei", "jun", "jul", "aug", "sep", "okt", "nov", "dec"];
-
 /// De dag van `tijd`: vandaag, gisteren of bijvoorbeeld 9 nov.
 pub(super) fn dag(tijd: std::time::SystemTime) -> String {
     use chrono::Datelike;
     let datum = chrono::DateTime::<chrono::Local>::from(tijd).date_naive();
     let vandaag = chrono::Local::now().date_naive();
     match (vandaag - datum).num_days() {
-        0 => "vandaag".into(),
-        1 => "gisteren".into(),
-        _ if datum.year() == vandaag.year() => format!("{} {}", datum.day(), MAANDEN[datum.month0() as usize]),
-        _ => format!("{} {} {}", datum.day(), MAANDEN[datum.month0() as usize], datum.year()),
+        0 => t("vandaag", "today").into(),
+        1 => t("gisteren", "yesterday").into(),
+        _ if datum.year() == vandaag.year() => format!("{} {}", datum.day(), taal::maand(datum.month0() as usize)),
+        _ => format!("{} {} {}", datum.day(), taal::maand(datum.month0() as usize), datum.year()),
     }
 }
 
@@ -120,7 +119,7 @@ pub(super) fn duur(tijd: Duration) -> String {
     match minuten {
         0 => format!("{} s", tijd.as_secs()),
         1..60 => format!("{minuten} min"),
-        _ => format!("{} u {} min", minuten / 60, minuten % 60),
+        _ => format!("{} {} {} min", minuten / 60, t("u", "h"), minuten % 60),
     }
 }
 
@@ -318,7 +317,7 @@ impl Jera {
             .text_color(rgb(th.mute))
             .hover(|d| d.bg(rgb(th.sel)))
             .child(pijl(if tab.oud_open { PIJL_OPEN } else { PIJL_DICHT }, th))
-            .child("oud")
+            .child(t("oud", "old"))
             .child(div().ml(px(2.0)).child(tab.oud.len().to_string()))
             .on_click(cx.listener(|this, _, _, cx| this.wissel_oud(cx)));
         let mut lijst = div().id("oud-lijst").overflow_y_scroll();
@@ -397,13 +396,13 @@ impl Jera {
                             this.sessie_menu = None;
                             cx.notify();
                         }))
-                        .child(info("looptijd", duur(sessie.gestart.elapsed())))
+                        .child(info(t("looptijd", "runtime"), duur(sessie.gestart.elapsed())))
                         .child(scheiding(th))
                         .child(
                             regel("naam wijzigen")
                                 .hover(|d| d.bg(rgb(th.sel)))
                                 .child(actie_icoon(HERNOEM, th))
-                                .child("naam wijzigen")
+                                .child(t("naam wijzigen", "rename"))
                                 .on_click(cx.listener(move |this, _, window, cx| {
                                     this.sessie_menu = None;
                                     let lengte = titel.len();
@@ -415,7 +414,7 @@ impl Jera {
                                 .hover(|d| d.bg(rgb(th.sel)))
                                 .text_color(rgb(th.bad))
                                 .child(actie_icoon(STOP, th))
-                                .child("stoppen")
+                                .child(t("stoppen", "stop"))
                                 .on_click(cx.listener(move |this, _, window, cx| this.stop_sessie(id, window, cx))),
                         ),
                 ),

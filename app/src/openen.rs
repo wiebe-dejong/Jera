@@ -16,6 +16,7 @@ use gpui_kit::{
 };
 
 use crate::bestandsicoon;
+use crate::taal::t;
 use crate::thema::{self as t, Thema};
 use crate::venster::naam;
 
@@ -110,9 +111,9 @@ impl Openen {
         self.gekozen = VAST;
         self.fout = None;
         let plaats = match stand {
-            Stand::Recent => "zoek",
-            Stand::Github => "zoek in github",
-            Stand::Nieuw => "naam van het nieuwe project",
+            Stand::Recent => t("zoek", "search"),
+            Stand::Github => t("zoek in github", "search github"),
+            Stand::Nieuw => t("naam van het nieuwe project", "name of the new project"),
         };
         self.veld.update(cx, |veld, cx| {
             veld.set_value("", window, cx);
@@ -177,9 +178,9 @@ impl Openen {
     fn maak(&mut self, cx: &mut Context<Self>) {
         let naam = self.veld.read(cx).value().trim().to_string();
         self.fout = if naam.is_empty() {
-            Some("geen naam")
+            Some(t("geen naam", "no name"))
         } else if naam.contains('/') {
-            Some("geen / in een naam")
+            Some(t("geen / in een naam", "no / in a name"))
         } else {
             None
         };
@@ -187,19 +188,19 @@ impl Openen {
         if self.fout.is_some() {
             return;
         }
-        let ouder = kies_plek("Maak hier", cx);
+        let ouder = kies_plek(t("Maak hier", "Create here"), cx);
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
             let Some(ouder) = ouder.await else { return };
             let map = ouder.join(&naam);
             let uitkomst = if map.exists() {
-                Err("bestaat al")
+                Err(t("bestaat al", "already exists"))
             } else {
                 std::fs::create_dir_all(&map)
                     .ok()
                     .and_then(|_| Command::new("git").arg("init").arg("-q").arg(&map).status().ok())
                     .filter(|s| s.success())
                     .map(|_| ())
-                    .ok_or("mislukt")
+                    .ok_or(t("mislukt", "failed"))
             };
             let _ = this.update(cx, |this, cx| match uitkomst {
                 Ok(()) => cx.emit(OpenenEvent::Gekozen(map)),
@@ -217,7 +218,7 @@ impl Openen {
         if self.klonen.get(&repo).is_some_and(Option::is_none) {
             return;
         }
-        let ouder = kies_plek("Kloon hier", cx);
+        let ouder = kies_plek(t("Kloon hier", "Clone here"), cx);
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
             let Some(ouder) = ouder.await else { return };
             let map = ouder.join(repo_naam(&repo));
@@ -231,12 +232,12 @@ impl Openen {
                 .spawn(async move {
                     if m.exists() {
                         let zelfde = remote(&m).is_some_and(|o| o.eq_ignore_ascii_case(&r));
-                        return if zelfde { Ok(()) } else { Err("bestaat al") };
+                        return if zelfde { Ok(()) } else { Err(t("bestaat al", "already exists")) };
                     }
-                    let uit = gh().args(["repo", "clone", &r]).arg(&m).output().map_err(|_| "mislukt")?;
+                    let uit = gh().args(["repo", "clone", &r]).arg(&m).output().map_err(|_| t("mislukt", "failed"))?;
                     if !uit.status.success() {
                         eprintln!("klonen van {r}: {}", String::from_utf8_lossy(&uit.stderr));
-                        return Err("mislukt");
+                        return Err(t("mislukt", "failed"));
                     }
                     Ok(())
                 })
@@ -275,7 +276,7 @@ impl Openen {
             Regel::Map(map) => (naam(map), Some(tilde(map))),
             Regel::Repo(repo) => {
                 let onder = match self.klonen.get(repo) {
-                    Some(None) => "klonen".to_string(),
+                    Some(None) => t("klonen", "cloning").to_string(),
                     Some(Some(fout)) => fout.to_string(),
                     None => repo.clone(),
                 };
@@ -344,10 +345,10 @@ impl Openen {
         let leeg = match self.stand {
             _ if regels.len() > VAST => None,
             Stand::Github if self.github_fout && self.repos.is_empty() => {
-                Some("GitHub niet bereikbaar. Log in met gh auth login.")
+                Some(t("GitHub niet bereikbaar. Log in met gh auth login.", "GitHub not reachable. Log in with gh auth login."))
             }
-            Stand::Github => Some("Geen repo met deze naam."),
-            Stand::Recent if !self.veld.read(cx).value().trim().is_empty() => Some("Geen map met deze naam."),
+            Stand::Github => Some(t("Geen repo met deze naam.", "No repo with this name.")),
+            Stand::Recent if !self.veld.read(cx).value().trim().is_empty() => Some(t("Geen map met deze naam.", "No folder with this name.")),
             _ => None,
         };
         let lijst = lijst.children(leeg.map(|tekst| {

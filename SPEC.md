@@ -88,6 +88,7 @@ Gemeten op 2026-11-04:
 | Nieuw project | Alleen met ⌘N en in de menubalk: ik typ een naam en kies daarna de map waarin het komt. Jera maakt de map, doet `git init` en start een sessie. Alleen lokaal | 2026-11-15 |
 | Op GitHub | Heeft een repo geen remote, dan toont het git-paneel de eigenaar (een klik wisselt) en de knop Op GitHub. Die maakt een privé repo en zet de code erop | 2026-11-15 |
 | Naam | Jera, naar de rune ᛃ voor oogst: een knipoog naar Hidden Harvest. Het teken is het icoon van de app | 2026-11-15 |
+| Taal | Nederlands en Engels. In de menubalk, onder Jera › Taal, kies ik tussen Nederlands en English. Zonder keuze volgt Jera de eerste taal van macOS: Nederlands als die Nederlands is, anders Engels | 2026-11-15 |
 | Icoon | Het teken ᛃ met rechte uiteinden. Donker: wit `#F4F5F0` op het groen van Hidden Harvest `#1D3A2A`. Licht: omgekeerd. Staat in `stijl/icoon/`. In het Dock wisselt het mee met macOS; rechtsboven in de titelbalk staat het teken in `ink` | 2026-11-15 |
 
 Het design system staat in `stijl/design-system/` en op https://claude.ai/artifact/QKTtDToW7LYRivNM1vYG88: de tokens en een voorbeeld per onderdeel. De feiten bij de stack en de terminal staan in `research/native.md`. De sessiestatus leest Jera uit het sessiebestand van Claude Code; de meting staat in `research/sessies.md`.

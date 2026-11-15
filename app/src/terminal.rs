@@ -125,7 +125,7 @@ impl TerminalView {
         let (pty, pid) = match start(&options, size, term.clone(), proxy) {
             Ok((pty, pid)) => (Some(pty), Some(pid)),
             Err(fout) => {
-                let tekst = format!("De terminal start niet: {fout}\r\n");
+                let tekst = format!("{} {fout}\r\n", crate::taal::t("De terminal start niet:", "The terminal does not start:"));
                 Processor::<vte::ansi::StdSyncHandler>::new().advance(&mut *term.lock(), tekst.as_bytes());
                 (None, None)
             }

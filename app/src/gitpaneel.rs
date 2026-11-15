@@ -16,6 +16,7 @@ use gpui_kit::{prelude::FluentBuilder, *};
 
 use crate::git::{self, Branch, Commit, Repo, Tov};
 use crate::openen::{GitHub, gh};
+use crate::taal;
 use crate::thema::{self as t, Thema};
 
 /// Zo oud mogen de gelezen branches zijn als het paneel open is.
@@ -191,12 +192,12 @@ impl GitPaneel {
                         }
                     })),
             )
-            .when(self.maak == Maak::Mislukt, |d| d.child(div().text_color(rgb(th.mute)).child("mislukt")))
+            .when(self.maak == Maak::Mislukt, |d| d.child(div().text_color(rgb(th.mute)).child(taal::t("mislukt", "failed"))))
             .child(match self.maak {
-                Maak::Bezig => div().text_color(rgb(th.mute)).child("maken").into_any_element(),
+                Maak::Bezig => div().text_color(rgb(th.mute)).child(taal::t("maken", "creating")).into_any_element(),
                 Maak::Niet | Maak::Mislukt if self.eigenaars.is_empty() => div().into_any_element(),
-                Maak::Niet => knop("Op GitHub").on_click(cx.listener(|p, _, _, cx| p.op_github(cx))).into_any_element(),
-                Maak::Mislukt => knop("Opnieuw").on_click(cx.listener(|p, _, _, cx| p.op_github(cx))).into_any_element(),
+                Maak::Niet => knop(taal::t("Op GitHub", "To GitHub")).on_click(cx.listener(|p, _, _, cx| p.op_github(cx))).into_any_element(),
+                Maak::Mislukt => knop(taal::t("Opnieuw", "Retry")).on_click(cx.listener(|p, _, _, cx| p.op_github(cx))).into_any_element(),
             })
     }
 
@@ -231,7 +232,7 @@ impl GitPaneel {
                 .min_h_0()
                 .p(px(t::PAD))
                 .text_color(rgb(th.mute))
-                .when(self.geen_git, |d| d.child("Geen git in deze map"))
+                .when(self.geen_git, |d| d.child(taal::t("Geen git in deze map", "No git in this folder")))
                 .into_any_element();
         };
         let staat = Staat { agents: self.agents, open: self.open.clone(), hover: self.hover };
@@ -354,34 +355,31 @@ fn middernacht(ts: i64) -> i64 {
     Local.from_local_datetime(&d.and_hms_opt(0, 0, 0).unwrap_or_default()).earliest().map_or(ts, |d| d.timestamp())
 }
 
-const MAANDEN: [&str; 12] = ["jan", "feb", "mrt", "apr", "mei", "jun", "jul", "aug", "sep", "okt", "nov", "dec"];
-const DAGEN: [&str; 7] = ["ma", "di", "wo", "do", "vr", "za", "zo"];
-
 fn datum(ts: i64) -> String {
     let d = Local.timestamp_opt(ts, 0).single().unwrap_or_default();
-    format!("{} {}, {:02}:{:02}", d.day(), MAANDEN[d.month0() as usize], d.hour(), d.minute())
+    format!("{} {}, {:02}:{:02}", d.day(), taal::maand(d.month0() as usize), d.hour(), d.minute())
 }
 
 fn dag_naam(ts: i64, nu: i64) -> String {
     let (v, d) = (middernacht(nu), middernacht(ts));
     if d == v {
-        return "vandaag".into();
+        return taal::t("vandaag", "today").into();
     }
     if d == middernacht(v - 3600) {
-        return "gisteren".into();
+        return taal::t("gisteren", "yesterday").into();
     }
     let t = Local.timestamp_opt(ts, 0).single().unwrap_or_default();
-    format!("{} {} {}", DAGEN[t.weekday().num_days_from_monday() as usize], t.day(), MAANDEN[t.month0() as usize])
+    format!("{} {} {}", taal::weekdag(t.weekday().num_days_from_monday() as usize), t.day(), taal::maand(t.month0() as usize))
 }
 
 fn geleden(ts: i64, nu: i64) -> String {
     let s = nu - ts;
-    for (n, naam) in [(2592000, "mnd"), (604800, "wk"), (86400, "d"), (3600, "u")] {
+    for (n, naam) in [(2592000, taal::t("mnd", "mo")), (604800, "wk"), (86400, "d"), (3600, taal::t("u", "h"))] {
         if s >= n {
             return format!("{} {naam}", s / n);
         }
     }
-    "nu".into()
+    taal::t("nu", "now").into()
 }
 
 /// De volgorde van de lijnen: de hoofdbranch, dan steeds wat erop aansluit.
@@ -627,14 +625,16 @@ fn titel(c: &Commit) -> String {
 fn tov_tip(ind: &Indeling, naam: &str, lijst: &[Tov]) -> Vec<(String, Soort)> {
     let rijen: Vec<&Tov> = lijst.iter().filter(|o| ind.in_l(o.naam.trim_start_matches("origin/"))).collect();
     let w = rijen.iter().map(|o| o.naam.chars().count()).max().unwrap_or(0).min(26);
-    let mut uit = vec![(naam.to_string(), Soort::Kop), (format!("{:w$}  extra  mist", ""), Soort::Mute)];
+    let mist = taal::t("mist", "missing");
+    let m = mist.chars().count();
+    let mut uit = vec![(naam.to_string(), Soort::Kop), (format!("{:w$}  extra  {mist}", ""), Soort::Mute)];
     for o in rijen {
         let n = kort(&o.naam);
         let regel = if o.extra == 0 && o.mist == 0 {
-            format!("{n:w$}  gelijk")
+            format!("{n:w$}  {}", taal::t("gelijk", "same"))
         } else {
             let s = |v: u32| if v == 0 { "–".to_string() } else { v.to_string() };
-            format!("{n:w$}  {:>5}  {:>4}", s(o.extra), s(o.mist))
+            format!("{n:w$}  {:>5}  {:>m$}", s(o.extra), s(o.mist))
         };
         uit.push((regel, Soort::Gewoon));
     }
@@ -712,7 +712,7 @@ fn teken_tijd(tek: &mut Tekening, ind: &Indeling, wd: f32, hh: f32, th: &Thema) 
         };
         let k = kleur(if oud { th.warn } else { th.line_strong }, 1.0);
         onder.push(lijn(vec![(0.0, yf + 0.5), (wd, yf + 0.5)], 1.0, k, Some([3.0, 4.0])));
-        boven.push(tekst(wd - 8.0, yf + 3.0, format!("opgehaald {wanneer}"), t::KLEIN, oud, if oud { k } else { kleur(th.mute, 1.0) }, true));
+        boven.push(tekst(wd - 8.0, yf + 3.0, format!("{} {wanneer}", taal::t("opgehaald", "fetched")), t::KLEIN, oud, if oud { k } else { kleur(th.mute, 1.0) }, true));
     }
 }
 
@@ -828,7 +828,7 @@ fn teken_branch(tek: &mut Tekening, ind: &Indeling, staat: &Staat, i: usize, hh:
                     let mut tip = vec![(format!("{n} commits"), Soort::Kop)];
                     tip.extend(run.iter().take(8).map(|(c, _)| (format!("{}  {}", datum(c.ts), titel(c)), Soort::Gewoon)));
                     if n > 8 {
-                        tip.push((format!("+{} meer", n - 8), Soort::Mute));
+                        tip.push((format!("+{} {}", n - 8, taal::t("meer", "more")), Soort::Mute));
                     }
                     doelen.push(doel(xi, yy, 11.0, tip, Some(Klik::Groep(key))));
                 }

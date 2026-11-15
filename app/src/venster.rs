@@ -32,6 +32,7 @@ use crate::gitpaneel::GitPaneel;
 use crate::openen::{NieuwProject, OpenProject, Openen, OpenenEvent};
 use crate::oud::{self, Oud};
 use crate::status::{Gelezen, Lezer, Status};
+use crate::taal::t;
 use crate::terminal::{TerminalEvent, TerminalView};
 use crate::thema::{self as t, Thema};
 
@@ -296,8 +297,8 @@ impl Jera {
 
     /// Voor de testhulp: "kies N" kiest sessie N van de tab, "sessies" en "bestanden" de stand,
     /// "klik pad" klikt in de bestandsboom op dat pad, vanaf de hoofdmap, "zed" en "kleur" kiezen
-    /// de iconen zoals het menu, "oud" klapt het blok oud open of dicht, "dag D" klapt die dag
-    /// in het blok oud open of dicht, "hervat N" hervat de oude sessie op plek N en "git" klapt het
+    /// de iconen zoals het menu, "nl" en "en" de taal, "oud" klapt het blok oud open of dicht,
+    /// "dag D" klapt die dag in het blok oud open of dicht, "hervat N" hervat de oude sessie op plek N en "git" klapt het
     /// git-paneel open of dicht. "menu pad" opent het menu van dat pad, "keuze woord" kiest
     /// daarin, "naam tekst" typt die naam in het veld en drukt op Enter. "openen" opent het scherm
     /// Openen, "nieuw" opent het met het naamveld, "zoek tekst" typt in het veld, "github" toont de
@@ -341,6 +342,8 @@ impl Jera {
             }
             "zed" => window.dispatch_action(Box::new(crate::instellingen::IconenZed), cx),
             "kleur" => window.dispatch_action(Box::new(crate::instellingen::IconenKleur), cx),
+            "nl" => window.dispatch_action(Box::new(crate::instellingen::TaalNederlands), cx),
+            "en" => window.dispatch_action(Box::new(crate::instellingen::TaalEngels), cx),
             _ if stap.starts_with("menu ") => {
                 if let Some(root) = self.tabs.get(self.actief).map(|tab| tab.root.clone()) {
                     self.open_menu(root.join(&stap[5..]), point(px(160.0), px(120.0)), cx);
@@ -535,7 +538,7 @@ impl Jera {
             .child(
                 tab_vak(th, false)
                     .id("map")
-                    .child("+ map")
+                    .child(t("+ map", "+ folder"))
                     .on_click(cx.listener(|this, _, window, cx| this.toon_openen(false, window, cx)))
                     // Openen hangt onder deze tab. De randen vallen samen met de lijnen van de titelbalk.
                     .when(self.openen_open, |d| {
@@ -605,8 +608,8 @@ impl Jera {
             .px(px(t::PAD))
             .border_b(px(t::LIJN))
             .border_color(rgb(th.line))
-            .child(knop(Stand::Sessies, "sessies"))
-            .child(knop(Stand::Bestanden, "bestanden"));
+            .child(knop(Stand::Sessies, t("sessies", "sessions")))
+            .child(knop(Stand::Bestanden, t("bestanden", "files")));
 
         let inhoud = match (self.stand, self.tabs.get(self.actief)) {
             (Stand::Sessies, Some(tab)) => self.sessielijst(tab, th, cx).into_any_element(),
@@ -682,7 +685,10 @@ impl Jera {
                                     .border_b(px(t::LIJN))
                                     .border_color(rgb(th.line))
                                     .font_weight(FontWeight::BOLD)
-                                    .child(format!("{} sluiten?", naam(&tab.root))),
+                                    .child(match crate::taal::engels() {
+                                        true => format!("Close {}?", naam(&tab.root)),
+                                        false => format!("{} sluiten?", naam(&tab.root)),
+                                    }),
                             )
                             .child(div().py(px(8.0)).children(rijen))
                             .child(
@@ -693,7 +699,7 @@ impl Jera {
                                     .p(px(t::PAD))
                                     .border_t(px(t::LIJN))
                                     .border_color(rgb(th.line))
-                                    .child(knop_vak(th).id("annuleren").child("Annuleren").on_click(cx.listener(
+                                    .child(knop_vak(th).id("annuleren").child(t("Annuleren", "Cancel")).on_click(cx.listener(
                                         |this, _, _, cx| {
                                             this.sluiten = None;
                                             cx.notify();
@@ -712,7 +718,7 @@ impl Jera {
                                             .border_color(rgb(th.ink))
                                             .text_color(rgb(th.bg))
                                             .font_weight(FontWeight::BOLD)
-                                            .child("Toch sluiten")
+                                            .child(t("Toch sluiten", "Close anyway"))
                                             .on_click(cx.listener(move |this, _, window, cx| {
                                                 this.sluit_tab(root.clone(), window, cx)
                                             })),
@@ -825,11 +831,11 @@ fn lege_staat(th: &Thema, cx: &mut Context<Jera>) -> impl IntoElement {
         .gap(px(t::PAD))
         .p(px(t::PAD))
         .text_color(rgb(th.mute))
-        .child("Nog geen sessie.")
+        .child(t("Nog geen sessie.", "No session yet."))
         .child(
             knop_vak(th)
                 .id("leeg-map")
-                .child("+ map")
+                .child(t("+ map", "+ folder"))
                 .on_click(cx.listener(|this, _, window, cx| this.toon_openen(false, window, cx))),
         )
 }

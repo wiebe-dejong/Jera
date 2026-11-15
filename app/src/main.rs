@@ -14,6 +14,7 @@ mod instellingen;
 mod openen;
 mod oud;
 mod status;
+mod taal;
 mod terminal;
 mod thema;
 mod venster;

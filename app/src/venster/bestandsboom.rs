@@ -188,7 +188,7 @@ impl Jera {
                 })
                 .when(!kan, |d| d.text_color(rgb(th.mute)))
         };
-        let nieuw = regel("nieuw", actie_icoon(NIEUW, th), "nieuw", Some(pijl(PIJL_DICHT, th).into_any_element()))
+        let nieuw = regel("nieuw", actie_icoon(NIEUW, th), t("nieuw", "new"), Some(pijl(PIJL_DICHT, th).into_any_element()))
             .when(menu.nieuw_open, |d| d.bg(rgb(th.sel)))
             .on_hover(cx.listener(|this, hover: &bool, _, cx| {
                 if *hover {
@@ -208,11 +208,16 @@ impl Jera {
             vak()
                 // De randen van beide vakken vallen samen.
                 .ml(px(-t::LIJN))
-                .child(soort("soort-map", bestandsicoon::map(false, th), "map", None))
+                .child(soort("soort-map", bestandsicoon::map(false, th), t("map", "folder"), None))
                 .child(scheiding())
                 .children(SOORTEN.iter().map(|(label, ext)| {
                     let icoon = bestandsicoon::bestand(Path::new(&format!("naam{ext}")), th);
-                    soort(label, icoon, label, Some(*ext))
+                    let woord = match *label {
+                        "bestand" => t("bestand", "file"),
+                        "tekst" => t("tekst", "text"),
+                        _ => label,
+                    };
+                    soort(label, icoon, woord, Some(*ext))
                 }))
         });
         deferred(
@@ -229,12 +234,12 @@ impl Jera {
                         vak()
                             .child(nieuw)
                             .child(scheiding())
-                            .child(actie(Keuze::Kopieer, KOPIEER, "kopiëren", true))
-                            .child(actie(Keuze::Plak, PLAK, "plakken", !menu.plakbaar.is_empty()))
+                            .child(actie(Keuze::Kopieer, KOPIEER, t("kopiëren", "copy"), true))
+                            .child(actie(Keuze::Plak, PLAK, t("plakken", "paste"), !menu.plakbaar.is_empty()))
                             .when(!hoofdmap, |d| {
                                 d.child(scheiding())
-                                    .child(actie(Keuze::Hernoem, HERNOEM, "naam wijzigen", true))
-                                    .child(actie(Keuze::Prullenmand, PRULLENMAND, "naar prullenmand", true))
+                                    .child(actie(Keuze::Hernoem, HERNOEM, t("naam wijzigen", "rename"), true))
+                                    .child(actie(Keuze::Prullenmand, PRULLENMAND, t("naar prullenmand", "move to trash"), true))
                             }),
                     )
                     .children(soorten),

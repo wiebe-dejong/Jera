@@ -89,12 +89,11 @@ app/bundel.sh
 
 ## Status
 
-Early, and built for one person's workflow first. Expect rough edges. The interface is in Dutch for now (`sessies`, `bestanden`, `oud`).
+Early, and built for one person's workflow first. Expect rough edges. The interface comes in Dutch and English (Jera › Language).
 
 Coming next:
 - Tab works inside a session
 - Git commands from the UI, not just the graph
-- Dutch and English interface
 - Several Claude sessions in one view
 - A project stays open when it has no sessions
 - Browser and ports: every listening port (open or kill) and running `agent-browser` instances
