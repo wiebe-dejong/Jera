@@ -1,11 +1,12 @@
-//! De branches van een repo, voor het git-paneel.
+//! De branches van een repo, voor het git-paneel, en wat het paneel ermee doet:
+//! commit, push, update, checkout en verwijderen, per branch.
 //! Zonder `gh`: de branch van een PR staat in de merge-commit.
 
 use std::{
     collections::{HashMap, HashSet},
-    path::Path,
-    process::Command,
-    sync::{LazyLock, Mutex},
+    io::Write,
+    path::{Path, PathBuf},
+    process::{Command, Stdio},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -17,8 +18,6 @@ pub struct Commit {
     pub ts: i64,
     /// De branch waar een merge vandaan kwam.
     pub van: Option<String>,
-    /// Bij een merge: hoeveel commits hij meebracht.
-    pub n: u32,
 }
 
 pub struct Punt {
@@ -40,8 +39,14 @@ pub struct Branch {
     pub vast: bool,
     /// De worktree van deze branch is de map van de tab.
     pub hier: bool,
-    /// De worktree van deze branch heeft wijzigingen.
+    /// De worktree van deze branch heeft wijzigingen, of Jera parkeerde ze bij een checkout.
     pub gewijzigd: bool,
+    /// Waar de branch uitgecheckt staat: de map van de tab of een andere worktree.
+    pub map: Option<PathBuf>,
+    /// Hoeveel bestanden in die map nog niet gecommit zijn, nieuwe bestanden meegeteld.
+    pub wijzigingen: u32,
+    /// Hoeveel bestanden Jera bij een checkout bij deze branch parkeerde.
+    pub geparkeerd: u32,
     pub alleen_origin: bool,
     pub origin: Option<Origin>,
     pub basis: Option<String>,
@@ -50,8 +55,6 @@ pub struct Branch {
     pub eigen: Vec<Commit>,
     pub op_origin: Vec<Commit>,
     pub oud: Vec<Commit>,
-    /// Commits die ook als losse commit op de basis staan.
-    pub dubbel: HashSet<String>,
     pub uniek: u32,
 }
 
@@ -61,10 +64,6 @@ pub struct Repo {
     pub hoofd: String,
     pub branches: Vec<Branch>,
 }
-
-/// Hoeveel commits een merge meebracht, per merge-commit. Een commit verandert nooit, dus dit
-/// hoeft maar één keer geteld te worden.
-static MEEGEBRACHT: LazyLock<Mutex<HashMap<String, u32>>> = LazyLock::new(Mutex::default);
 
 fn git(map: &Path, args: &[&str]) -> String {
     Command::new("git")
@@ -88,6 +87,18 @@ pub fn haal_op(map: &Path) {
     let _ = Command::new("git").env("GIT_TERMINAL_PROMPT", "0").arg("-C").arg(map).args(["fetch", "-q", "origin"]).output();
 }
 
+/// De patch-id van een diff: gelijk als twee diffs dezelfde wijziging zijn.
+fn patch_id(map: &Path, args: &[&str]) -> String {
+    let diff = Command::new("git").env("GIT_OPTIONAL_LOCKS", "0").arg("-C").arg(map).args(args).output().map(|u| u.stdout).unwrap_or_default();
+    let Ok(mut kind) = Command::new("git").arg("-C").arg(map).args(["patch-id", "--stable"]).stdin(Stdio::piped()).stdout(Stdio::piped()).spawn() else {
+        return String::new();
+    };
+    if let Some(mut invoer) = kind.stdin.take() {
+        let _ = invoer.write_all(&diff);
+    }
+    kind.wait_with_output().map(|u| String::from_utf8_lossy(&u.stdout).split_whitespace().next().unwrap_or("").to_string()).unwrap_or_default()
+}
+
 /// Leest de branches. `None` als de map geen git-repo is.
 pub fn lees(map: &Path) -> Option<Repo> {
     let g = |args: &[&str]| git(map, args);
@@ -109,15 +120,23 @@ pub fn lees(map: &Path) -> Option<Repo> {
 
     // de worktrees: welke branch waar staat, en of er wijzigingen zijn
     let hier_pad = std::fs::canonicalize(map).ok();
-    let mut worktrees: HashMap<String, (bool, bool)> = HashMap::new();
+    let mut worktrees: HashMap<String, (bool, u32, PathBuf)> = HashMap::new();
     let mut pad = String::new();
     for regel in g(&["worktree", "list", "--porcelain"]).lines() {
         if let Some(p) = regel.strip_prefix("worktree ") {
             pad = p.to_string();
         } else if let Some(b) = regel.strip_prefix("branch refs/heads/") {
             let hier = std::fs::canonicalize(&pad).ok() == hier_pad;
-            let gewijzigd = git(Path::new(&pad), &["status", "--porcelain"]).lines().any(|l| !l.starts_with("??") && !l.is_empty());
-            worktrees.insert(b.to_string(), (hier, gewijzigd));
+            let n = git(Path::new(&pad), &["status", "--porcelain", "-uall"]).lines().filter(|l| !l.is_empty()).count() as u32;
+            worktrees.insert(b.to_string(), (hier, n, PathBuf::from(&pad)));
+        }
+    }
+    // wat Jera bij een checkout bij zijn branch parkeerde
+    let mut geparkeerd: HashMap<String, u32> = HashMap::new();
+    for (i, regel) in g(&["stash", "list", "--format=%gs"]).lines().enumerate() {
+        if let Some(b) = regel.strip_prefix("On ").and_then(|r| r.strip_suffix(PARKEER)) {
+            let n = g(&["stash", "show", "--include-untracked", "--name-only", &format!("stash@{{{i}}}")]).lines().count() as u32;
+            *geparkeerd.entry(b.to_string()).or_default() += n;
         }
     }
 
@@ -167,17 +186,7 @@ pub fn lees(map: &Path) -> Option<Repo> {
                         van = Some(c.clone());
                     }
                 }
-                let n = if ouders.len() > 1 {
-                    let bekend = MEEGEBRACHT.lock().unwrap().get(h).copied();
-                    bekend.unwrap_or_else(|| {
-                        let n = count(ouders[0], h, &[]).saturating_sub(1);
-                        MEEGEBRACHT.lock().unwrap().insert(h.to_string(), n);
-                        n
-                    })
-                } else {
-                    0
-                };
-                Some(Commit { h: h.to_string(), ts: ts.parse().unwrap_or(0), van, n })
+                Some(Commit { h: h.to_string(), ts: ts.parse().unwrap_or(0), van })
             })
             .collect()
     };
@@ -234,9 +243,9 @@ pub fn lees(map: &Path) -> Option<Repo> {
             basis = None;
         }
         let op_origin = if achter { lijst(n, &r, eigen_origin.as_deref(), 40) } else { Vec::new() };
-        let (mut mb, mut merged_into, mut eigen, mut dubbel, mut uniek) = (None, None, Vec::new(), HashSet::new(), 0);
+        let (mut mb, mut merged_into, mut eigen, mut uniek) = (None, None, Vec::new(), 0);
         if let Some(b) = &basis {
-            let m = info(&g(&["merge-base", &best(b), &top]));
+            let mut m = info(&g(&["merge-base", &best(b), &top]));
             eigen = lijst(n, &m.h, Some(&r), 300);
             for regel in g(&["log", "--first-parent", "--merges", "-n60", "--format=%H|%ct|%P", &best(b)]).lines() {
                 let v: Vec<&str> = regel.split('|').collect();
@@ -245,24 +254,43 @@ pub fn lees(map: &Path) -> Option<Repo> {
                     break;
                 }
             }
-            // dezelfde wijziging aan beide kanten, als losse commit op elke branch gezet
-            let bereik = format!("{}...{top}", best(b));
-            let hier: HashSet<String> = g(&["rev-list", &format!("{}..{top}", best(b))]).lines().map(str::to_string).collect();
-            for regel in g(&["log", "--no-merges", "--cherry-mark", "--left-right", "--format=%m|%H", &bereik]).lines() {
-                match regel.split_once('|') {
-                    Some(("=", h)) if hier.contains(h) => {
-                        dubbel.insert(h.to_string());
+            // gemerged: de merge-base is dan het eindpunt zelf; het echte aftakpunt ligt onder de merge
+            if let Some(mi) = &merged_into {
+                m = info(&g(&["merge-base", &format!("{}^1", mi.h), &top]));
+                eigen = lijst(n, &m.h, Some(&r), 300);
+            } else if !eigen.is_empty() {
+                // een squash-merge: een PR-commit op de basis met precies de wijziging van deze branch
+                let eigen_id = patch_id(map, &["diff", &m.h, &top]);
+                for regel in g(&["log", "--first-parent", "--no-merges", "-n60", "--format=%H|%ct|%s", &format!("{}..{}", m.h, best(b))]).lines() {
+                    let v: Vec<&str> = regel.splitn(3, '|').collect();
+                    if v.len() == 3
+                        && v[2].trim_end().ends_with(')')
+                        && v[2].contains("(#")
+                        && !eigen_id.is_empty()
+                        && patch_id(map, &["diff", &format!("{}^", v[0]), v[0]]) == eigen_id
+                    {
+                        merged_into = Some(Punt { h: v[0].to_string(), ts: v[1].parse().unwrap_or(0) });
+                        break;
                     }
-                    Some((">", _)) => uniek += 1,
-                    _ => {}
                 }
+            }
+            // eigen werk: niet als losse commit ook op de basis gezet
+            let bereik = format!("{}...{top}", best(b));
+            uniek = g(&["log", "--no-merges", "--cherry-mark", "--left-right", "--format=%m", &bereik]).lines().filter(|m| *m == ">").count() as u32;
+            if merged_into.is_some() {
+                uniek = eigen.len() as u32;
             }
             mb = Some(m);
         }
         let gezien: HashSet<&str> = eigen.iter().chain(&op_origin).map(|c| c.h.as_str()).collect();
         let oud: Vec<Commit> =
             lijst(n, &top, None, 150 + gezien.len()).into_iter().filter(|c| !gezien.contains(c.h.as_str()) && c.h != eind.h).collect();
-        let (hier, gewijzigd) = worktrees.get(n).copied().unwrap_or((false, false));
+        let (hier, wijzigingen, map) = match worktrees.get(n) {
+            Some((hier, w, pad)) => (*hier, *w, Some(pad.clone())),
+            None => (false, 0, None),
+        };
+        let geparkeerd = geparkeerd.get(n).copied().unwrap_or(0);
+        let gewijzigd = wijzigingen + geparkeerd > 0;
         branches.push(Branch {
             naam: n.clone(),
             h: eind.h,
@@ -270,6 +298,9 @@ pub fn lees(map: &Path) -> Option<Repo> {
             vast: VAST.contains(&n.as_str()),
             hier,
             gewijzigd,
+            map,
+            wijzigingen,
+            geparkeerd,
             alleen_origin,
             origin,
             basis,
@@ -278,7 +309,6 @@ pub fn lees(map: &Path) -> Option<Repo> {
             eigen,
             op_origin,
             oud,
-            dubbel,
             uniek,
         });
     }
@@ -293,3 +323,192 @@ pub fn lees(map: &Path) -> Option<Repo> {
     Some(Repo { nu, opgehaald, hoofd, branches })
 }
 
+
+/// Het bericht waarmee Jera wijzigingen bij een checkout parkeert: `git stash` maakt er "On branch: jera" van.
+const PARKEER: &str = ": jera";
+
+/// Een git-commando dat iets verandert. Bij een fout: de eerste regel van wat git zei.
+fn doe(map: &Path, args: &[&str]) -> Result<(), String> {
+    let uit = Command::new("git")
+        // nooit wachten op een wachtwoord: dan hangt het paneel
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .arg("-C")
+        .arg(map)
+        .args(args)
+        .output()
+        .map_err(|e| e.to_string())?;
+    if uit.status.success() {
+        return Ok(());
+    }
+    let tekst = [uit.stderr, uit.stdout].map(|b| String::from_utf8_lossy(&b).into_owned()).join("\n");
+    Err(tekst.lines().map(str::trim).find(|l| !l.is_empty() && !l.starts_with("hint:")).unwrap_or("mislukt").to_string())
+}
+
+/// Commit alles wat in de map gewijzigd is, ook nieuwe bestanden.
+pub fn commit(map: &Path, bericht: &str) -> Result<(), String> {
+    doe(map, &["add", "-A"])?;
+    doe(map, &["commit", "-q", "-m", bericht])
+}
+
+/// Pusht een branch; een branch die nog niet op GitHub staat krijgt daar een upstream.
+pub fn push(map: &Path, branch: &str, nieuw: bool) -> Result<(), String> {
+    if nieuw { doe(map, &["push", "-q", "-u", "origin", branch]) } else { doe(map, &["push", "-q", "origin", branch]) }
+}
+
+/// Haalt binnen wat op GitHub verder is. Staat de branch uitgecheckt, dan met een rebase in die map, die bij een
+/// conflict wordt teruggedraaid. Anders alleen als het zonder samenvoegen kan.
+pub fn update(root: &Path, branch: &str, map: Option<&Path>) -> Result<(), String> {
+    let Some(map) = map else {
+        return doe(root, &["fetch", "-q", "origin", &format!("{branch}:{branch}")]);
+    };
+    doe(map, &["pull", "-q", "--rebase", "--autostash", "origin", branch]).map_err(|fout| {
+        let bezig = ["rebase-merge", "rebase-apply"].iter().any(|d| Path::new(&git(map, &["rev-parse", "--path-format=absolute", "--git-path", d])).exists());
+        if bezig {
+            let _ = doe(map, &["rebase", "--abort"]);
+            crate::taal::t("conflict · vraag Claude om samen te voegen", "conflict · ask Claude to merge").to_string()
+        } else {
+            fout
+        }
+    })
+}
+
+/// Zet de map op een andere branch. Wat in de map niet gecommit is, blijft geparkeerd bij zijn branch;
+/// wat bij de nieuwe branch geparkeerd stond, komt terug.
+pub fn checkout(map: &Path, branch: &str) -> Result<(), String> {
+    let gewijzigd = !git(map, &["status", "--porcelain", "-uall"]).is_empty();
+    if gewijzigd {
+        doe(map, &["stash", "push", "-q", "-u", "-m", "jera"])?;
+    }
+    if let Err(fout) = doe(map, &["switch", "-q", branch]) {
+        if gewijzigd {
+            let _ = doe(map, &["stash", "pop", "-q"]);
+        }
+        return Err(fout);
+    }
+    let terug = format!("On {branch}{PARKEER}");
+    let stashes: Vec<String> = git(map, &["stash", "list", "--format=%gs"]).lines().map(str::to_string).collect();
+    // van hoog naar laag, zodat de nummers van de rest niet verschuiven
+    for (i, _) in stashes.iter().enumerate().filter(|(_, s)| **s == terug).collect::<Vec<_>>().into_iter().rev() {
+        doe(map, &["stash", "pop", "-q", &format!("stash@{{{i}}}")])?;
+    }
+    Ok(())
+}
+
+/// Verwijdert een gemergde branch, hier en op GitHub.
+pub fn verwijder(map: &Path, branch: &str, lokaal: bool, op_github: bool) -> Result<(), String> {
+    if lokaal {
+        // -D: een squash-merge ziet git niet als gemerged
+        doe(map, &["branch", "-q", "-D", branch])?;
+    }
+    if op_github {
+        doe(map, &["push", "-q", "origin", "--delete", branch])?;
+    }
+    Ok(())
+}
+
+/// Een commitbericht van één regel voor de wijzigingen, geschreven door Claude (`claude -p`).
+/// Claude draait buiten de repo, zodat er geen sessie bij dit project bijkomt.
+pub fn bericht(map: &Path) -> Option<String> {
+    let mut diff = git(map, &["diff", "HEAD"]);
+    if diff.is_empty() {
+        diff = git(map, &["diff"]);
+    }
+    if diff.len() > 40_000 {
+        let mut eind = 40_000;
+        while !diff.is_char_boundary(eind) {
+            eind -= 1;
+        }
+        diff.truncate(eind);
+    }
+    let prompt = format!(
+        "Schrijf het commitbericht voor deze wijzigingen: één regel, in dezelfde taal en stijl als de eerdere berichten. \
+         Geef alleen het bericht, zonder aanhalingstekens.\n\nEerdere berichten:\n{}\n\nGewijzigd:\n{}\n\nDiff:\n{diff}",
+        git(map, &["log", "-8", "--format=%s"]),
+        git(map, &["status", "--short", "-uall"]),
+    );
+    let eigen = std::env::home_dir().map(|h| h.join(".local/bin/claude")).filter(|p| p.exists());
+    let mut cmd = match eigen {
+        Some(pad) => Command::new(pad),
+        None => {
+            let mut c = Command::new("/bin/zsh");
+            c.args(["-ilc", "claude \"$@\"", "claude"]);
+            c
+        }
+    };
+    let mut kind = cmd
+        // kaal: zonder tools, MCP, skills en instellingen, en een korte systeemprompt; scheelt de helft
+        .args(["-p", "--model", "haiku", "--tools", "", "--strict-mcp-config", "--disable-slash-commands", "--no-session-persistence"])
+        .args(["--setting-sources", "", "--system-prompt", "Je schrijft commitberichten."])
+        .current_dir(std::env::temp_dir())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .ok()?;
+    kind.stdin.take()?.write_all(prompt.as_bytes()).ok()?;
+    let uit = kind.wait_with_output().ok()?;
+    if !uit.status.success() {
+        return None;
+    }
+    let regel = String::from_utf8_lossy(&uit.stdout).lines().map(str::trim).find(|l| !l.is_empty())?.trim_matches(['"', '`', '\'']).to_string();
+    (!regel.is_empty()).then_some(regel)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Een lege repo in een eigen tijdelijke map, met één commit op main.
+    fn repo(naam: &str) -> PathBuf {
+        let map = std::env::temp_dir().join(format!("jera-git-{naam}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&map);
+        std::fs::create_dir_all(&map).unwrap();
+        for args in [&["init", "-q", "-b", "main"][..], &["config", "user.email", "t@t"], &["config", "user.name", "t"]] {
+            doe(&map, args).unwrap();
+        }
+        std::fs::write(map.join("a.txt"), "a\n").unwrap();
+        commit(&map, "eerste").unwrap();
+        map
+    }
+
+    fn branch<'a>(r: &'a Repo, naam: &str) -> &'a Branch {
+        r.branches.iter().find(|b| b.naam == naam).unwrap()
+    }
+
+    #[test]
+    fn checkout_parkeert_wijzigingen_bij_hun_branch() {
+        let map = repo("parkeer");
+        doe(&map, &["branch", "feat/x"]).unwrap();
+        std::fs::write(map.join("a.txt"), "a\nwip\n").unwrap();
+        std::fs::write(map.join("nieuw.txt"), "n\n").unwrap();
+        assert_eq!(branch(&lees(&map).unwrap(), "main").wijzigingen, 2);
+
+        checkout(&map, "feat/x").unwrap();
+        assert_eq!(std::fs::read_to_string(map.join("a.txt")).unwrap(), "a\n");
+        assert!(!map.join("nieuw.txt").exists());
+        let r = lees(&map).unwrap();
+        assert_eq!((branch(&r, "main").geparkeerd, branch(&r, "main").wijzigingen), (2, 0));
+        assert!(branch(&r, "feat/x").hier && !branch(&r, "feat/x").gewijzigd);
+
+        checkout(&map, "main").unwrap();
+        assert_eq!(std::fs::read_to_string(map.join("a.txt")).unwrap(), "a\nwip\n");
+        assert!(map.join("nieuw.txt").exists());
+        let r = lees(&map).unwrap();
+        assert_eq!((branch(&r, "main").geparkeerd, branch(&r, "main").wijzigingen), (0, 2));
+        let _ = std::fs::remove_dir_all(&map);
+    }
+
+    #[test]
+    fn verwijder_haalt_een_gemergde_branch_weg() {
+        let map = repo("verwijder");
+        doe(&map, &["switch", "-q", "-c", "feat/y"]).unwrap();
+        std::fs::write(map.join("y.txt"), "y\n").unwrap();
+        commit(&map, "y").unwrap();
+        doe(&map, &["switch", "-q", "main"]).unwrap();
+        doe(&map, &["merge", "-q", "--no-ff", "-m", "Merge branch 'feat/y'", "feat/y"]).unwrap();
+        assert!(branch(&lees(&map).unwrap(), "feat/y").merged_into.is_some());
+        verwijder(&map, "feat/y", true, false).unwrap();
+        assert!(!lees(&map).unwrap().branches.iter().any(|b| b.naam == "feat/y"));
+        let _ = std::fs::remove_dir_all(&map);
+    }
+}

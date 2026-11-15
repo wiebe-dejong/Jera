@@ -1,4 +1,5 @@
-//! Het git-paneel: de branches van de repo als graaf, rechts naast de terminal.
+//! Het git-paneel: de branches van de repo als graaf, rechts naast de terminal. Een klik op een branch
+//! opent zijn menu: commit, push, update, checkout en verwijderen; bij de hoofdbranch ook opruimen.
 //! De stijl komt uit `stijl/design-system/components/GitPaneel`:
 //! recht, de namen getrapt boven de lijnen, de dagen rechts op hun lijn.
 
@@ -12,7 +13,11 @@ use std::{
 };
 
 use chrono::{Datelike, Local, TimeZone, Timelike};
-use gpui_kit::{prelude::FluentBuilder, *};
+use gpui_kit::{
+    base::input::{Input, InputEvent, InputState},
+    prelude::FluentBuilder,
+    *,
+};
 
 use crate::git::{self, Branch, Commit, Repo};
 use crate::openen::{GitHub, gh};
@@ -32,12 +37,8 @@ const RN: f32 = 18.0; // een regel in de kop met de namen
 const RUIMTE: f32 = 4.0; // kleinste afstand tussen twee randen
 const LIJN: f32 = 1.5;
 const PUNT: f32 = 3.0;
-const DUB: f32 = 2.0;
-const MERGE: f32 = 3.4;
-const GROEP: f32 = 4.8;
 const KOP: f32 = 6.5;
 const KOP_LIJN: f32 = 2.0;
-const HIER: f32 = 8.0;
 /// Breedte van een teken in JetBrains Mono, per px lettergrootte.
 const TEKEN: f32 = 0.6;
 
@@ -60,6 +61,32 @@ pub struct GitPaneel {
     zichtbaar: bool,
     opgehaald: Option<Instant>,
     haalt_op: bool,
+    /// Claude is bezig in deze repo: dan geen checkout, want die verandert de bestanden onder Claude.
+    claude_bezig: bool,
+    /// Het menu van een branch: de naam en waar ik klikte.
+    menu: Option<(String, Point<Pixels>)>,
+    /// Het veld voor het commitbericht, zolang het open is.
+    veld: Option<Veld>,
+    /// Wat Jera nu doet, zoals "pushen feat/x".
+    bezig: Option<String>,
+    fout: Option<String>,
+}
+
+struct Veld {
+    branch: String,
+    map: PathBuf,
+    invoer: Entity<InputState>,
+    _volg: Subscription,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum Actie {
+    Commit,
+    Push { nieuw: bool },
+    Update,
+    Checkout,
+    Verwijder,
+    Opruimen,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -88,7 +115,216 @@ impl GitPaneel {
             zichtbaar: false,
             opgehaald: None,
             haalt_op: false,
+            claude_bezig: false,
+            menu: None,
+            veld: None,
+            bezig: None,
+            fout: None,
         }
+    }
+
+    pub fn zet_claude_bezig(&mut self, bezig: bool, cx: &mut Context<Self>) {
+        if bezig != self.claude_bezig {
+            self.claude_bezig = bezig;
+            cx.notify();
+        }
+    }
+
+    fn sluit_menu(&mut self, cx: &mut Context<Self>) {
+        self.menu = None;
+        self.veld = None;
+        cx.notify();
+    }
+
+    /// Doet een actie uit het menu op de achtergrond, en leest daarna opnieuw.
+    fn doe(&mut self, actie: Actie, naam: String, cx: &mut Context<Self>) {
+        let Some(repo) = self.repo.clone() else { return };
+        let Some(b) = repo.branches.iter().find(|b| b.naam == naam) else { return };
+        if self.bezig.is_some() {
+            return;
+        }
+        let root = self.root.clone();
+        let map = b.map.clone();
+        let taak: Box<dyn FnOnce() -> Result<(), String> + Send> = match actie {
+            Actie::Commit => {
+                let bericht = self.veld.as_ref().map(|v| v.invoer.read(cx).value().trim().to_string()).unwrap_or_default();
+                let Some(map) = self.veld.as_ref().map(|v| v.map.clone()) else { return };
+                if bericht.is_empty() {
+                    return;
+                }
+                Box::new(move || git::commit(&map, &bericht))
+            }
+            Actie::Push { nieuw } => Box::new(move || git::push(&root, &naam, nieuw)),
+            Actie::Update => Box::new(move || git::update(&root, &naam, map.as_deref())),
+            Actie::Checkout => Box::new(move || git::checkout(&root, &naam)),
+            Actie::Verwijder => {
+                let (lokaal, op_github) = (!b.alleen_origin, b.alleen_origin || b.origin.is_some());
+                Box::new(move || git::verwijder(&root, &naam, lokaal, op_github))
+            }
+            Actie::Opruimen => {
+                let weg: Vec<(String, bool, bool)> =
+                    repo.branches.iter().filter(|b| gemerged(b)).map(|b| (b.naam.clone(), !b.alleen_origin, b.alleen_origin || b.origin.is_some())).collect();
+                Box::new(move || weg.iter().try_for_each(|(n, lokaal, op_github)| git::verwijder(&root, n, *lokaal, *op_github)))
+            }
+        };
+        let woord = match actie {
+            Actie::Commit => taal::t("committen", "committing"),
+            Actie::Push { .. } => taal::t("pushen", "pushing"),
+            Actie::Update => taal::t("updaten", "updating"),
+            Actie::Checkout => taal::t("checkout", "checking out"),
+            Actie::Verwijder => taal::t("verwijderen", "deleting"),
+            Actie::Opruimen => taal::t("opruimen", "cleaning up"),
+        };
+        self.bezig = Some(if actie == Actie::Opruimen { woord.to_string() } else { format!("{woord} {}", kort(&b.naam)) });
+        self.fout = None;
+        self.menu = None;
+        cx.notify();
+        cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
+            let uitkomst = cx.background_executor().spawn(async move { taak() }).await;
+            let _ = this.update(cx, |p, cx| {
+                p.bezig = None;
+                match uitkomst {
+                    Ok(()) => p.veld = None,
+                    Err(fout) => p.fout = Some(fout),
+                }
+                p.gelezen = None;
+                p.ververs(cx);
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// Opent het veld voor het commitbericht in het menu. Claude schrijft een voorstel; wat ik intussen typ blijft staan.
+    fn open_veld(&mut self, naam: String, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(map) = self.repo.as_ref().and_then(|r| r.branches.iter().find(|b| b.naam == naam)).and_then(|b| b.map.clone()) else { return };
+        let invoer = cx.new(|cx| {
+            let mut veld = InputState::new(window, cx);
+            veld.set_placeholder("…", window, cx);
+            veld
+        });
+        invoer.update(cx, |veld, cx| veld.focus(window, cx));
+        let tak = naam.clone();
+        let volg = cx.subscribe_in(&invoer, window, move |this, _, event, _, cx| {
+            if let InputEvent::PressEnter { .. } = event {
+                this.doe(Actie::Commit, tak.clone(), cx);
+            }
+        });
+        self.veld = Some(Veld { branch: naam, map: map.clone(), invoer: invoer.clone(), _volg: volg });
+        cx.notify();
+        cx.spawn_in(window, async move |this, cx| {
+            let bericht = cx.background_executor().spawn(async move { git::bericht(&map) }).await;
+            let _ = this.update_in(cx, |p, window, cx| {
+                // alleen als dit veld nog open is en leeg
+                if p.veld.as_ref().is_some_and(|v| v.invoer == invoer) && invoer.read(cx).value().is_empty() {
+                    invoer.update(cx, |veld, cx| match bericht {
+                        Some(bericht) => veld.set_value(bericht, window, cx),
+                        None => veld.set_placeholder(taal::t("bericht", "message"), window, cx),
+                    });
+                }
+            });
+        })
+        .detach();
+    }
+
+    /// Het menu van een branch, op de plek van de klik: alleen wat bij die branch kan.
+    fn menu_vak(&self, th: &Thema, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let (naam, plek) = self.menu.clone()?;
+        let repo = self.repo.clone()?;
+        let b = repo.branches.iter().find(|b| b.naam == naam)?;
+        let regel = |id: &'static str| div().id(id).flex().items_center().gap(px(t::GAP)).h(px(t::H_RIJ)).px(px(t::PAD));
+        let mut vak = crate::venster::menuvak(th).id("branchmenu").min_w(px(200.0)).on_mouse_down_out(cx.listener(|p, _, _, cx| {
+            if p.bezig.is_none() {
+                p.sluit_menu(cx);
+            }
+        }));
+        if let Some(veld) = self.veld.as_ref().filter(|v| v.branch == naam) {
+            let rechts = if self.bezig.is_some() {
+                div().flex_none().text_color(rgb(th.mute)).child(taal::t("committen", "committing")).into_any_element()
+            } else {
+                let tak = naam.clone();
+                crate::venster::knop_vak(th)
+                    .id("commit-ok")
+                    .child("commit")
+                    .on_click(cx.listener(move |p, _, _, cx| p.doe(Actie::Commit, tak.clone(), cx)))
+                    .into_any_element()
+            };
+            vak = vak.w(px(340.0)).child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(t::GAP))
+                    .px(px(t::PAD))
+                    .py(px(4.0))
+                    .child(div().flex_1().min_w_0().px(px(4.0)).border(px(t::LIJN)).border_color(rgb(th.line_strong)).child(Input::new(&veld.invoer)))
+                    .child(rechts)
+                    .capture_key_down(cx.listener(|p, e: &KeyDownEvent, _, cx| {
+                        if e.keystroke.key == "escape" && p.bezig.is_none() {
+                            cx.stop_propagation();
+                            p.sluit_menu(cx);
+                        }
+                    })),
+            );
+        } else {
+            let lijst = acties(&repo, b, self.remote == Some(true));
+            if lijst.is_empty() {
+                vak = vak.child(regel("niets").text_color(rgb(th.mute)).child(taal::t("niets te doen", "nothing to do")));
+            }
+            let mut vorige_gevaarlijk = true;
+            for (actie, rechts) in lijst {
+                let gevaarlijk = matches!(actie, Actie::Verwijder | Actie::Opruimen);
+                if gevaarlijk && !vorige_gevaarlijk {
+                    vak = vak.child(crate::venster::scheiding(th));
+                }
+                vorige_gevaarlijk = gevaarlijk;
+                let (id, woord): (&'static str, &'static str) = match actie {
+                    Actie::Commit => ("commit", "commit"),
+                    Actie::Push { .. } => ("push", "push"),
+                    Actie::Update => ("update", "update"),
+                    Actie::Checkout => ("checkout", "checkout"),
+                    Actie::Verwijder => ("verwijder", taal::t("verwijder", "delete")),
+                    Actie::Opruimen => ("opruimen", taal::t("opruimen", "clean up")),
+                };
+                // geen checkout zolang Claude bezig is
+                let kan = !(actie == Actie::Checkout && self.claude_bezig);
+                let rechts = if kan { rechts } else { taal::t("Claude bezig", "Claude working").to_string() };
+                let tak = naam.clone();
+                vak = vak.child(
+                    regel(id)
+                        .text_color(rgb(if !kan { th.mute } else if gevaarlijk { th.bad } else { th.ink }))
+                        .child(div().flex_1().child(woord))
+                        .child(div().text_color(rgb(th.mute)).child(rechts))
+                        .when(kan, |d| {
+                            d.hover(|d| d.bg(rgb(th.sel))).on_click(cx.listener(move |p, _, window, cx| match actie {
+                                Actie::Commit => p.open_veld(tak.clone(), window, cx),
+                                _ => p.doe(actie, tak.clone(), cx),
+                            }))
+                        }),
+                );
+            }
+        }
+        Some(deferred(anchored().position(plek).snap_to_window_with_margin(px(8.0)).child(vak)).with_priority(1).into_any_element())
+    }
+
+    /// Bovenaan het paneel, zolang Jera iets doet of als het mislukte.
+    fn melding_rij(&self, th: &Thema) -> Option<impl IntoElement> {
+        let (tekst, kleur) = match (&self.bezig, &self.fout) {
+            (Some(bezig), _) => (bezig.clone(), th.mute),
+            (None, Some(fout)) => (fout.clone(), th.ink),
+            (None, None) => return None,
+        };
+        Some(
+            div()
+                .flex()
+                .flex_none()
+                .items_center()
+                .h(px(t::H_RIJ + 8.0))
+                .px(px(t::PAD))
+                .border_b(px(t::LIJN))
+                .border_color(rgb(th.line))
+                .text_color(rgb(kleur))
+                .child(div().w_full().min_w_0().truncate().child(tekst)),
+        )
     }
 
     /// Of het paneel open staat. Bij het openen haalt het meteen op.
@@ -268,7 +504,9 @@ impl Render for GitPaneel {
             .flex_col()
             .h_full()
             .when(self.remote == Some(false), |d| d.min_w(px(270.0)).child(self.op_github_rij(th, cx)))
+            .children(self.melding_rij(th))
             .child(self.graaf(window, cx))
+            .children(self.menu_vak(th, cx))
     }
 }
 
@@ -299,15 +537,31 @@ impl GitPaneel {
             .overflow_hidden()
             .on_mouse_down(
                 MouseButton::Left,
-                cx.listener(|this, e: &MouseDownEvent, _, cx| {
-                    let Some(i) = this.doel_op(e.position) else { return };
-                    match this.doelen.borrow()[i].klik.clone() {
+                cx.listener(|this, e: &MouseDownEvent, window, cx| {
+                    if this.bezig.is_none() {
+                        this.fout = None;
+                    }
+                    let Some(i) = this.doel_op(e.position) else {
+                        cx.notify();
+                        return;
+                    };
+                    let klik = this.doelen.borrow()[i].klik.clone();
+                    match klik {
                         Klik::Groep(key) => {
                             if !this.open.remove(&key) {
                                 this.open.insert(key);
                             }
                         }
                         Klik::Agents => this.agents = !this.agents,
+                        Klik::Branch(naam) => {
+                            this.veld = None;
+                            this.menu = Some((naam, e.position));
+                        }
+                        // een klik op het open bolletje opent meteen het commitveld
+                        Klik::Commit(naam) => {
+                            this.menu = Some((naam.clone(), e.position));
+                            this.open_veld(naam, window, cx);
+                        }
                     }
                     cx.notify();
                 }),
@@ -337,6 +591,10 @@ struct Staat {
 enum Klik {
     Groep(String),
     Agents,
+    /// Het menu van een branch.
+    Branch(String),
+    /// Het commitveld van een branch.
+    Commit(String),
 }
 
 /// Een punt of knop waar een klik iets doet.
@@ -352,9 +610,9 @@ struct Doel {
 
 enum Vorm {
     Lijn { punten: Vec<(f32, f32)>, dik: f32, kleur: Hsla, streep: Option<[f32; 2]> },
-    Vlak { x: f32, y: f32, z: f32, kleur: Hsla },
+    Bol { x: f32, y: f32, r: f32, kleur: Hsla },
+    Ring { x: f32, y: f32, r: f32, kleur: Hsla, vul: Hsla },
     Hol { x: f32, y: f32, z: f32, rand: f32, kleur: Hsla, vul: Hsla },
-    Driehoek { punten: [(f32, f32); 3], kleur: Hsla },
     Wolk { x: f32, y: f32, kleur: Hsla, vul: Hsla },
     Knop { x: f32, y: f32, w: f32, h: f32, rand: Hsla, vul: Hsla },
     Tekst { x: f32, y: f32, tekst: String, grootte: f32, vet: bool, kleur: Hsla, rechts: bool },
@@ -525,6 +783,12 @@ impl<'a> Indeling<'a> {
             dagen.extend(commits[i].iter().map(|c| middernacht(c.ts)));
             dagen.extend(b.op_origin.iter().map(|c| middernacht(c.ts)));
         }
+        // de merge van een gemergde branch: daar loopt zijn lijn naartoe
+        for &bi in &l {
+            if let (Some(m), true) = (&br[bi].merged_into, br[bi].basis.as_ref().is_some_and(|n| lane.contains_key(n.as_str()))) {
+                pt(&m.h, m.ts, &mut rijen);
+            }
+        }
         if let Some(f) = repo.opgehaald {
             pt("fetch", f, &mut rijen);
         }
@@ -562,7 +826,7 @@ impl<'a> Indeling<'a> {
             for (&q, lijst) in &v.vakken {
                 let it = groepeer(b, lijst, &staat.open, &in_l);
                 let mut moet = straal_op_rij(&rijen, b, v, q) + straal_op_rij(&rijen, b, v, q + 1) + (it.len() + 1) as f32 * RUIMTE;
-                moet += it.iter().map(|o| 2.0 * straal_van(b, o)).sum::<f32>();
+                moet += it.len() as f32 * 2.0 * PUNT;
                 if q + 1 < gaps.len() && gaps[q + 1] < moet {
                     gaps[q + 1] = moet;
                 }
@@ -606,30 +870,60 @@ fn leeg(b: &Branch) -> bool {
     !b.vast && b.basis.is_some() && b.uniek == 0 && !(b.hier || b.gewijzigd)
 }
 
+/// Wat het menu van een branch toont, met wat er rechts bij staat.
+fn acties(repo: &Repo, b: &Branch, remote: bool) -> Vec<(Actie, String)> {
+    let mut v = Vec::new();
+    if b.map.is_some() && b.wijzigingen > 0 {
+        let n = b.wijzigingen;
+        v.push((Actie::Commit, format!("{n} {}", if n == 1 { taal::t("bestand", "file") } else { taal::t("bestanden", "files") })));
+    }
+    if remote && !b.alleen_origin {
+        match &b.origin {
+            None => v.push((Actie::Push { nieuw: true }, taal::t("nieuw", "new").to_string())),
+            // push pas als er niets te halen is: anders weigert GitHub hem
+            Some(o) if o.ahead > 0 && o.behind == 0 => v.push((Actie::Push { nieuw: false }, format!("↑{}", o.ahead))),
+            _ => {}
+        }
+    }
+    // beide kanten verder kan alleen met een rebase, en dus alleen waar de branch uitgecheckt staat
+    if let Some(o) = b.origin.as_ref().filter(|o| o.behind > 0 && (o.ahead == 0 || b.map.is_some())) {
+        v.push((Actie::Update, format!("↓{}", o.behind)));
+    }
+    if !b.hier && b.map.is_none() {
+        v.push((Actie::Checkout, String::new()));
+    }
+    if gemerged(b) {
+        v.push((Actie::Verwijder, String::new()));
+    }
+    if b.naam == repo.hoofd {
+        let n = repo.branches.iter().filter(|b| gemerged(b)).count();
+        if n > 0 {
+            v.push((Actie::Opruimen, format!("{n} {}", taal::t("gemerged", "merged"))));
+        }
+    }
+    v
+}
+
+/// Een branch die weg kan: gemerged, nergens uitgecheckt, niets geparkeerd en niets dat alleen hier staat.
+fn gemerged(b: &Branch) -> bool {
+    b.merged_into.is_some() && !b.vast && b.map.is_none() && b.geparkeerd == 0 && b.origin.as_ref().is_none_or(|o| o.ahead == 0)
+}
+
 /// De kleur van lijn `i`.
 fn lk(th: &Thema, i: usize) -> u32 {
     th.lanes[i % 4]
-}
-
-fn straal_van(b: &Branch, o: &Item) -> f32 {
-    match o {
-        Item::Groep { .. } => GROEP,
-        Item::Los { c, .. } if c.n > 0 => MERGE + 0.9,
-        Item::Los { c, .. } if b.dubbel.contains(&c.h) => DUB,
-        Item::Los { .. } => PUNT,
-    }
 }
 
 /// Hoe groot wat er van branch `b` op rij `r` staat.
 fn straal_op_rij(rijen: &[Rij], b: &Branch, v: &Vak, r: usize) -> f32 {
     let h = &rijen[r].h;
     if *h == b.h {
-        return if b.hier { HIER + 1.3 } else if b.alleen_origin { KOP } else { KOP + KOP_LIJN / 2.0 };
+        return KOP + KOP_LIJN / 2.0;
     }
     if b.origin.as_ref().is_some_and(|o| o.h == *h) {
-        return 7.0;
+        return PUNT;
     }
-    v.vast.iter().find(|c| c.h == *h).map_or(0.0, |&c| straal_van(b, &Item::Los { c, vaag: false, key: None }))
+    if v.vast.iter().any(|c| c.h == *h) { PUNT } else { 0.0 }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -645,28 +939,96 @@ fn doel(x: f32, y: f32, r: f32, klik: Klik) -> Doel {
     Doel { x, y, rx: r, ry: r, punt: true, klik }
 }
 
-/// Een pijl van een merge: van de lijn waar hij vandaan kwam naar de lijn waar hij in ging.
-fn pijl(onder: &mut Vec<Vorm>, x_van: f32, x_naar: f32, yy: f32, k: u32, dik: bool) {
+/// Een merge: haaks van de branch af en met een bocht de lijn in waar hij in ging, precies op de merge.
+fn pijl(onder: &mut Vec<Vorm>, x_van: f32, x_naar: f32, yy: f32, k: u32) {
     let d = if x_van > x_naar { 1.0 } else { -1.0 };
-    let (a, f) = if dik { (1.0, 1.0) } else { (0.65, 0.8) };
-    let c = kleur(k, a);
-    onder.push(lijn(vec![(x_van, yy), (x_naar + d * 14.0 * f, yy)], if dik { LIJN } else { LIJN * 0.72 }, c, None));
-    let p = x_naar + d * 8.0 * f;
-    onder.push(Vorm::Driehoek { punten: [(p, yy), (p + d * 7.0 * f, yy - 4.5 * f), (p + d * 7.0 * f, yy + 4.5 * f)], kleur: c });
-    onder.push(Vorm::Vlak { x: x_van, y: yy, z: if dik { 2.8 } else { 2.3 } * 0.9, kleur: c });
+    let mut punten = vec![(x_van, yy + BOCHT)];
+    for s in 0..=12 {
+        let t = s as f32 / 12.0 * std::f32::consts::FRAC_PI_2;
+        punten.push((x_naar + d * BOCHT - d * BOCHT * t.sin(), yy + BOCHT * t.cos()));
+    }
+    onder.push(lijn(punten, LIJN, kleur(k, 1.0), None));
 }
 
-/// De lijn zelf zegt waar een stuk staat: vol = lokaal en op origin, gestippeld = alleen op origin, hol = alleen lokaal.
-fn baan(onder: &mut Vec<Vorm>, punten: Vec<(f32, f32)>, k: u32, soort: &str, th: &Thema) {
+/// De straal van de bocht waarmee een merge de andere lijn in gaat.
+const BOCHT: f32 = 10.0;
+
+/// Het paneel als SVG, zonder venster: dezelfde vormen als `verf` tekent.
+#[cfg(feature = "schermafdruk")]
+pub fn svg(map: &std::path::Path, licht: bool, hh: f32) -> Option<String> {
+    let th = if licht { &t::LICHT } else { &t::DONKER };
+    let repo = git::lees(map)?;
+    let staat = Staat { agents: false, open: HashSet::new() };
+    let wd = breedte(&repo, false);
+    let tek = teken(&repo, &staat, wd, hh, th);
+    let k = |c: &Hsla| {
+        let r = Rgba::from(*c);
+        format!("rgba({},{},{},{:.3})", (r.r * 255.0).round(), (r.g * 255.0).round(), (r.b * 255.0).round(), r.a)
+    };
+    let mut s = format!(
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{wd}\" height=\"{hh}\" viewBox=\"0 0 {wd} {hh}\" font-family=\"JetBrains Mono, ui-monospace, Menlo, monospace\"><rect width=\"{wd}\" height=\"{hh}\" fill=\"#{:06x}\"/>",
+        th.bg
+    );
+    for vorm in tek.onder.iter().chain(&tek.boven) {
+        s += &match vorm {
+            Vorm::Lijn { punten, dik, kleur, streep } => {
+                let p: Vec<String> = punten.iter().map(|(x, y)| format!("{x:.2},{y:.2}")).collect();
+                let st = streep.map_or(String::new(), |[a, b]| format!(" stroke-dasharray=\"{a} {b}\""));
+                format!("<polyline points=\"{}\" fill=\"none\" stroke=\"{}\" stroke-width=\"{dik}\"{st}/>", p.join(" "), k(kleur))
+            }
+            Vorm::Bol { x, y, r, kleur } => format!("<circle cx=\"{x}\" cy=\"{y}\" r=\"{r}\" fill=\"{}\"/>", k(kleur)),
+            Vorm::Ring { x, y, r, kleur, vul } => {
+                format!("<circle cx=\"{x}\" cy=\"{y}\" r=\"{r}\" fill=\"{}\" stroke=\"{}\" stroke-width=\"{LIJN}\"/>", k(vul), k(kleur))
+            }
+            Vorm::Hol { x, y, z: r, rand, kleur, vul } => {
+                format!("<rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" fill=\"{}\" stroke=\"{}\" stroke-width=\"{rand}\"/>", x - r, y - r, 2.0 * r, 2.0 * r, k(vul), k(kleur))
+            }
+            Vorm::Wolk { x, y, kleur, vul } => {
+                let s = 0.95;
+                let q = |a: f32, b: f32| format!("{:.2} {:.2}", x + a * s, y + 1.5 + b * s);
+                format!(
+                    "<path d=\"M{} A{r1} {r1} 0 0 1 {} A{r2} {r2} 0 0 1 {} A{r3} {r3} 0 0 1 {} Z\" fill=\"{}\" stroke=\"{}\" stroke-width=\"{KOP_LIJN}\"/>",
+                    q(-5.5, 4.5),
+                    q(-6.1, -2.65),
+                    q(2.7, -3.75),
+                    q(5.0, 4.5),
+                    k(vul),
+                    k(kleur),
+                    r1 = 3.6 * s,
+                    r2 = 4.6 * s,
+                    r3 = 3.9 * s
+                )
+            }
+            Vorm::Knop { x, y, w, h, rand, vul } => {
+                format!("<rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" fill=\"{}\" stroke=\"{}\" stroke-width=\"1\"/>", x + 0.5, y + 0.5, w - 1.0, h - 1.0, k(vul), k(rand))
+            }
+            Vorm::Tekst { x, y, tekst, grootte, vet, kleur, rechts } => {
+                let t = tekst.replace('&', "&amp;").replace('<', "&lt;");
+                format!(
+                    "<text x=\"{x}\" y=\"{}\" font-size=\"{grootte}\" font-weight=\"{}\" fill=\"{}\" dominant-baseline=\"central\"{}>{t}</text>",
+                    y + RN / 2.0,
+                    if *vet { 600 } else { 400 },
+                    k(kleur),
+                    if *rechts { " text-anchor=\"end\"" } else { "" }
+                )
+            }
+        };
+    }
+    s += "</svg>";
+    Some(s)
+}
+
+/// De lijn zegt waar een stuk staat: vol = ook op GitHub, gestreept = alleen hier, vaag gestippeld = alleen op GitHub.
+fn baan(onder: &mut Vec<Vorm>, punten: Vec<(f32, f32)>, k: u32, soort: &str) {
     match soort {
-        "origin" => onder.push(lijn(punten, LIJN, kleur(k, 0.7), Some([2.0, 6.0]))),
-        "lokaal" => {
-            onder.push(lijn(punten.clone(), LIJN * 2.0 + 1.0, kleur(k, 1.0), None));
-            onder.push(lijn(punten, LIJN * 0.8, kleur(th.bg, 1.0), None));
-        }
+        "origin" => onder.push(lijn(punten, LIJN, kleur(k, VAAG), Some([1.5, 4.0]))),
+        "lokaal" => onder.push(lijn(punten, LIJN, kleur(k, 1.0), Some([4.0, 3.0]))),
         _ => onder.push(lijn(punten, LIJN, kleur(k, 1.0), None)),
     }
 }
+
+/// Wat alleen op GitHub staat en nog niet hier.
+const VAAG: f32 = 0.45;
 
 /// Waar de naam van lijn `i` komt: de lijn loopt er dun naartoe tot `tot`.
 struct Naam {
@@ -738,9 +1100,9 @@ fn teken_branch(tek: &mut Tekening, ind: &Indeling, staat: &Staat, i: usize, hh:
     };
     // valt de hele branch onder de onderrand, dan een stompje onderaan met zijn naam en hoe oud hij is
     if hoogste > hh - 6.0 {
-        onder.push(lijn(vec![(xi, hh), (xi, hh - 18.0)], LIJN, kleur(k, 1.0), Some([1.0, 5.0])));
-        let rand = kleur(k, if leeg(b) { 0.4 } else { 1.0 });
-        boven.push(Vorm::Hol { x: xi, y: hh - 18.0, z: (KOP - 2.0) * 0.9, rand: KOP_LIJN, kleur: rand, vul: bg });
+        onder.push(lijn(vec![(xi, hh), (xi, hh - 18.0)], LIJN, kleur(k, 1.0), None));
+        boven.push(Vorm::Hol { x: xi, y: hh - 18.0, z: KOP * 0.9, rand: KOP_LIJN, kleur: kleur(k, 1.0), vul: if b.hier { kleur(k, 1.0) } else { bg } });
+        doelen.push(doel(xi, hh - 18.0, 9.0, Klik::Branch(b.naam.clone())));
         return Naam { i, xi, tot: hh - 18.0 - KOP, oud: Some(geleden(b.ts, repo.nu)), leeg: leeg(b) };
     }
     let soort = if b.alleen_origin {
@@ -755,11 +1117,19 @@ fn teken_branch(tek: &mut Tekening, ind: &Indeling, staat: &Staat, i: usize, hh:
         Some(o) if soort == "vol" && o.ahead > 0 && o.behind == 0 => y(&o.h),
         _ => yt,
     };
-    if voet > yp {
-        baan(onder, vec![(xi, voet), (xi, yp)], k, soort, th);
+    // een gemergde branch loopt door tot zijn merge
+    if let Some(m) = b.merged_into.as_ref().filter(|m| ind.rij.contains_key(m.h.as_str())) {
+        let tot = y(&m.h) + BOCHT;
+        if tot < yt {
+            onder.push(lijn(vec![(xi, yt), (xi, tot)], LIJN, kleur(k, 1.0), None));
+        }
     }
+    if voet > yp {
+        baan(onder, vec![(xi, voet), (xi, yp)], k, soort);
+    }
+    // staat GitHub lager dan het eindpunt, dan is het stuk erboven nog niet gepusht; het wolkje is GitHub
     if yp > yt {
-        onder.push(lijn(vec![(xi, yp), (xi, yt)], LIJN, kleur(k, 0.7), Some([2.0, 6.0])));
+        baan(onder, vec![(xi, yp), (xi, yt)], k, "lokaal");
         boven.push(Vorm::Wolk { x: xi, y: yp, kleur: kleur(k, 1.0), vul: bg });
     }
     if let Some(&j) = b.basis.as_deref().and_then(|n| ind.lane.get(n)) {
@@ -767,38 +1137,41 @@ fn teken_branch(tek: &mut Tekening, ind: &Indeling, staat: &Staat, i: usize, hh:
         let basis = &br[ind.l[j]];
         let dikke_merge = b.merged_into.as_ref().filter(|m| ind.rij.contains_key(m.h.as_str()) && basis.h == m.h);
         if let Some(m) = dikke_merge {
-            pijl(onder, xi, xj, y(&m.h), k, true);
-        } else if !door {
+            pijl(onder, xi, xj, y(&m.h), k);
+        }
+        if !door {
             // een gewone branch takt hier af van zijn basis, met een rechte hoek
             if let Some(mb) = &b.mb {
                 let ym = y(&mb.h);
                 let d = if xi > xj { 1.0 } else { -1.0 };
-                baan(onder, vec![(xj, ym), (xi + d * LIJN / 2.0, ym)], k, soort, th);
-                onder.push(Vorm::Vlak { x: xj, y: ym, z: PUNT * 0.9, kleur: kleur(lk(th, j), 1.0) });
+                baan(onder, vec![(xj, ym), (xi + d * LIJN / 2.0, ym)], k, soort);
             }
         }
     }
     if let Some(o) = b.origin.as_ref().filter(|o| o.behind > 0) {
         let yo = y(&o.h);
-        onder.push(lijn(vec![(xi, yt), (xi, yo)], LIJN, kleur(k, 0.7), Some([2.0, 6.0])));
+        baan(onder, vec![(xi, yt), (xi, yo)], k, "origin");
         boven.push(Vorm::Wolk { x: xi, y: yo, kleur: kleur(k, 1.0), vul: bg });
     }
+    // een commit die alleen op GitHub staat is vaag
+    let achter = b.origin.as_ref().is_some_and(|o| o.behind > 0);
+    let bolletje = |boven: &mut Vec<Vorm>, yy: f32, vaag: bool| {
+        let a = if b.alleen_origin || vaag || (achter && yy < yt - 0.5) { VAAG } else { 1.0 };
+        boven.push(Vorm::Bol { x: xi, y: yy, r: PUNT, kleur: kleur(k, a) });
+    };
 
-    // één puntje per commit; een merge (PR) is hol; een wijziging die ook op de basis staat is klein
+    // één bolletje per commit
     let punt = |onder: &mut Vec<Vorm>, boven: &mut Vec<Vorm>, doelen: &mut Vec<Doel>, c: &Commit, yy: f32, vaag: bool, key: Option<String>| {
         if yy > hh + 10.0 {
             return;
         }
-        let dub = b.dubbel.contains(&c.h);
-        if let Some(&bron) = c.van.as_deref().filter(|v| *v != b.naam).and_then(|v| ind.lane.get(v)) {
-            pijl(onder, x(bron), xi, yy, lk(th, bron), false);
+        let bron = c.van.as_deref().filter(|v| *v != b.naam).and_then(|v| ind.lane.get(v)).copied().or_else(|| {
+            ind.l.iter().position(|&o| repo.branches[o].merged_into.as_ref().is_some_and(|m| m.h == c.h) && repo.branches[o].naam != b.naam)
+        });
+        if let Some(bron) = bron {
+            pijl(onder, x(bron), xi, yy, lk(th, bron));
         }
-        let a = if vaag { 0.6 } else if dub { 0.55 } else { 1.0 };
-        if c.n > 0 {
-            boven.push(Vorm::Hol { x: xi, y: yy, z: MERGE * 0.9, rand: KOP_LIJN, kleur: kleur(k, a), vul: bg });
-        } else {
-            boven.push(Vorm::Vlak { x: xi, y: yy, z: if dub { DUB } else { PUNT } * 0.9, kleur: kleur(k, a) });
-        }
+        bolletje(boven, yy, vaag);
         // een klik op een losse commit uit een uitgeklapte groep klapt hem weer in
         if let Some(key) = key {
             doelen.push(doel(xi, yy, 6.0, Klik::Groep(key)));
@@ -814,18 +1187,17 @@ fn teken_branch(tek: &mut Tekening, ind: &Indeling, staat: &Staat, i: usize, hh:
         // gelijke afstand van rand tot rand, ook tot het bolletje op de rij eronder en erboven
         let onderkant = y_laag - straal_op_rij(&ind.rijen, b, v, q);
         let bovenkant = y_hoog + straal_op_rij(&ind.rijen, b, v, q + 1);
-        let dik: f32 = it.iter().map(|o| 2.0 * straal_van(b, o)).sum();
+        let dik = it.len() as f32 * 2.0 * PUNT;
         let tussen = (onderkant - bovenkant - dik) / (it.len() + 1) as f32;
         let mut yy = onderkant;
         for o in it {
-            let r = straal_van(b, &o);
+            let r = PUNT;
             yy -= tussen + r;
             match o {
                 Item::Groep { run, key, vaag } if yy <= hh + 10.0 => {
-                    let licht = vaag || run.iter().all(|(c, _)| b.dubbel.contains(&c.h));
-                    boven.push(Vorm::Vlak { x: xi, y: yy, z: GROEP * 0.9, kleur: kleur(k, if licht { 0.6 } else { 1.0 }) });
+                    bolletje(boven, yy, vaag);
                     let n = run.len();
-                    boven.push(tekst(xi + GROEP + 5.0, yy - 9.0, n.to_string(), t::KLEIN, true, kleur(k, if licht { 0.7 } else { 1.0 }), false));
+                    boven.push(tekst(xi + PUNT + 6.0, yy - 9.0, n.to_string(), t::KLEIN, true, kleur(k, 1.0), false));
                     doelen.push(doel(xi, yy, 11.0, Klik::Groep(key)));
                 }
                 Item::Groep { .. } => {}
@@ -835,11 +1207,21 @@ fn teken_branch(tek: &mut Tekening, ind: &Indeling, staat: &Staat, i: usize, hh:
         }
     }
     // het eindpunt van de branch; vol als dit de map van de tab is
-    let rk = if b.hier { HIER } else if b.alleen_origin { KOP - 1.5 } else { KOP };
-    let rand = kleur(k, if leeg(b) { 0.4 } else { 1.0 });
-    boven.push(Vorm::Hol { x: xi, y: yt, z: rk * 0.9, rand: KOP_LIJN, kleur: rand, vul: if b.hier { kleur(k, 1.0) } else { bg } });
-    if b.hier {
-        boven.push(Vorm::Vlak { x: xi, y: yt, z: HIER * 0.4 * 0.9, kleur: bg });
+    let rk = KOP;
+    let ka = if b.alleen_origin { VAAG } else { 1.0 };
+    boven.push(Vorm::Hol { x: xi, y: yt, z: rk * 0.9, rand: KOP_LIJN, kleur: kleur(k, ka), vul: if b.hier { kleur(k, 1.0) } else { bg } });
+    doelen.push(doel(xi, yt, 9.0, Klik::Branch(b.naam.clone())));
+    // wat nog niet gecommit is: een open bolletje boven het eindpunt, met het aantal bestanden
+    let open = b.wijzigingen + b.geparkeerd;
+    if open > 0 {
+        let yw = yt - RHMIN;
+        onder.push(lijn(vec![(xi, yt - rk), (xi, yw)], LIJN, kleur(k, 1.0), Some([1.5, 3.0])));
+        boven.push(Vorm::Ring { x: xi, y: yw, r: PUNT + 0.5, kleur: kleur(k, 1.0), vul: bg });
+        boven.push(tekst(xi + PUNT + 6.0, yw - 9.0, open.to_string(), t::KLEIN, true, kleur(k, 1.0), false));
+        // geparkeerd: eerst een checkout, dus het menu
+        let klik = if b.wijzigingen > 0 { Klik::Commit(b.naam.clone()) } else { Klik::Branch(b.naam.clone()) };
+        doelen.push(doel(xi, yw, 9.0, klik));
+        return Naam { i, xi, tot: yw - PUNT - 2.0, oud: None, leeg: leeg(b) };
     }
     Naam { i, xi, tot: yt - rk - 1.0, oud: None, leeg: leeg(b) }
 }
@@ -855,6 +1237,8 @@ fn teken_namen(tek: &mut Tekening, ind: &Indeling, namen: Vec<Naam>, th: &Thema)
         let naam = kort(&ind.repo.branches[ind.l[i]].naam);
         let breed = naam.chars().count() as f32 * 12.0 * TEKEN;
         tek.boven.push(tekst(xi + 7.0, rn, naam, 12.0, true, kleur(k, if leeg { 0.45 } else { 1.0 }), false));
+        let volledig = ind.repo.branches[ind.l[i]].naam.clone();
+        tek.doelen.push(Doel { x: xi + 7.0 + breed / 2.0, y: rn + RN / 2.0, rx: breed / 2.0 + 4.0, ry: RN / 2.0, punt: false, klik: Klik::Branch(volledig) });
         if let Some(oud) = oud {
             tek.boven.push(tekst(xi + 7.0 + breed + 7.0, rn + 1.0, oud, t::KLEIN, false, kleur(th.mute, 1.0), false));
         }
@@ -940,8 +1324,12 @@ fn verf(tek: &Tekening, bounds: Bounds<Pixels>, th: &Thema, window: &mut Window,
                     window.paint_path(pad, *kleur);
                 }
             }
-            Vorm::Vlak { x, y, z: r, kleur } => {
-                window.paint_quad(fill(Bounds::new(p(x - r, y - r), size(px(2.0 * r), px(2.0 * r))), *kleur));
+            Vorm::Bol { x, y, r, kleur } => {
+                window.paint_quad(fill(Bounds::new(p(x - r, y - r), size(px(2.0 * r), px(2.0 * r))), *kleur).corner_radii(px(*r)));
+            }
+            Vorm::Ring { x, y, r, kleur, vul } => {
+                let zz = r + LIJN / 2.0;
+                window.paint_quad(quad(Bounds::new(p(x - zz, y - zz), size(px(2.0 * zz), px(2.0 * zz))), px(zz), *vul, px(LIJN), *kleur, BorderStyle::default()));
             }
             Vorm::Hol { x, y, z: r, rand, kleur, vul } => {
                 let zz = r + rand / 2.0;
@@ -952,16 +1340,6 @@ fn verf(tek: &Tekening, bounds: Bounds<Pixels>, th: &Thema, window: &mut Window,
             }
             Vorm::Knop { x, y, w, h, rand, vul } => {
                 window.paint_quad(quad(Bounds::new(p(*x, *y), size(px(*w), px(*h))), px(0.0), *vul, px(1.0), *rand, BorderStyle::default()));
-            }
-            Vorm::Driehoek { punten, kleur } => {
-                let mut pad = PathBuilder::fill();
-                pad.move_to(p(punten[0].0, punten[0].1));
-                pad.line_to(p(punten[1].0, punten[1].1));
-                pad.line_to(p(punten[2].0, punten[2].1));
-                pad.close();
-                if let Ok(pad) = pad.build() {
-                    window.paint_path(pad, *kleur);
-                }
             }
             Vorm::Wolk { x, y, kleur, vul } => {
                 // de stand op GitHub: een wolkje op de lijn

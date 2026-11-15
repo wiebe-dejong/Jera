@@ -59,6 +59,15 @@ fn main() {
 
     let mappen: Vec<PathBuf> = std::env::args().skip(1).map(PathBuf::from).collect();
 
+    // JERA_SVG=pad: schrijf het git-paneel van de eerste map als SVG, zonder venster
+    #[cfg(feature = "schermafdruk")]
+    if let Ok(uit) = std::env::var("JERA_SVG") {
+        let licht = std::env::var("JERA_THEMA").as_deref() == Ok("licht");
+        let s = gitpaneel::svg(&mappen[0], licht, 852.0).expect("geen git");
+        std::fs::write(uit, s).expect("schrijven");
+        return;
+    }
+
     gpui_kit::application().run(move |cx| {
         gpui_kit::init(cx);
         instellingen::init(cx);

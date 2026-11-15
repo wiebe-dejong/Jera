@@ -112,7 +112,7 @@ pub(crate) fn knop_vak(th: &Thema) -> Div {
 }
 
 /// Het vak van een menu, met een rand in `line_strong`. De muis gaat er niet doorheen naar wat eronder ligt.
-pub(super) fn menuvak(th: &Thema) -> Div {
+pub(crate) fn menuvak(th: &Thema) -> Div {
     div()
         .flex()
         .flex_col()
@@ -124,7 +124,7 @@ pub(super) fn menuvak(th: &Thema) -> Div {
 }
 
 /// De lijn tussen twee groepen in een menu.
-pub(super) fn scheiding(th: &Thema) -> Div {
+pub(crate) fn scheiding(th: &Thema) -> Div {
     div().h(px(t::LIJN)).my(px(4.0)).bg(rgb(th.line))
 }
 

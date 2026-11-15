@@ -23,7 +23,7 @@ use bestandsboom::{Gesleept, Item, Menu, kort_pad, lees_map};
 #[cfg(feature = "schermafdruk")]
 use bestandsboom::{Keuze, Sub};
 use naamveld::{Doel, NaamVeld};
-pub(crate) use onderdelen::{PIJL_DICHT, PIJL_OPEN, knop_vak, lijn, pijl, tab_vak};
+pub(crate) use onderdelen::{PIJL_DICHT, PIJL_OPEN, knop_vak, lijn, menuvak, pijl, scheiding, tab_vak};
 use onderdelen::*;
 use sessielijst::titel;
 
@@ -370,6 +370,11 @@ impl Jera {
         }
         if veranderd {
             cx.notify();
+        }
+        // zolang Claude bezig is in een repo, kan het git-paneel daar geen checkout doen
+        for tab in &self.tabs {
+            let bezig = tab.sessies.iter().any(|s| s.status == Status::Bezig && s.map.starts_with(&tab.root));
+            tab.git.update(cx, |git, cx| git.zet_claude_bezig(bezig, cx));
         }
         if let Some(tab) = self.tabs.get(self.actief) {
             let open = self.git_open;
