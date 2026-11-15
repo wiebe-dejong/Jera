@@ -648,7 +648,6 @@ impl Jera {
             )
             .child(lijn(th))
             .child(div().flex_1())
-            .child(lijn(th))
             .child(
                 div()
                     .flex()
