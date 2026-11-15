@@ -126,8 +126,6 @@ pub struct Jera {
     sessie_menu: Option<(usize, Point<Pixels>)>,
     /// De tab met deze hoofdmap wacht op het antwoord of hij dicht mag.
     sluiten: Option<PathBuf>,
-    /// De tab onder de muis: die toont een kruisje in plaats van het aantal.
-    tab_hover: Option<usize>,
     naam_veld: Option<NaamVeld>,
     openen: Entity<Openen>,
     openen_open: bool,
@@ -176,7 +174,6 @@ impl Jera {
             menu: None,
             sessie_menu: None,
             sluiten: None,
-            tab_hover: None,
             naam_veld: None,
             openen,
             openen_open: false,
@@ -527,7 +524,6 @@ impl Jera {
             return;
         }
         self.sluiten = None;
-        self.tab_hover = None;
         let tab = self.tabs.remove(index);
         for sessie in &tab.sessies {
             sessie.terminal.read(cx).stop();
@@ -560,25 +556,40 @@ impl Jera {
             // De slechtste status van de sessies in de tab: rood boven geel boven groen.
             let slechtste = tab.sessies.iter().map(|s| s.status).min();
             let root = tab.root.clone();
-            // Onder de muis staat een kruisje op de plek van het aantal.
-            let rechts = match self.tab_hover == Some(index) {
-                true => div()
-                    .id(("sluit", index))
-                    .flex()
-                    .justify_center()
-                    .w(px(t::ICOON))
-                    .text_color(rgb(th.mute))
-                    .hover(|d| d.text_color(rgb(th.ink)))
-                    .child("×")
-                    .on_click(cx.listener(move |this, _, window, cx| {
-                        cx.stop_propagation();
-                        this.sluit_tab(root.clone(), window, cx);
-                    }))
-                    .into_any_element(),
-                false => div().text_color(rgb(th.mute)).child(tab.sessies.len().to_string()).into_any_element(),
-            };
+            // Onder de muis staat een kruisje op de plek van het aantal. Beide staan er altijd,
+            // zodat het kruisje er nog is als de muis tijdens de klik iets beweegt.
+            let groep = SharedString::from(format!("tab-{index}"));
+            let rechts = div()
+                .relative()
+                .flex()
+                .justify_center()
+                .min_w(px(t::ICOON))
+                .child(
+                    div()
+                        .text_color(rgb(th.mute))
+                        .group_hover(groep.clone(), |s| s.invisible())
+                        .child(tab.sessies.len().to_string()),
+                )
+                .child(
+                    div()
+                        .id(("sluit", index))
+                        .absolute()
+                        .inset_0()
+                        .flex()
+                        .justify_center()
+                        .text_color(rgb(th.mute))
+                        .invisible()
+                        .group_hover(groep.clone(), |s| s.visible())
+                        .hover(|d| d.text_color(rgb(th.ink)))
+                        .child("×")
+                        .on_click(cx.listener(move |this, _, window, cx| {
+                            cx.stop_propagation();
+                            this.sluit_tab(root.clone(), window, cx);
+                        })),
+                );
             tab_vak(th, actief)
                 .id(("tab", index))
+                .group(groep)
                 .children(slechtste.map(|status| {
                     let woord = status.woord();
                     div()
@@ -589,13 +600,6 @@ impl Jera {
                 }))
                 .child(naam(&tab.root))
                 .child(div().flex().justify_center().min_w(px(t::ICOON)).font_weight(FontWeight::NORMAL).child(rechts))
-                .on_hover(cx.listener(move |this, hover: &bool, _, cx| {
-                    let nu = if *hover { Some(index) } else { this.tab_hover.filter(|i| *i != index) };
-                    if nu != this.tab_hover {
-                        this.tab_hover = nu;
-                        cx.notify();
-                    }
-                }))
                 .on_click(cx.listener(move |this, _, window, cx| {
                     this.actief = index;
                     this.focus(window, cx);
