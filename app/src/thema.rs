@@ -6,6 +6,8 @@ pub const LETTER: &str = "JetBrains Mono";
 pub const TEKST: f32 = 12.5;
 pub const REGEL: f32 = 1.3;
 pub const TERMINAL_REGEL: f32 = 1.55;
+/// De dagen en het tijdstip van ophalen in het git-paneel, en andere kleine tekst.
+pub const KLEIN: f32 = 11.0;
 
 pub const PAD: f32 = 12.0;
 pub const TAB_PAD: f32 = 14.0;
@@ -18,6 +20,8 @@ pub const H_TITELBALK: f32 = 40.0;
 pub const H_SCHAKELAAR: f32 = 30.0;
 pub const H_RENDER: f32 = 30.0;
 pub const B_KOLOM: f32 = 290.0;
+
+pub const H_KNOP: f32 = 20.0;
 
 pub const ICOON: f32 = 14.0;
 pub const LIJN: f32 = 1.0;

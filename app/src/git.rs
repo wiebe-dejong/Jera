@@ -305,14 +305,23 @@ pub fn lees(map: &Path) -> Option<Repo> {
             eind.push((format!("origin/{}", b.naam), format!("origin/{}", b.naam)));
         }
     }
+    // Eén keer per paar: `a...b` telt links wat a extra heeft en rechts wat a mist, en omgekeerd voor b.
+    let mut paren: HashMap<(usize, usize), (u32, u32)> = HashMap::new();
+    for i in 0..eind.len() {
+        for j in i + 1..eind.len() {
+            let uit = g(&["rev-list", "--left-right", "--count", "--no-merges", "--cherry-pick", &format!("{}...{}", eind[i].1, eind[j].1)]);
+            let mut v = uit.split_whitespace().map(|x| x.parse().unwrap_or(0));
+            paren.insert((i, j), (v.next().unwrap_or(0), v.next().unwrap_or(0)));
+        }
+    }
     let tov = |naam: &str| -> Vec<Tov> {
-        let eigen = &eind.iter().find(|(n, _)| n == naam).unwrap().1;
+        let i = eind.iter().position(|(n, _)| n == naam).unwrap();
         eind.iter()
-            .filter(|(n, _)| n != naam)
-            .map(|(n, r)| {
-                let uit = g(&["rev-list", "--left-right", "--count", "--no-merges", "--cherry-pick", &format!("{eigen}...{r}")]);
-                let mut v = uit.split_whitespace().map(|x| x.parse().unwrap_or(0));
-                Tov { naam: n.clone(), extra: v.next().unwrap_or(0), mist: v.next().unwrap_or(0) }
+            .enumerate()
+            .filter(|(j, _)| *j != i)
+            .map(|(j, (n, _))| {
+                let (extra, mist) = if i < j { paren[&(i, j)] } else { (paren[&(j, i)].1, paren[&(j, i)].0) };
+                Tov { naam: n.clone(), extra, mist }
             })
             .collect()
     };

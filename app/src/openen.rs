@@ -407,7 +407,7 @@ impl Openen {
 }
 
 fn recent_pad() -> PathBuf {
-    PathBuf::from(std::env::var("HOME").unwrap_or_default()).join("Library/Application Support/Jera/recent.json")
+    crate::thuis().join("Library/Application Support/Jera/recent.json")
 }
 
 /// De mappen die ik in Jera opende, de laatste eerst. Een map die er niet meer is, valt weg.
@@ -433,7 +433,7 @@ pub fn onthoud(map: &Path) {
 
 /// Het pad met ~ voor de thuismap.
 fn tilde(map: &Path) -> String {
-    let thuis = PathBuf::from(std::env::var("HOME").unwrap_or_default());
+    let thuis = crate::thuis();
     match map.strip_prefix(&thuis) {
         Ok(rest) => format!("~/{}", rest.display()),
         Err(_) => map.display().to_string(),
@@ -475,7 +475,7 @@ pub struct GitHub {
 }
 
 fn cache_pad() -> PathBuf {
-    PathBuf::from(std::env::var("HOME").unwrap_or_default()).join("Library/Application Support/Jera/github.json")
+    crate::thuis().join("Library/Application Support/Jera/github.json")
 }
 
 impl GitHub {

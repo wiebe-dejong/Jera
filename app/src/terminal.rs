@@ -18,7 +18,10 @@ use alacritty_terminal::{
     sync::FairMutex,
     term::{Config, Term, TermMode, cell::Flags, color::Colors},
     tty,
-    vte::ansi::{Color, CursorShape, NamedColor, Rgb},
+    vte::{
+        self,
+        ansi::{Color, CursorShape, NamedColor, Processor, Rgb},
+    },
 };
 use gpui_kit::*;
 
@@ -81,12 +84,13 @@ pub enum TerminalEvent {
 pub struct TerminalView {
     metrics: Arc<Mutex<Metrics>>,
     term: Arc<FairMutex<Term<Proxy>>>,
-    pty: EventLoopSender,
+    /// Leeg als de terminal niet is gestart.
+    pty: Option<EventLoopSender>,
     pub focus: FocusHandle,
     /// De titel die het programma zet, leeg tot het dat doet.
     pub title: String,
-    /// Het pid van de shell die het programma start.
-    pub pid: u32,
+    /// Het pid van de shell die het programma start. Leeg als de terminal niet is gestart.
+    pub pid: Option<u32>,
     scroll_rest: f32,
     /// Het thema van de laatste keer tekenen, voor antwoorden op kleurvragen.
     thema: &'static Thema,
@@ -117,12 +121,15 @@ impl TerminalView {
             ]),
         };
         let size = WindowSize { num_lines: 30, num_cols: 100, cell_width: 8, cell_height: 16 };
-        let pty = tty::new(&options, size, 0).expect("pty openen");
-        let pid = pty.child().id();
-        let event_loop =
-            EventLoop::new(term.clone(), proxy, pty, false, false).expect("event loop starten");
-        let pty = event_loop.channel();
-        event_loop.spawn();
+        // Start de terminal niet, dan staat de fout in deze terminal; de andere sessies draaien door.
+        let (pty, pid) = match start(&options, size, term.clone(), proxy) {
+            Ok((pty, pid)) => (Some(pty), Some(pid)),
+            Err(fout) => {
+                let tekst = format!("De terminal start niet: {fout}\r\n");
+                Processor::<vte::ansi::StdSyncHandler>::new().advance(&mut *term.lock(), tekst.as_bytes());
+                (None, None)
+            }
+        };
 
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
             while let Ok(event) = events_rx.recv_async().await {
@@ -171,12 +178,14 @@ impl TerminalView {
 
     /// Stopt het programma: de pty gaat dicht en de shell krijgt SIGHUP.
     pub fn stop(&self) {
-        let _ = self.pty.send(Msg::Shutdown);
+        if let Some(pty) = &self.pty {
+            let _ = pty.send(Msg::Shutdown);
+        }
     }
 
     pub fn write(&self, bytes: Vec<u8>) {
-        if !bytes.is_empty() {
-            let _ = self.pty.send(Msg::Input(Cow::Owned(bytes)));
+        if let Some(pty) = self.pty.as_ref().filter(|_| !bytes.is_empty()) {
+            let _ = pty.send(Msg::Input(Cow::Owned(bytes)));
         }
     }
 
@@ -324,12 +333,27 @@ impl Render for TerminalView {
                 canvas(
                     |_, _, _| (),
                     move |bounds, _, window, cx| {
-                        paint(bounds, &term, &pty, &metrics, thema, cursor_aan, window, cx)
+                        paint(bounds, &term, pty.as_ref(), &metrics, thema, cursor_aan, window, cx)
                     },
                 )
                 .size_full(),
             )
     }
+}
+
+/// Opent de pty met de shell en start de lus die hem leest. Geeft de zender en het pid van de shell.
+fn start(
+    options: &tty::Options,
+    size: WindowSize,
+    term: Arc<FairMutex<Term<Proxy>>>,
+    proxy: Proxy,
+) -> std::io::Result<(EventLoopSender, u32)> {
+    let pty = tty::new(options, size, 0)?;
+    let pid = pty.child().id();
+    let event_loop = EventLoop::new(term, proxy, pty, false, false)?;
+    let sender = event_loop.channel();
+    event_loop.spawn();
+    Ok((sender, pid))
 }
 
 /// Een rij tekens met dezelfde opmaak, die in één keer getekend wordt.
@@ -367,7 +391,7 @@ fn text_run(len: usize, color: Rgba, bold: bool, italic: bool, underline: bool) 
 fn paint(
     bounds: Bounds<Pixels>,
     term: &FairMutex<Term<Proxy>>,
-    pty: &EventLoopSender,
+    pty: Option<&EventLoopSender>,
     metrics: &Mutex<Metrics>,
     thema: &'static Thema,
     cursor_aan: bool,
@@ -416,12 +440,14 @@ fn paint(
             m.gemeten = true;
             m.wacht = None;
             term.resize(Grid { cols, rows });
-            let _ = pty.send(Msg::Resize(WindowSize {
-                num_lines: rows as u16,
-                num_cols: cols as u16,
-                cell_width: f32::from(cell_w) as u16,
-                cell_height: f32::from(cell_h) as u16,
-            }));
+            if let Some(pty) = pty {
+                let _ = pty.send(Msg::Resize(WindowSize {
+                    num_lines: rows as u16,
+                    num_cols: cols as u16,
+                    cell_width: f32::from(cell_w) as u16,
+                    cell_height: f32::from(cell_h) as u16,
+                }));
+            }
         } else {
             // Opnieuw tekenen tot de maat lang genoeg gelijk is gebleven.
             window.request_animation_frame();

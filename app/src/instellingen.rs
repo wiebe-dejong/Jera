@@ -20,8 +20,7 @@ pub fn zed() -> bool {
 }
 
 fn bestand() -> PathBuf {
-    PathBuf::from(std::env::var("HOME").unwrap_or_default())
-        .join("Library/Application Support/Jera/instellingen.json")
+    crate::thuis().join("Library/Application Support/Jera/instellingen.json")
 }
 
 fn bewaar() {

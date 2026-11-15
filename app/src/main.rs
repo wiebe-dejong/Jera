@@ -6,6 +6,7 @@ extern crate gpui_kit as gpui;
 
 mod agents;
 mod bestandsicoon;
+mod claude;
 mod bewerk;
 mod git;
 mod gitpaneel;
@@ -22,6 +23,11 @@ use std::{borrow::Cow, path::PathBuf};
 use gpui_kit::*;
 
 use venster::Jera;
+
+/// De thuismap.
+pub fn thuis() -> PathBuf {
+    PathBuf::from(std::env::var("HOME").unwrap_or_default())
+}
 
 const LETTERS: [&[u8]; 5] = [
     include_bytes!("../fonts/JetBrainsMono-Regular.ttf"),
@@ -100,22 +106,18 @@ fn main() {
 }
 
 /// Het icoon in het Dock, donker of licht zoals macOS.
-#[allow(deprecated)]
 fn dock_icoon(window: &Window) {
-    use cocoa::{
-        appkit::{NSApp, NSApplication, NSImage},
-        base::nil,
-        foundation::NSData,
-    };
+    use objc2::{AllocAnyThread, MainThreadMarker};
+    use objc2_app_kit::{NSApplication, NSImage};
+    use objc2_foundation::NSData;
     let png: &[u8] = match window.appearance() {
         WindowAppearance::Light | WindowAppearance::VibrantLight => include_bytes!("../iconen/dock-licht.png"),
         WindowAppearance::Dark | WindowAppearance::VibrantDark => include_bytes!("../iconen/dock.png"),
     };
-    // Veilig: de bytes leven zo lang als het programma, en NSData kopieert ze.
-    unsafe {
-        let data = NSData::dataWithBytes_length_(nil, png.as_ptr().cast(), png.len() as u64);
-        NSApp().setApplicationIconImage_(NSImage::initWithData_(NSImage::alloc(nil), data));
-    }
+    let Some(mtm) = MainThreadMarker::new() else { return };
+    let Some(beeld) = NSImage::initWithData(NSImage::alloc(), &NSData::with_bytes(png)) else { return };
+    // Veilig: een geldig NSImage, op de main thread.
+    unsafe { NSApplication::sharedApplication(mtm).setApplicationIconImage(Some(&beeld)) };
 }
 
 /// JERA_SHOT=pad bewaart elke seconde het venster als afbeelding.

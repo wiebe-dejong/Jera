@@ -4,9 +4,11 @@
 
 use std::{
     io::{Read, Seek, SeekFrom},
-    path::{Path, PathBuf},
+    path::Path,
     time::SystemTime,
 };
+
+use crate::claude;
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Stand {
@@ -32,10 +34,8 @@ const STAART: u64 = 16 << 10;
 
 /// De agents van sessie `id` die in `cwd` is gestart, in de volgorde van starten.
 pub fn lees(id: &str, cwd: &Path) -> Vec<Agent> {
-    let claude = PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(".claude");
-    // Claude Code noemt de map naar het pad, met een streepje voor elk ander teken dan een letter of cijfer.
-    let code: String = cwd.to_string_lossy().chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect();
-    let map = claude.join("projects").join(code).join(id).join("subagents");
+    let claude = claude::map();
+    let map = claude.join("projects").join(claude::projectcode(cwd)).join(id).join("subagents");
     let Ok(bestanden) = std::fs::read_dir(&map) else { return Vec::new() };
     let mut leden: Option<Vec<String>> = None;
     let mut uit: Vec<(SystemTime, Agent)> = Vec::new();

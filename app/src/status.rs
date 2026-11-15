@@ -3,8 +3,10 @@
 
 use std::{collections::HashMap, path::PathBuf, process::Command};
 
-/// Van dringend naar niet dringend.
-#[derive(Clone, Copy, PartialEq, Debug)]
+use crate::claude;
+
+/// Van dringend naar niet dringend: de kleinste is de dringendste.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub enum Status {
     Toestemming,
     Antwoord,
@@ -62,14 +64,7 @@ pub struct Lezer {
 impl Lezer {
     pub fn lees(&mut self) -> HashMap<u32, Bestand> {
         let mut uit = HashMap::new();
-        let Ok(map) = std::fs::read_dir(sessiemap()) else { return uit };
-        for bestand in map.flatten() {
-            let pad = bestand.path();
-            if pad.extension().is_none_or(|e| e != "json") {
-                continue;
-            }
-            let Ok(tekst) = std::fs::read_to_string(&pad) else { continue };
-            let Ok(json) = serde_json::from_str::<serde_json::Value>(&tekst) else { continue };
+        for json in claude::sessies() {
             let Some(pid) = json["pid"].as_u64().map(|p| p as u32) else { continue };
             let gelezen = match (json["status"].as_str(), json["waitingFor"].as_str()) {
                 (Some("idle"), _) => Gelezen::Klaar,
@@ -101,8 +96,4 @@ impl Lezer {
         }
         self.ouders.get(&pid).copied()
     }
-}
-
-fn sessiemap() -> PathBuf {
-    PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(".claude/sessions")
 }

@@ -179,7 +179,7 @@ impl GitPaneel {
                     .min_w_0()
                     .items_center()
                     // Onder de muis een vlak zo hoog als de knop ernaast; het woord blijft op `pad` van de rand.
-                    .h(px(20.0))
+                    .h(px(t::H_KNOP))
                     .px(px(8.0))
                     .ml(px(-8.0))
                     .when(self.eigenaars.len() > 1 && self.maak != Maak::Bezig, |d| d.hover(|d| d.bg(rgb(th.sel))))
@@ -439,153 +439,270 @@ struct Rij {
     dag: bool,
 }
 
-fn teken(repo: &Repo, staat: &Staat, wd: f32, hh: f32, th: &Thema) -> Tekening {
-    let mut tek = Tekening::default();
-    let br = &repo.branches;
-    let l = volgorde(repo, staat.agents);
-    let lane: HashMap<&str, usize> = l.iter().enumerate().map(|(i, &b)| (br[b].naam.as_str(), i)).collect();
-    let in_l = |n: &str| lane.contains_key(n);
-    let is_basis = |b: &Branch| b.naam == repo.hoofd || l.iter().any(|&c| br[c].basis.as_ref() == Some(&b.naam));
-    let doorlopend = |b: &Branch| {
-        is_basis(b)
-            || b.vast
-            || b.basis.as_ref().is_none_or(|n| !br.iter().any(|c| c.naam == *n))
-            || b.mb.as_ref().is_some_and(|mb| b.eigen.iter().any(|c| c.ts < mb.ts))
-    };
-    let leeg = |b: &Branch| !b.vast && b.basis.is_some() && b.uniek == 0 && !(b.hier || b.gewijzigd);
-    let lk = |i: usize| th.lanes[i % 4];
-    let kop_h = 16.0 + l.len() as f32 * RN;
-    let top = kop_h + 26.0;
+/// Waar alles in de graaf staat: de volgorde van de lijnen, de rijen op tijd met hun plek
+/// vanaf boven, en per lijn de commits in de vakken tussen twee rijen.
+struct Indeling<'a> {
+    repo: &'a Repo,
+    /// De branches in de volgorde van de lijnen.
+    l: Vec<usize>,
+    lane: HashMap<&'a str, usize>,
+    rijen: Vec<Rij>,
+    rij: HashMap<String, usize>,
+    /// De plek van elke rij vanaf boven: de nieuwste rij staat bovenaan.
+    ys: Vec<f32>,
+    vakken: Vec<Vak<'a>>,
+    kop_h: f32,
+}
 
-    // de rijen: de punten die ertoe doen, het moment van ophalen, en de middernacht van elke dag
-    let commits: Vec<Vec<&Commit>> = l
-        .iter()
-        .map(|&b| if doorlopend(&br[b]) { br[b].eigen.iter().chain(&br[b].oud).collect() } else { br[b].eigen.iter().collect() })
-        .collect();
-    let mut rijen: Vec<Rij> = Vec::new();
-    let mut gezien: HashSet<String> = HashSet::new();
-    let mut pt = |h: &str, ts: i64, rijen: &mut Vec<Rij>| {
-        if gezien.insert(h.to_string()) {
-            rijen.push(Rij { h: h.to_string(), ts, dag: false });
-        }
-    };
-    let mut dagen: Vec<i64> = vec![middernacht(repo.nu)];
-    for (i, &bi) in l.iter().enumerate() {
-        let b = &br[bi];
-        pt(&b.h, b.ts, &mut rijen);
-        if let Some(o) = b.origin.as_ref().filter(|o| o.behind > 0 || o.ahead > 0) {
-            pt(&o.h, o.ts, &mut rijen);
-        }
-        if !doorlopend(b) {
-            if let Some(mb) = &b.mb {
-                pt(&mb.h, mb.ts, &mut rijen);
-            }
-        }
-        if let (Some(basis), true) = (&b.basis, doorlopend(b)) {
-            if let Some(c) = commits[i].iter().find(|c| c.van.as_ref() == Some(basis)) {
-                pt(&c.h, c.ts, &mut rijen);
-            }
-        }
-        dagen.extend(commits[i].iter().map(|c| middernacht(c.ts)));
-        dagen.extend(b.op_origin.iter().map(|c| middernacht(c.ts)));
-    }
-    if let Some(f) = repo.opgehaald {
-        pt("fetch", f, &mut rijen);
-    }
-    dagen.extend(rijen.iter().map(|r| middernacht(r.ts)));
-    dagen.sort();
-    dagen.dedup();
-    for m in dagen {
-        rijen.push(Rij { h: format!("dag:{m}"), ts: m, dag: true });
-    }
-    rijen.sort_by(|a, b| a.ts.cmp(&b.ts).then(b.dag.cmp(&a.dag)));
-    let rij: HashMap<&str, usize> = rijen.iter().enumerate().map(|(i, r)| (r.h.as_str(), i)).collect();
+impl<'a> Indeling<'a> {
+    fn new(repo: &'a Repo, staat: &Staat) -> Self {
+        let br = &repo.branches;
+        let l = volgorde(repo, staat.agents);
+        let lane: HashMap<&str, usize> = l.iter().enumerate().map(|(i, &b)| (br[b].naam.as_str(), i)).collect();
+        let in_l = |n: &str| lane.contains_key(n);
+        let doorlopend = |b: &Branch| doorlopend(repo, &l, b);
+        let kop_h = 16.0 + l.len() as f32 * RN;
+        let top = kop_h + 26.0;
 
-    // commits per branch, verdeeld over de vakken tussen twee rijen, op tijd
-    let vakken: Vec<Vak> = l
-        .iter()
-        .enumerate()
-        .map(|(i, &bi)| {
+        // de rijen: de punten die ertoe doen, het moment van ophalen, en de middernacht van elke dag
+        let commits: Vec<Vec<&Commit>> = l
+            .iter()
+            .map(|&b| if doorlopend(&br[b]) { br[b].eigen.iter().chain(&br[b].oud).collect() } else { br[b].eigen.iter().collect() })
+            .collect();
+        let mut rijen: Vec<Rij> = Vec::new();
+        let mut gezien: HashSet<String> = HashSet::new();
+        let mut pt = |h: &str, ts: i64, rijen: &mut Vec<Rij>| {
+            if gezien.insert(h.to_string()) {
+                rijen.push(Rij { h: h.to_string(), ts, dag: false });
+            }
+        };
+        let mut dagen: Vec<i64> = vec![middernacht(repo.nu)];
+        for (i, &bi) in l.iter().enumerate() {
             let b = &br[bi];
-            let mut v = Vak { vast: Vec::new(), vakken: BTreeMap::new() };
-            let tr = rij[b.h.as_str()] as isize;
-            if let Some(o) = b.origin.as_ref().filter(|o| o.behind > 0) {
-                let op: Vec<&Commit> = b.op_origin.iter().collect();
-                leg(&op, tr, rij[o.h.as_str()] as isize - 1, true, &mut v, b, &rij, &rijen);
+            pt(&b.h, b.ts, &mut rijen);
+            if let Some(o) = b.origin.as_ref().filter(|o| o.behind > 0 || o.ahead > 0) {
+                pt(&o.h, o.ts, &mut rijen);
             }
-            let lo = if doorlopend(b) { 0 } else { b.mb.as_ref().map_or(0, |mb| rij[mb.h.as_str()] as isize) };
-            leg(&commits[i], lo, tr - 1, false, &mut v, b, &rij, &rijen);
-            v
-        })
-        .collect();
+            if !doorlopend(b) {
+                if let Some(mb) = &b.mb {
+                    pt(&mb.h, mb.ts, &mut rijen);
+                }
+            }
+            if let (Some(basis), true) = (&b.basis, doorlopend(b)) {
+                if let Some(c) = commits[i].iter().find(|c| c.van.as_ref() == Some(basis)) {
+                    pt(&c.h, c.ts, &mut rijen);
+                }
+            }
+            dagen.extend(commits[i].iter().map(|c| middernacht(c.ts)));
+            dagen.extend(b.op_origin.iter().map(|c| middernacht(c.ts)));
+        }
+        if let Some(f) = repo.opgehaald {
+            pt("fetch", f, &mut rijen);
+        }
+        dagen.extend(rijen.iter().map(|r| middernacht(r.ts)));
+        dagen.sort();
+        dagen.dedup();
+        for m in dagen {
+            rijen.push(Rij { h: format!("dag:{m}"), ts: m, dag: true });
+        }
+        rijen.sort_by(|a, b| a.ts.cmp(&b.ts).then(b.dag.cmp(&a.dag)));
+        let rij: HashMap<String, usize> = rijen.iter().enumerate().map(|(i, r)| (r.h.clone(), i)).collect();
 
-        let straal_van = |b: &Branch, o: &Item| match o {
+        // commits per branch, verdeeld over de vakken tussen twee rijen, op tijd
+        let vakken: Vec<Vak> = l
+            .iter()
+            .enumerate()
+            .map(|(i, &bi)| {
+                let b = &br[bi];
+                let mut v = Vak { vast: Vec::new(), vakken: BTreeMap::new() };
+                let tr = rij[b.h.as_str()] as isize;
+                if let Some(o) = b.origin.as_ref().filter(|o| o.behind > 0) {
+                    let op: Vec<&Commit> = b.op_origin.iter().collect();
+                    leg(&op, tr, rij[o.h.as_str()] as isize - 1, true, &mut v, b, &rij, &rijen);
+                }
+                let lo = if doorlopend(b) { 0 } else { b.mb.as_ref().map_or(0, |mb| rij[mb.h.as_str()] as isize) };
+                leg(&commits[i], lo, tr - 1, false, &mut v, b, &rij, &rijen);
+                v
+            })
+            .collect();
+
+        // de hoogte van elk vak, en de plek van elke rij vanaf boven
+        let mut gaps = vec![RHMIN; rijen.len()];
+        for (i, v) in vakken.iter().enumerate() {
+            let b = &br[l[i]];
+            for (&q, lijst) in &v.vakken {
+                let it = groepeer(b, lijst, &staat.open, &in_l);
+                let mut moet = straal_op_rij(&rijen, b, v, q) + straal_op_rij(&rijen, b, v, q + 1) + (it.len() + 1) as f32 * RUIMTE;
+                moet += it.iter().map(|o| 2.0 * straal_van(b, o)).sum::<f32>();
+                if q + 1 < gaps.len() && gaps[q + 1] < moet {
+                    gaps[q + 1] = moet;
+                }
+            }
+        }
+        let mut ys = vec![0.0; rijen.len()];
+        let mut acc = top;
+        for q in (0..rijen.len()).rev() {
+            ys[q] = acc;
+            acc += gaps[q];
+        }
+        Indeling { repo, l, lane, rijen, rij, ys, vakken, kop_h }
+    }
+
+    fn y(&self, h: &str) -> f32 {
+        self.ys[self.rij[h]]
+    }
+
+    fn in_l(&self, n: &str) -> bool {
+        self.lane.contains_key(n)
+    }
+
+    fn doorlopend(&self, b: &Branch) -> bool {
+        doorlopend(self.repo, &self.l, b)
+    }
+}
+
+/// Een lijn die doorloopt tot onderaan: een basis, een vaste branch, een branch zonder basis,
+/// of een met commits van voor zijn merge-base.
+fn doorlopend(repo: &Repo, l: &[usize], b: &Branch) -> bool {
+    let br = &repo.branches;
+    let is_basis = b.naam == repo.hoofd || l.iter().any(|&c| br[c].basis.as_ref() == Some(&b.naam));
+    is_basis
+        || b.vast
+        || b.basis.as_ref().is_none_or(|n| !br.iter().any(|c| c.naam == *n))
+        || b.mb.as_ref().is_some_and(|mb| b.eigen.iter().any(|c| c.ts < mb.ts))
+}
+
+/// Een branch zonder eigen werk: zijn naam en eindpunt zijn vaag.
+fn leeg(b: &Branch) -> bool {
+    !b.vast && b.basis.is_some() && b.uniek == 0 && !(b.hier || b.gewijzigd)
+}
+
+/// De kleur van lijn `i`.
+fn lk(th: &Thema, i: usize) -> u32 {
+    th.lanes[i % 4]
+}
+
+fn straal_van(b: &Branch, o: &Item) -> f32 {
+    match o {
         Item::Groep { .. } => GROEP,
         Item::Los { c, .. } if c.n > 0 => MERGE + 0.9,
         Item::Los { c, .. } if b.dubbel.contains(&c.h) => DUB,
         Item::Los { .. } => PUNT,
-    };
-    let straal_op_rij = |b: &Branch, v: &Vak, r: usize| {
-        let h = &rijen[r].h;
-        if *h == b.h {
-            return if b.hier { HIER + 1.3 } else if b.alleen_origin { KOP } else { KOP + KOP_LIJN / 2.0 };
-        }
-        if b.origin.as_ref().is_some_and(|o| o.h == *h) {
-            return 7.0;
-        }
-        v.vast.iter().find(|c| c.h == *h).map_or(0.0, |&c| straal_van(b, &Item::Los { c, vaag: false, key: None }))
-    };
-
-    // de hoogte van elk vak, en de plek van elke rij vanaf boven: de nieuwste rij staat bovenaan
-    let mut gaps = vec![RHMIN; rijen.len()];
-    for (i, v) in vakken.iter().enumerate() {
-        let b = &br[l[i]];
-        for (&q, lijst) in &v.vakken {
-            let it = groepeer(b, lijst, &staat.open, &in_l);
-            let mut moet = straal_op_rij(b, v, q) + straal_op_rij(b, v, q + 1) + (it.len() + 1) as f32 * RUIMTE;
-            moet += it.iter().map(|o| 2.0 * straal_van(b, o)).sum::<f32>();
-            if q + 1 < gaps.len() && gaps[q + 1] < moet {
-                gaps[q + 1] = moet;
-            }
-        }
     }
-    let mut ys = vec![0.0; rijen.len()];
-    let mut acc = top;
-    for q in (0..rijen.len()).rev() {
-        ys[q] = acc;
-        acc += gaps[q];
+}
+
+/// Hoe groot wat er van branch `b` op rij `r` staat.
+fn straal_op_rij(rijen: &[Rij], b: &Branch, v: &Vak, r: usize) -> f32 {
+    let h = &rijen[r].h;
+    if *h == b.h {
+        return if b.hier { HIER + 1.3 } else if b.alleen_origin { KOP } else { KOP + KOP_LIJN / 2.0 };
     }
-    let y = |h: &str| ys[rij[h]];
+    if b.origin.as_ref().is_some_and(|o| o.h == *h) {
+        return 7.0;
+    }
+    v.vast.iter().find(|c| c.h == *h).map_or(0.0, |&c| straal_van(b, &Item::Los { c, vaag: false, key: None }))
+}
 
-    let (onder, boven, doelen) = (&mut tek.onder, &mut tek.boven, &mut tek.doelen);
-    let bg = kleur(th.bg, 1.0);
-    let tekst = |x: f32, y: f32, s: String, grootte: f32, vet: bool, kleur: Hsla, rechts: bool| Vorm::Tekst {
-        x,
-        y,
-        tekst: s,
-        grootte,
-        vet,
-        kleur,
-        rechts,
-    };
-    let lijn = |punten: Vec<(f32, f32)>, dik: f32, kleur: Hsla, streep: Option<[f32; 2]>| Vorm::Lijn { punten, dik, kleur, streep };
+#[allow(clippy::too_many_arguments)]
+fn tekst(x: f32, y: f32, tekst: String, grootte: f32, vet: bool, kleur: Hsla, rechts: bool) -> Vorm {
+    Vorm::Tekst { x, y, tekst, grootte, vet, kleur, rechts }
+}
 
-    // de kop, de dagen en het moment van ophalen
-    onder.push(lijn(vec![(0.0, kop_h + 0.5), (wd, kop_h + 0.5)], 1.0, kleur(th.line, 1.0), None));
-    let mut vorige = kop_h;
-    for q in (0..rijen.len()).rev() {
+fn lijn(punten: Vec<(f32, f32)>, dik: f32, kleur: Hsla, streep: Option<[f32; 2]>) -> Vorm {
+    Vorm::Lijn { punten, dik, kleur, streep }
+}
+
+fn doel(x: f32, y: f32, r: f32, tip: Vec<(String, Soort)>, klik: Option<Klik>) -> Doel {
+    Doel { x, y, rx: r, ry: r, tip, klik }
+}
+
+fn titel(c: &Commit) -> String {
+    match c.pr {
+        Some(pr) => format!("#{pr} {}", c.titel),
+        None => c.titel.clone(),
+    }
+}
+
+/// Wat een eindpunt extra heeft en mist ten opzichte van de andere lijnen.
+fn tov_tip(ind: &Indeling, naam: &str, lijst: &[Tov]) -> Vec<(String, Soort)> {
+    let rijen: Vec<&Tov> = lijst.iter().filter(|o| ind.in_l(o.naam.trim_start_matches("origin/"))).collect();
+    let w = rijen.iter().map(|o| o.naam.chars().count()).max().unwrap_or(0).min(26);
+    let mut uit = vec![(naam.to_string(), Soort::Kop), (format!("{:w$}  extra  mist", ""), Soort::Mute)];
+    for o in rijen {
+        let n = kort(&o.naam);
+        let regel = if o.extra == 0 && o.mist == 0 {
+            format!("{n:w$}  gelijk")
+        } else {
+            let s = |v: u32| if v == 0 { "–".to_string() } else { v.to_string() };
+            format!("{n:w$}  {:>5}  {:>4}", s(o.extra), s(o.mist))
+        };
+        uit.push((regel, Soort::Gewoon));
+    }
+    uit
+}
+
+/// Een pijl van een merge: van de lijn waar hij vandaan kwam naar de lijn waar hij in ging.
+fn pijl(onder: &mut Vec<Vorm>, x_van: f32, x_naar: f32, yy: f32, k: u32, dik: bool) {
+    let d = if x_van > x_naar { 1.0 } else { -1.0 };
+    let (a, f) = if dik { (1.0, 1.0) } else { (0.65, 0.8) };
+    let c = kleur(k, a);
+    onder.push(lijn(vec![(x_van, yy), (x_naar + d * 14.0 * f, yy)], if dik { LIJN } else { LIJN * 0.72 }, c, None));
+    let p = x_naar + d * 8.0 * f;
+    onder.push(Vorm::Driehoek { punten: [(p, yy), (p + d * 7.0 * f, yy - 4.5 * f), (p + d * 7.0 * f, yy + 4.5 * f)], kleur: c });
+    onder.push(Vorm::Vlak { x: x_van, y: yy, z: if dik { 2.8 } else { 2.3 } * 0.9, kleur: c });
+}
+
+/// De lijn zelf zegt waar een stuk staat: vol = lokaal en op origin, gestippeld = alleen op origin, hol = alleen lokaal.
+fn baan(onder: &mut Vec<Vorm>, punten: Vec<(f32, f32)>, k: u32, soort: &str, th: &Thema) {
+    match soort {
+        "origin" => onder.push(lijn(punten, LIJN, kleur(k, 0.7), Some([2.0, 6.0]))),
+        "lokaal" => {
+            onder.push(lijn(punten.clone(), LIJN * 2.0 + 1.0, kleur(k, 1.0), None));
+            onder.push(lijn(punten, LIJN * 0.8, kleur(th.bg, 1.0), None));
+        }
+        _ => onder.push(lijn(punten, LIJN, kleur(k, 1.0), None)),
+    }
+}
+
+/// Waar de naam van lijn `i` komt: de lijn loopt er dun naartoe tot `tot`.
+struct Naam {
+    i: usize,
+    xi: f32,
+    tot: f32,
+    /// Bij een stompje onderaan: hoe oud de branch is.
+    oud: Option<String>,
+    leeg: bool,
+}
+
+fn teken(repo: &Repo, staat: &Staat, wd: f32, hh: f32, th: &Thema) -> Tekening {
+    let ind = Indeling::new(repo, staat);
+    let mut tek = Tekening::default();
+    teken_tijd(&mut tek, &ind, wd, hh, th);
+    let namen: Vec<Naam> = (0..ind.l.len()).map(|i| teken_branch(&mut tek, &ind, staat, i, hh, th)).collect();
+    teken_namen(&mut tek, &ind, namen, th);
+    teken_agents_knop(&mut tek, repo, staat, wd, th);
+    tek
+}
+
+/// De kop, de dagen rechts op hun lijn en het moment van ophalen.
+fn teken_tijd(tek: &mut Tekening, ind: &Indeling, wd: f32, hh: f32, th: &Thema) {
+    let repo = ind.repo;
+    let (onder, boven) = (&mut tek.onder, &mut tek.boven);
+    onder.push(lijn(vec![(0.0, ind.kop_h + 0.5), (wd, ind.kop_h + 0.5)], 1.0, kleur(th.line, 1.0), None));
+    let mut vorige = ind.kop_h;
+    for q in (0..ind.rijen.len()).rev() {
         if vorige >= hh {
             break;
         }
-        if !rijen[q].dag {
+        if !ind.rijen[q].dag {
             continue;
         }
-        boven.push(tekst(wd - 8.0, vorige + 4.0, dag_naam(rijen[q].ts, repo.nu), 11.0, false, kleur(th.mute, 1.0), true));
-        onder.push(lijn(vec![(0.0, ys[q] + 0.5), (wd, ys[q] + 0.5)], 1.0, kleur(th.line, 1.0), None));
-        vorige = ys[q];
+        boven.push(tekst(wd - 8.0, vorige + 4.0, dag_naam(ind.rijen[q].ts, repo.nu), t::KLEIN, false, kleur(th.mute, 1.0), true));
+        onder.push(lijn(vec![(0.0, ind.ys[q] + 0.5), (wd, ind.ys[q] + 0.5)], 1.0, kleur(th.line, 1.0), None));
+        vorige = ind.ys[q];
     }
-    if let Some(f) = repo.opgehaald.filter(|_| y("fetch") < hh) {
-        let yf = y("fetch");
+    if let Some(f) = repo.opgehaald.filter(|_| ind.y("fetch") < hh) {
+        let yf = ind.y("fetch");
         let oud = repo.nu - f > 86400;
         let wanneer = if middernacht(f) == middernacht(repo.nu) {
             let d = Local.timestamp_opt(f, 0).single().unwrap_or_default();
@@ -595,210 +712,178 @@ fn teken(repo: &Repo, staat: &Staat, wd: f32, hh: f32, th: &Thema) -> Tekening {
         };
         let k = kleur(if oud { th.warn } else { th.line_strong }, 1.0);
         onder.push(lijn(vec![(0.0, yf + 0.5), (wd, yf + 0.5)], 1.0, k, Some([3.0, 4.0])));
-        boven.push(tekst(wd - 8.0, yf + 3.0, format!("opgehaald {wanneer}"), 11.0, oud, if oud { k } else { kleur(th.mute, 1.0) }, true));
+        boven.push(tekst(wd - 8.0, yf + 3.0, format!("opgehaald {wanneer}"), t::KLEIN, oud, if oud { k } else { kleur(th.mute, 1.0) }, true));
     }
-
-    let tov_tip = |naam: &str, lijst: &[Tov]| -> Vec<(String, Soort)> {
-        let rijen: Vec<&Tov> = lijst.iter().filter(|o| in_l(o.naam.trim_start_matches("origin/"))).collect();
-        let w = rijen.iter().map(|o| o.naam.chars().count()).max().unwrap_or(0).min(26);
-        let mut uit = vec![(naam.to_string(), Soort::Kop), (format!("{:w$}  extra  mist", ""), Soort::Mute)];
-        for o in rijen {
-            let n = kort(&o.naam);
-            let regel = if o.extra == 0 && o.mist == 0 {
-                format!("{n:w$}  gelijk")
-            } else {
-                let s = |v: u32| if v == 0 { "–".to_string() } else { v.to_string() };
-                format!("{n:w$}  {:>5}  {:>4}", s(o.extra), s(o.mist))
-            };
-            uit.push((regel, Soort::Gewoon));
-        }
-        uit
-    };
-    let titel = |c: &Commit| match c.pr {
-        Some(pr) => format!("#{pr} {}", c.titel),
-        None => c.titel.clone(),
-    };
-    let doel = |x: f32, y: f32, r: f32, tip: Vec<(String, Soort)>, klik: Option<Klik>| Doel { x, y, rx: r, ry: r, tip, klik };
-
-    // een pijl van een merge: van de lijn waar hij vandaan kwam naar de lijn waar hij in ging
-    let pijl = |onder: &mut Vec<Vorm>, x_van: f32, x_naar: f32, yy: f32, k: u32, dik: bool| {
-        let d = if x_van > x_naar { 1.0 } else { -1.0 };
-        let (a, f) = if dik { (1.0, 1.0) } else { (0.65, 0.8) };
-        let c = kleur(k, a);
-        onder.push(lijn(vec![(x_van, yy), (x_naar + d * 14.0 * f, yy)], if dik { LIJN } else { LIJN * 0.72 }, c, None));
-        let p = x_naar + d * 8.0 * f;
-        onder.push(Vorm::Driehoek { punten: [(p, yy), (p + d * 7.0 * f, yy - 4.5 * f), (p + d * 7.0 * f, yy + 4.5 * f)], kleur: c });
-        onder.push(Vorm::Vlak { x: x_van, y: yy, z: if dik { 2.8 } else { 2.3 } * 0.9, kleur: c });
-    };
-    // de lijn zelf zegt waar een stuk staat: vol = lokaal en op origin, gestippeld = alleen op origin, hol = alleen lokaal
-    let baan = |onder: &mut Vec<Vorm>, punten: Vec<(f32, f32)>, k: u32, soort: &str| match soort {
-        "origin" => onder.push(lijn(punten, LIJN, kleur(k, 0.7), Some([2.0, 6.0]))),
-        "lokaal" => {
-            onder.push(lijn(punten.clone(), LIJN * 2.0 + 1.0, kleur(k, 1.0), None));
-            onder.push(lijn(punten, LIJN * 0.8, bg, None));
-        }
-        _ => onder.push(lijn(punten, LIJN, kleur(k, 1.0), None)),
-    };
-
-    let mut namen: Vec<(usize, f32, f32, Option<String>, bool)> = Vec::new(); // lijn, xi, tot, oud, leeg
-    for (i, &bi) in l.iter().enumerate() {
-        let b = &br[bi];
-        let (xi, yt, k, v, door) = (x(i), y(&b.h), lk(i), &vakken[i], doorlopend(b));
-        let hoogste = match &b.origin {
-            Some(o) if o.behind > 0 => y(&o.h),
-            _ => yt,
-        };
-        let tip = tov_tip(&b.naam, &b.tov);
-        // valt de hele branch onder de onderrand, dan een stompje onderaan met zijn naam en hoe oud hij is
-        if hoogste > hh - 6.0 {
-            onder.push(lijn(vec![(xi, hh), (xi, hh - 18.0)], LIJN, kleur(k, 1.0), Some([1.0, 5.0])));
-            let rand = kleur(k, if leeg(b) { 0.4 } else { 1.0 });
-            boven.push(Vorm::Hol { x: xi, y: hh - 18.0, z: (KOP - 2.0) * 0.9, rand: KOP_LIJN, kleur: rand, vul: bg });
-            doelen.push(doel(xi, hh - 18.0, 11.0, tip, None));
-            namen.push((i, xi, hh - 18.0 - KOP, Some(geleden(b.ts, repo.nu)), leeg(b)));
-            continue;
-        }
-        let soort = if b.alleen_origin {
-            "origin"
-        } else if b.origin.is_none() {
-            "lokaal"
-        } else {
-            "vol"
-        };
-        let voet = if door { hh } else { b.mb.as_ref().map_or(hh, |mb| y(&mb.h).min(hh)) };
-        let yp = match &b.origin {
-            Some(o) if soort == "vol" && o.ahead > 0 && o.behind == 0 => y(&o.h),
-            _ => yt,
-        };
-        if voet > yp {
-            baan(onder, vec![(xi, voet), (xi, yp)], k, soort);
-        }
-        if yp > yt {
-            baan(onder, vec![(xi, yp), (xi, yt)], k, "lokaal");
-            boven.push(Vorm::Wolk { x: xi, y: yp, kleur: kleur(k, 1.0), vul: bg });
-            if let Some(ot) = &b.origin_tov {
-                doelen.push(doel(xi, yp, 10.0, tov_tip(&format!("origin/{}", b.naam), ot), None));
-            }
-        }
-        if let Some(&j) = b.basis.as_deref().and_then(|n| lane.get(n)) {
-            let xj = x(j);
-            let basis = &br[l[j]];
-            let dikke_merge = b.merged_into.as_ref().filter(|m| rij.contains_key(m.h.as_str()) && basis.h == m.h);
-            if let Some(m) = dikke_merge {
-                pijl(onder, xi, xj, y(&m.h), k, true);
-            } else if !door {
-                // een gewone branch takt hier af van zijn basis, met een rechte hoek
-                if let Some(mb) = &b.mb {
-                    let ym = y(&mb.h);
-                    let d = if xi > xj { 1.0 } else { -1.0 };
-                    baan(onder, vec![(xj, ym), (xi + d * LIJN / 2.0, ym)], k, soort);
-                    onder.push(Vorm::Vlak { x: xj, y: ym, z: PUNT * 0.9, kleur: kleur(lk(j), 1.0) });
-                }
-            }
-        }
-        if let Some(o) = b.origin.as_ref().filter(|o| o.behind > 0) {
-            let yo = y(&o.h);
-            onder.push(lijn(vec![(xi, yt), (xi, yo)], LIJN, kleur(k, 0.7), Some([2.0, 6.0])));
-            boven.push(Vorm::Wolk { x: xi, y: yo, kleur: kleur(k, 1.0), vul: bg });
-            if let Some(ot) = &b.origin_tov {
-                doelen.push(doel(xi, yo, 10.0, tov_tip(&format!("origin/{}", b.naam), ot), None));
-            }
-        }
-
-        // één puntje per commit; een merge (PR) is hol; een wijziging die ook op de basis staat is klein
-        let punt = |onder: &mut Vec<Vorm>, boven: &mut Vec<Vorm>, doelen: &mut Vec<Doel>, c: &Commit, yy: f32, vaag: bool, key: Option<String>| {
-            if yy > hh + 10.0 {
-                return;
-            }
-            let dub = b.dubbel.contains(&c.h);
-            if let Some(&bron) = c.van.as_deref().filter(|v| *v != b.naam).and_then(|v| lane.get(v)) {
-                pijl(onder, x(bron), xi, yy, lk(bron), false);
-            }
-            let a = if vaag { 0.6 } else if dub { 0.55 } else { 1.0 };
-            if c.n > 0 {
-                boven.push(Vorm::Hol { x: xi, y: yy, z: MERGE * 0.9, rand: KOP_LIJN, kleur: kleur(k, a), vul: bg });
-            } else {
-                boven.push(Vorm::Vlak { x: xi, y: yy, z: if dub { DUB } else { PUNT } * 0.9, kleur: kleur(k, a) });
-            }
-            let tip = vec![(datum(c.ts), Soort::Mute), (titel(c), Soort::Gewoon), (c.auteur.clone(), Soort::Mute)];
-            doelen.push(doel(xi, yy, 6.0, tip, key.map(Klik::Groep)));
-        };
-        for c in &v.vast {
-            punt(onder, boven, doelen, c, y(&c.h), false, None);
-        }
-        for (&q, lijst) in &v.vakken {
-            let (y_laag, y_hoog) = (ys[q], ys[q + 1]);
-            let mut it = groepeer(b, lijst, &staat.open, &in_l);
-            it.reverse();
-            // gelijke afstand van rand tot rand, ook tot het bolletje op de rij eronder en erboven
-            let onderkant = y_laag - straal_op_rij(b, v, q);
-            let bovenkant = y_hoog + straal_op_rij(b, v, q + 1);
-            let dik: f32 = it.iter().map(|o| 2.0 * straal_van(b, o)).sum();
-            let tussen = (onderkant - bovenkant - dik) / (it.len() + 1) as f32;
-            let mut yy = onderkant;
-            for o in it {
-                let r = straal_van(b, &o);
-                yy -= tussen + r;
-                match o {
-                    Item::Groep { run, key, vaag } if yy <= hh + 10.0 => {
-                        let licht = vaag || run.iter().all(|(c, _)| b.dubbel.contains(&c.h));
-                        boven.push(Vorm::Vlak { x: xi, y: yy, z: GROEP * 0.9, kleur: kleur(k, if licht { 0.6 } else { 1.0 }) });
-                        let n = run.len();
-                        boven.push(tekst(xi + GROEP + 5.0, yy - 9.0, n.to_string(), 11.0, true, kleur(k, if licht { 0.7 } else { 1.0 }), false));
-                        let mut tip = vec![(format!("{n} commits"), Soort::Kop)];
-                        tip.extend(run.iter().take(8).map(|(c, _)| (format!("{}  {}", datum(c.ts), titel(c)), Soort::Gewoon)));
-                        if n > 8 {
-                            tip.push((format!("+{} meer", n - 8), Soort::Mute));
-                        }
-                        doelen.push(doel(xi, yy, 11.0, tip, Some(Klik::Groep(key))));
-                    }
-                    Item::Groep { .. } => {}
-                    Item::Los { c, vaag, key } => punt(onder, boven, doelen, c, yy, vaag, key),
-                }
-                yy -= r;
-            }
-        }
-        // het eindpunt van de branch; vol als dit de map van de tab is
-        let rk = if b.hier { HIER } else if b.alleen_origin { KOP - 1.5 } else { KOP };
-        let rand = kleur(k, if leeg(b) { 0.4 } else { 1.0 });
-        boven.push(Vorm::Hol { x: xi, y: yt, z: rk * 0.9, rand: KOP_LIJN, kleur: rand, vul: if b.hier { kleur(k, 1.0) } else { bg } });
-        if b.hier {
-            boven.push(Vorm::Vlak { x: xi, y: yt, z: HIER * 0.4 * 0.9, kleur: bg });
-        }
-        doelen.push(doel(xi, yt, 13.0, tip, None));
-        namen.push((i, xi, yt - rk - 1.0, None, leeg(b)));
-    }
-
-    // de namen, getrapt boven de lijnen: elke naam op een eigen regel, met de lijn er dun naartoe
-    for (i, xi, tot, oud, leeg) in namen {
-        let rn = 8.0 + i as f32 * RN;
-        let k = lk(i);
-        if tot > rn + 4.0 {
-            onder.push(lijn(vec![(xi, rn + 4.0), (xi, tot)], LIJN, kleur(k, if leeg { 0.2 } else { 0.4 }), None));
-        }
-        let naam = kort(&br[l[i]].naam);
-        let breed = naam.chars().count() as f32 * 12.0 * TEKEN;
-        boven.push(tekst(xi + 7.0, rn, naam, 12.0, true, kleur(k, if leeg { 0.45 } else { 1.0 }), false));
-        if let Some(oud) = oud {
-            boven.push(tekst(xi + 7.0 + breed + 7.0, rn + 1.0, oud, 11.0, false, kleur(th.mute, 1.0), false));
-        }
-    }
-    // de knop voor de branches van agents
-    let n_agent = br.iter().filter(|b| agent(b)).count();
-    if n_agent > 0 {
-        let label = format!("{n_agent} agents {}", if staat.agents { "▾" } else { "▸" });
-        let w = label.chars().count() as f32 * 11.0 * TEKEN + 16.0;
-        let (cx_, cy) = (wd - 8.0 - w / 2.0, 6.0 + 10.0);
-        // Onder de muis krijgt de knop het vlak `sel`. Zijn doel komt hierna op deze plek in de lijst.
-        let vul = if staat.hover == Some(doelen.len()) { kleur(th.sel, 1.0) } else { bg };
-        boven.push(Vorm::Knop { x: cx_ - w / 2.0, y: cy - 10.0, w, h: 20.0, rand: kleur(th.line_strong, 1.0), vul });
-        boven.push(tekst(cx_ - w / 2.0 + 8.0, cy - 9.0, label, 11.0, false, kleur(th.ink, 1.0), false));
-        doelen.push(Doel { x: cx_, y: cy, rx: w / 2.0, ry: 10.0, tip: Vec::new(), klik: Some(Klik::Agents) });
-    }
-    tek
 }
 
-fn leg<'a>(lijst: &[&'a Commit], lo: isize, hi: isize, vaag: bool, v: &mut Vak<'a>, b: &Branch, rij: &HashMap<&str, usize>, rijen: &[Rij]) {
+/// Lijn `i`: de lijn zelf, waar hij aftakt of in ging, zijn commits en zijn eindpunt.
+fn teken_branch(tek: &mut Tekening, ind: &Indeling, staat: &Staat, i: usize, hh: f32, th: &Thema) -> Naam {
+    let repo = ind.repo;
+    let br = &repo.branches;
+    let b = &br[ind.l[i]];
+    let (onder, boven, doelen) = (&mut tek.onder, &mut tek.boven, &mut tek.doelen);
+    let bg = kleur(th.bg, 1.0);
+    let y = |h: &str| ind.y(h);
+    let (xi, yt, k, v, door) = (x(i), y(&b.h), lk(th, i), &ind.vakken[i], ind.doorlopend(b));
+    let hoogste = match &b.origin {
+        Some(o) if o.behind > 0 => y(&o.h),
+        _ => yt,
+    };
+    let tip = tov_tip(ind, &b.naam, &b.tov);
+    // valt de hele branch onder de onderrand, dan een stompje onderaan met zijn naam en hoe oud hij is
+    if hoogste > hh - 6.0 {
+        onder.push(lijn(vec![(xi, hh), (xi, hh - 18.0)], LIJN, kleur(k, 1.0), Some([1.0, 5.0])));
+        let rand = kleur(k, if leeg(b) { 0.4 } else { 1.0 });
+        boven.push(Vorm::Hol { x: xi, y: hh - 18.0, z: (KOP - 2.0) * 0.9, rand: KOP_LIJN, kleur: rand, vul: bg });
+        doelen.push(doel(xi, hh - 18.0, 11.0, tip, None));
+        return Naam { i, xi, tot: hh - 18.0 - KOP, oud: Some(geleden(b.ts, repo.nu)), leeg: leeg(b) };
+    }
+    let soort = if b.alleen_origin {
+        "origin"
+    } else if b.origin.is_none() {
+        "lokaal"
+    } else {
+        "vol"
+    };
+    let voet = if door { hh } else { b.mb.as_ref().map_or(hh, |mb| y(&mb.h).min(hh)) };
+    let yp = match &b.origin {
+        Some(o) if soort == "vol" && o.ahead > 0 && o.behind == 0 => y(&o.h),
+        _ => yt,
+    };
+    if voet > yp {
+        baan(onder, vec![(xi, voet), (xi, yp)], k, soort, th);
+    }
+    if yp > yt {
+        baan(onder, vec![(xi, yp), (xi, yt)], k, "lokaal", th);
+        boven.push(Vorm::Wolk { x: xi, y: yp, kleur: kleur(k, 1.0), vul: bg });
+        if let Some(ot) = &b.origin_tov {
+            doelen.push(doel(xi, yp, 10.0, tov_tip(ind, &format!("origin/{}", b.naam), ot), None));
+        }
+    }
+    if let Some(&j) = b.basis.as_deref().and_then(|n| ind.lane.get(n)) {
+        let xj = x(j);
+        let basis = &br[ind.l[j]];
+        let dikke_merge = b.merged_into.as_ref().filter(|m| ind.rij.contains_key(m.h.as_str()) && basis.h == m.h);
+        if let Some(m) = dikke_merge {
+            pijl(onder, xi, xj, y(&m.h), k, true);
+        } else if !door {
+            // een gewone branch takt hier af van zijn basis, met een rechte hoek
+            if let Some(mb) = &b.mb {
+                let ym = y(&mb.h);
+                let d = if xi > xj { 1.0 } else { -1.0 };
+                baan(onder, vec![(xj, ym), (xi + d * LIJN / 2.0, ym)], k, soort, th);
+                onder.push(Vorm::Vlak { x: xj, y: ym, z: PUNT * 0.9, kleur: kleur(lk(th, j), 1.0) });
+            }
+        }
+    }
+    if let Some(o) = b.origin.as_ref().filter(|o| o.behind > 0) {
+        let yo = y(&o.h);
+        onder.push(lijn(vec![(xi, yt), (xi, yo)], LIJN, kleur(k, 0.7), Some([2.0, 6.0])));
+        boven.push(Vorm::Wolk { x: xi, y: yo, kleur: kleur(k, 1.0), vul: bg });
+        if let Some(ot) = &b.origin_tov {
+            doelen.push(doel(xi, yo, 10.0, tov_tip(ind, &format!("origin/{}", b.naam), ot), None));
+        }
+    }
+
+    // één puntje per commit; een merge (PR) is hol; een wijziging die ook op de basis staat is klein
+    let punt = |onder: &mut Vec<Vorm>, boven: &mut Vec<Vorm>, doelen: &mut Vec<Doel>, c: &Commit, yy: f32, vaag: bool, key: Option<String>| {
+        if yy > hh + 10.0 {
+            return;
+        }
+        let dub = b.dubbel.contains(&c.h);
+        if let Some(&bron) = c.van.as_deref().filter(|v| *v != b.naam).and_then(|v| ind.lane.get(v)) {
+            pijl(onder, x(bron), xi, yy, lk(th, bron), false);
+        }
+        let a = if vaag { 0.6 } else if dub { 0.55 } else { 1.0 };
+        if c.n > 0 {
+            boven.push(Vorm::Hol { x: xi, y: yy, z: MERGE * 0.9, rand: KOP_LIJN, kleur: kleur(k, a), vul: bg });
+        } else {
+            boven.push(Vorm::Vlak { x: xi, y: yy, z: if dub { DUB } else { PUNT } * 0.9, kleur: kleur(k, a) });
+        }
+        let tip = vec![(datum(c.ts), Soort::Mute), (titel(c), Soort::Gewoon), (c.auteur.clone(), Soort::Mute)];
+        doelen.push(doel(xi, yy, 6.0, tip, key.map(Klik::Groep)));
+    };
+    for c in &v.vast {
+        punt(onder, boven, doelen, c, y(&c.h), false, None);
+    }
+    for (&q, lijst) in &v.vakken {
+        let (y_laag, y_hoog) = (ind.ys[q], ind.ys[q + 1]);
+        let mut it = groepeer(b, lijst, &staat.open, &|n| ind.in_l(n));
+        it.reverse();
+        // gelijke afstand van rand tot rand, ook tot het bolletje op de rij eronder en erboven
+        let onderkant = y_laag - straal_op_rij(&ind.rijen, b, v, q);
+        let bovenkant = y_hoog + straal_op_rij(&ind.rijen, b, v, q + 1);
+        let dik: f32 = it.iter().map(|o| 2.0 * straal_van(b, o)).sum();
+        let tussen = (onderkant - bovenkant - dik) / (it.len() + 1) as f32;
+        let mut yy = onderkant;
+        for o in it {
+            let r = straal_van(b, &o);
+            yy -= tussen + r;
+            match o {
+                Item::Groep { run, key, vaag } if yy <= hh + 10.0 => {
+                    let licht = vaag || run.iter().all(|(c, _)| b.dubbel.contains(&c.h));
+                    boven.push(Vorm::Vlak { x: xi, y: yy, z: GROEP * 0.9, kleur: kleur(k, if licht { 0.6 } else { 1.0 }) });
+                    let n = run.len();
+                    boven.push(tekst(xi + GROEP + 5.0, yy - 9.0, n.to_string(), t::KLEIN, true, kleur(k, if licht { 0.7 } else { 1.0 }), false));
+                    let mut tip = vec![(format!("{n} commits"), Soort::Kop)];
+                    tip.extend(run.iter().take(8).map(|(c, _)| (format!("{}  {}", datum(c.ts), titel(c)), Soort::Gewoon)));
+                    if n > 8 {
+                        tip.push((format!("+{} meer", n - 8), Soort::Mute));
+                    }
+                    doelen.push(doel(xi, yy, 11.0, tip, Some(Klik::Groep(key))));
+                }
+                Item::Groep { .. } => {}
+                Item::Los { c, vaag, key } => punt(onder, boven, doelen, c, yy, vaag, key),
+            }
+            yy -= r;
+        }
+    }
+    // het eindpunt van de branch; vol als dit de map van de tab is
+    let rk = if b.hier { HIER } else if b.alleen_origin { KOP - 1.5 } else { KOP };
+    let rand = kleur(k, if leeg(b) { 0.4 } else { 1.0 });
+    boven.push(Vorm::Hol { x: xi, y: yt, z: rk * 0.9, rand: KOP_LIJN, kleur: rand, vul: if b.hier { kleur(k, 1.0) } else { bg } });
+    if b.hier {
+        boven.push(Vorm::Vlak { x: xi, y: yt, z: HIER * 0.4 * 0.9, kleur: bg });
+    }
+    doelen.push(doel(xi, yt, 13.0, tip, None));
+    Naam { i, xi, tot: yt - rk - 1.0, oud: None, leeg: leeg(b) }
+}
+
+/// De namen, getrapt boven de lijnen: elke naam op een eigen regel, met de lijn er dun naartoe.
+fn teken_namen(tek: &mut Tekening, ind: &Indeling, namen: Vec<Naam>, th: &Thema) {
+    for Naam { i, xi, tot, oud, leeg } in namen {
+        let rn = 8.0 + i as f32 * RN;
+        let k = lk(th, i);
+        if tot > rn + 4.0 {
+            tek.onder.push(lijn(vec![(xi, rn + 4.0), (xi, tot)], LIJN, kleur(k, if leeg { 0.2 } else { 0.4 }), None));
+        }
+        let naam = kort(&ind.repo.branches[ind.l[i]].naam);
+        let breed = naam.chars().count() as f32 * 12.0 * TEKEN;
+        tek.boven.push(tekst(xi + 7.0, rn, naam, 12.0, true, kleur(k, if leeg { 0.45 } else { 1.0 }), false));
+        if let Some(oud) = oud {
+            tek.boven.push(tekst(xi + 7.0 + breed + 7.0, rn + 1.0, oud, t::KLEIN, false, kleur(th.mute, 1.0), false));
+        }
+    }
+}
+
+/// De knop voor de branches van agents.
+fn teken_agents_knop(tek: &mut Tekening, repo: &Repo, staat: &Staat, wd: f32, th: &Thema) {
+    let n_agent = repo.branches.iter().filter(|b| agent(b)).count();
+    if n_agent == 0 {
+        return;
+    }
+    let label = format!("{n_agent} agents {}", if staat.agents { "▾" } else { "▸" });
+    let w = label.chars().count() as f32 * t::KLEIN * TEKEN + 16.0;
+    let (cx_, cy) = (wd - 8.0 - w / 2.0, 6.0 + 10.0);
+    // Onder de muis krijgt de knop het vlak `sel`. Zijn doel komt hierna op deze plek in de lijst.
+    let vul = if staat.hover == Some(tek.doelen.len()) { kleur(th.sel, 1.0) } else { kleur(th.bg, 1.0) };
+    tek.boven.push(Vorm::Knop { x: cx_ - w / 2.0, y: cy - 10.0, w, h: t::H_KNOP, rand: kleur(th.line_strong, 1.0), vul });
+    tek.boven.push(tekst(cx_ - w / 2.0 + 8.0, cy - 9.0, label, t::KLEIN, false, kleur(th.ink, 1.0), false));
+    tek.doelen.push(Doel { x: cx_, y: cy, rx: w / 2.0, ry: 10.0, tip: Vec::new(), klik: Some(Klik::Agents) });
+}
+
+#[allow(clippy::too_many_arguments)]
+fn leg<'a>(lijst: &[&'a Commit], lo: isize, hi: isize, vaag: bool, v: &mut Vak<'a>, b: &Branch, rij: &HashMap<String, usize>, rijen: &[Rij]) {
     for &c in lijst {
         if rij.contains_key(c.h.as_str()) {
             if c.h != b.h && b.origin.as_ref().is_none_or(|o| c.h != o.h) {

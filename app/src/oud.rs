@@ -8,6 +8,8 @@ use std::{
     time::SystemTime,
 };
 
+use crate::claude;
+
 pub struct Oud {
     pub id: String,
     pub map: PathBuf,
@@ -22,14 +24,13 @@ const KOP: u64 = 2 << 20;
 /// De oude sessies onder `root`, de nieuwste eerst. Sessies die nu draaien en sessies
 /// zonder titel staan er niet in.
 pub fn lees(root: &Path) -> Vec<Oud> {
-    let home = PathBuf::from(std::env::var("HOME").unwrap_or_default());
-    let draait = draaiend(&home);
-    // Claude Code noemt de map naar het pad, met een streepje voor elk ander teken dan
-    // een letter of cijfer. Dat is niet terug te rekenen; de map zelf staat in het gesprek.
-    let code: String =
-        root.to_string_lossy().chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect();
+    // De sessies die nu draaien, in Jera of elders.
+    let draait: HashSet<String> =
+        claude::sessies().iter().filter_map(|json| json["sessionId"].as_str().map(str::to_string)).collect();
+    // De map van een submap begint met die van `root`; de map zelf staat in het gesprek.
+    let code = claude::projectcode(root);
     let mut uit = Vec::new();
-    let Ok(projecten) = std::fs::read_dir(home.join(".claude/projects")) else { return uit };
+    let Ok(projecten) = std::fs::read_dir(claude::map().join("projects")) else { return uit };
     for project in projecten.flatten() {
         if !project.file_name().to_string_lossy().starts_with(&code) {
             continue;
@@ -62,9 +63,10 @@ fn kop(pad: &Path) -> Option<(PathBuf, String)> {
     let (mut map, mut titel) = (None, None);
     for regel in BufReader::new(bestand.take(KOP)).lines() {
         let Ok(regel) = regel else { break };
-        if map.is_none() {
-            if let Some(rest) = regel.split_once("\"cwd\":\"").map(|(_, r)| r) {
-                map = rest.split_once('"').map(|(m, _)| PathBuf::from(m));
+        // Een regel met `cwd` als JSON lezen: in de tekst kan een pad escapes hebben.
+        if map.is_none() && regel.contains("\"cwd\":") {
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&regel) {
+                map = json["cwd"].as_str().map(PathBuf::from);
             }
         }
         if titel.is_none() && regel.contains("\"ai-title\"") {
@@ -76,14 +78,4 @@ fn kop(pad: &Path) -> Option<(PathBuf, String)> {
         }
     }
     Some((map?, titel?))
-}
-
-/// De sessies die nu draaien, in Jera of elders.
-fn draaiend(home: &Path) -> HashSet<String> {
-    let Ok(map) = std::fs::read_dir(home.join(".claude/sessions")) else { return HashSet::new() };
-    map.flatten()
-        .filter_map(|bestand| std::fs::read_to_string(bestand.path()).ok())
-        .filter_map(|tekst| serde_json::from_str::<serde_json::Value>(&tekst).ok())
-        .filter_map(|json| json["sessionId"].as_str().map(str::to_string))
-        .collect()
 }
