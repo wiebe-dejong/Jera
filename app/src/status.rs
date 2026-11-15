@@ -1,5 +1,5 @@
 //! De status van een sessie, gelezen uit `~/.claude/sessions/<pid>.json` van Claude Code.
-//! Het formaat staat niet in de documentatie; de meting staat in `research/zelf-bouwen.md`.
+//! Het formaat staat niet in de documentatie; de meting staat in `research/sessies.md`.
 
 use std::{collections::HashMap, path::PathBuf, process::Command};
 

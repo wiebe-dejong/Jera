@@ -11,5 +11,5 @@ Geef de branches met hun commits, de dagen, en het moment waarop voor het laatst
 - De lijnen gebruiken `lane-1` tot `lane-4`, in die volgorde.
 - De breedte volgt uit het aantal lijnen en de langste naam.
 - De knop `git` in de Render-regel klapt het paneel in. Dan krijgt de terminal de volle breedte.
-- De graaf zelf (bolletjes, pijlen, groepen met een getal) ligt vast in `git-graaf/` van het project.
+- De graaf zelf (bolletjes, pijlen, groepen met een getal) ligt vast in `app/src/gitpaneel.rs` van het project.
 - Heeft de repo branches van agents (`worktree-agent-…`), dan staat rechtsboven in de kop een knop met hun aantal; die klapt ze in en uit.

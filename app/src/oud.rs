@@ -1,5 +1,5 @@
 //! De oude sessies van een tab, uit `~/.claude/projects/<map>/<sessie-id>.jsonl` van Claude Code.
-//! `claude --resume <sessie-id>` start er een opnieuw. Zie `research/zelf-bouwen.md`.
+//! `claude --resume <sessie-id>` start er een opnieuw. Zie `research/sessies.md`.
 
 use std::{
     collections::HashSet,

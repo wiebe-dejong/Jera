@@ -1,5 +1,5 @@
-//! De branches van een repo, voor het git-paneel. Alleen lezen. Overgenomen uit
-//! `git-graaf/lees_repo.py`, zonder `gh`: de titel van een PR staat in de merge-commit.
+//! De branches van een repo, voor het git-paneel. Alleen lezen.
+//! Zonder `gh`: de titel van een PR staat in de merge-commit.
 
 use std::{
     collections::{HashMap, HashSet},

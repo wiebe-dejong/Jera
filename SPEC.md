@@ -20,7 +20,7 @@ Niet erin:
 
 ## Gemeten werkwijze
 
-Uit `research/werkwijze.md`:
+Gemeten op 2026-11-04:
 - Claude doet het werk: start zelf de dev-servers, maakt ~77% van de commits, pusht, en regelt deploys en database via MCP.
 - Ik draai vaak 7 sessies tegelijk.
 - Ik controleer in Safari.
@@ -62,10 +62,10 @@ Uit `research/werkwijze.md`:
 | Render, plek | Een smalle regel boven de terminal | 2026-11-14 |
 | Eerste versie | Tabs, de sessielijst met status, één terminal, Bestanden, Render en het git-paneel | 2026-11-14 |
 | Daarna | In deze volgorde: de oude sessies, het paneel met poorten en agent-browser, de tweede terminal ernaast, Overnemen | 2026-11-14 |
-| Git | Een smal git-paneel per repo. Het ontwerp staat als werkend voorbeeld in `git-graaf/`. De logica staat vast | 2026-11-14 |
+| Git | Een smal git-paneel per repo. De logica staat vast en staat in `app/src/git.rs` en `gitpaneel.rs` | 2026-11-14 |
 | Git, plek | Rechts naast de terminal, als paneel dat open en dicht klapt. Het wisselt mee met de tab | 2026-11-14 |
 | Thema | Een donker en een licht thema | 2026-11-14 |
-| Uiterlijk, grond | Bijna zwart, één vlak, met lijnen van 1 px tussen de panelen. De terminal heeft dezelfde grond. De waarden staan in `stijl/jera/keuzes.md` | 2026-11-14 |
+| Uiterlijk, grond | Bijna zwart, één vlak, met lijnen van 1 px tussen de panelen. De terminal heeft dezelfde grond. De waarden staan in `stijl/design-system/tokens.json` | 2026-11-14 |
 | Uiterlijk, tab | Een vlak in de titelbalk, met een streep boven de actieve tab | 2026-11-14 |
 | Uiterlijk, status | Een icoon per sessie, zonder woorden: bezig is een groen draaiend boogje, wacht op antwoord een geel vraagteken, wacht op toestemming een rood slot, net klaar een groen vinkje, idle een grijs streepje | 2026-11-14 |
 | Uiterlijk, letter | JetBrains Mono overal, 12.5 px | 2026-11-14 |
@@ -79,7 +79,7 @@ Uit `research/werkwijze.md`:
 | Uiterlijk, bestandsiconen | In de bestandsboom staat links van de naam een icoon in kleur: voor bestanden de iconen van GitLab, voor mappen die van Catppuccin. Gekozen uit 25 pakketten, https://claude.ai/artifact/4RPw8CGnNfEKgS9jmvFkLm | 2026-11-14 |
 | Iconen, keuze | In de menubalk, onder Jera › Iconen, kies ik tussen Kleur (GitLab en Catppuccin) en Zed (de iconen van Zed, in één kleur). Zed is de standaard. Jera onthoudt de keuze | 2026-11-14 |
 | Git, branchnamen | De branchnamen staan boven de lijnen, getrapt: elke naam op een eigen regel | 2026-11-14 |
-| Git, stijl | Recht: commits, groepen en eindpunten zijn vierkantjes, een branch splitst af met een rechte hoek, lijnen van 2 px. Geen datumkolom: de dag en het moment van ophalen staan rechts op hun lijn. Gekozen uit drie, https://claude.ai/artifact/LfeunM49x3iSRWZrLbtZLT | 2026-11-14 |
+| Git, stijl | Recht: commits, groepen en eindpunten zijn vierkantjes, een branch splitst af met een rechte hoek, lijnen van 2 px. Geen datumkolom: de dag en het moment van ophalen staan rechts op hun lijn. Gekozen uit drie | 2026-11-14 |
 | Git, inklappen | De knop git in de Render-regel klapt het paneel in en uit. Bij het openen van Jera is het ingeklapt | 2026-11-14 |
 | Documenten | Geen viewers in de app. Een klik op een document opent het direct in een externe app, zoals Safari, Preview of GridCraft | 2026-11-14 |
 | Openen | `+ map` en ⌘O openen het scherm Openen. Het hangt direct onder de tab `+ map`, tegen de titelbalk aan. Bovenaan `open` (met een mapicoon, opent de mapkeuze van macOS) en `clone repository` (met het icoon van git), daaronder het zoekveld en de mappen die ik het laatst in Jera opende. Typen filtert op de naam en kiest de eerste die past, pijltjes en Enter kiezen. Zonder tabs staat Openen open | 2026-11-15 |
@@ -90,17 +90,17 @@ Uit `research/werkwijze.md`:
 | Naam | Jera, naar de rune ᛃ voor oogst: een knipoog naar Hidden Harvest. Het teken is het icoon van de app | 2026-11-15 |
 | Icoon | Het teken ᛃ met rechte uiteinden. Donker: wit `#F4F5F0` op het groen van Hidden Harvest `#1D3A2A`. Licht: omgekeerd. Staat in `stijl/icoon/`. In het Dock wisselt het mee met macOS; rechtsboven in de titelbalk staat het teken in `ink` | 2026-11-15 |
 
-Het design system staat in `stijl/design-system/` en op https://claude.ai/artifact/QKTtDToW7LYRivNM1vYG88: de tokens en een voorbeeld per onderdeel. De keuzes zelf staan in `stijl/jera/keuzes.md`; het keuzebord staat op https://claude.ai/artifact/6M7pWS1JLMd6jWtFqZkoj3. De feiten bij de stack en de terminal staan in `research/native.md`. De sessiestatus leest Jera uit het sessiebestand van Claude Code; de meting staat in `research/zelf-bouwen.md`.
+Het design system staat in `stijl/design-system/` en op https://claude.ai/artifact/QKTtDToW7LYRivNM1vYG88: de tokens en een voorbeeld per onderdeel. Het keuzebord staat op https://claude.ai/artifact/6M7pWS1JLMd6jWtFqZkoj3. De feiten bij de stack en de terminal staan in `research/native.md`. De sessiestatus leest Jera uit het sessiebestand van Claude Code; de meting staat in `research/sessies.md`.
 
 ### Indeling
 
 Schakelaar op Sessies:
 
 ```
-[ webshop  3 ]  [ cockpit  1 ]  [ + map ]            [ Poorten 4  agent-browser 1 ]
+[ webshop  3 ]  [ jera  1 ]  [ + map ]                         [ Poorten 4  agent-browser 1 ]
 ─────────────────────────────────────────────────────────────────────────────────────────────
  [ Sessies ]  Bestanden           │ ● api  api.onrender.com    ● web  web.onrender.com
- webshop/          [+]   │──────────────────────────────────────┬─────────────────
+ webshop/                    [+]   │──────────────────────────────────────┬─────────────────
    ● kpi cards            bezig    │                                      │
    ● bug       wacht op antwoord   │   terminal van de gekozen sessie     │   git-paneel
  frontend/                   [+]   │                                      │   (open of dicht)
@@ -124,7 +124,7 @@ Schakelaar op Sessies, met het blok oud open en het paneel rechts open:
 
 ```
  [ Sessies ]  Bestanden                  │            │ agent-browser  1
- webshop/                 [+]  │            │   default          [Sluiten]
+ webshop/                           [+]  │            │   default          [Sluiten]
    ● kpi cards                           │            │
                                          │  terminal  │ Poorten  4
 ─────────────────────────────────────────│            │   3000  node    [Openen] [Stoppen]
@@ -142,7 +142,7 @@ De schermen staan ook in het artifact https://claude.ai/artifact/7yXL3y5ykQbPFcZ
 
 - **Rechts van de terminal:** het git-paneel en het paneel met poorten en agent-browser openen allebei daar. Hoe ze die plek delen.
 - **Render:** later misschien: logs en belasting in Jera zelf, en knoppen om te deployen of te herstarten.
-- **Terminal:** de proef in `proef/terminal` tekent Claude Code goed (zie `research/native.md`). Ik heb het venster geprobeerd en goed bevonden; selecteren en kopiëren werken. Nog te bouwen: een pad aanklikken, letters met een accent, en bloktekens zonder naad.
+- **Terminal:** tekent Claude Code goed (zie `research/native.md`); selecteren en kopiëren werken. Nog te bouwen: een pad aanklikken, letters met een accent, en bloktekens zonder naad.
 
 ## Later
 

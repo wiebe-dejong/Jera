@@ -1,5 +1,5 @@
 //! Het git-paneel: de branches van de repo als graaf, rechts naast de terminal.
-//! De logica komt uit `git-graaf/paneel.html`, de stijl uit `stijl/design-system/components/GitPaneel`:
+//! De stijl komt uit `stijl/design-system/components/GitPaneel`:
 //! recht, de namen getrapt boven de lijnen, de dagen rechts op hun lijn.
 
 use std::{

@@ -1,5 +1,5 @@
 //! Eén terminal: `alacritty_terminal` als kern, zelf getekend in GPUI.
-//! Overgenomen uit `proef/terminal`, met de kleuren en maten van het design system.
+//! Met de kleuren en maten van het design system.
 
 use std::{
     borrow::Cow,

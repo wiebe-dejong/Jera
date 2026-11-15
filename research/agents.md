@@ -1,6 +1,6 @@
 # Agents van een sessie (2026-11-14)
 
-Hoe Cockpit kan zien welke agents een sessie heeft en wat ze doen.
+Hoe Jera kan zien welke agents een sessie heeft en wat ze doen.
 
 **Legenda:**
 - ✓ = gemeten op 2026-11-14 met Claude Code 2.1.325. Zes proefagents op Haiku, in een sessie met `bypassPermissions`. Een script las `~/.claude` elke 0,5 s.
@@ -35,7 +35,7 @@ Elke sessie heeft vanaf de start een eigen team, `session-<eerste 8 tekens van h
 | Weer aan het werk | Komt niet voor | Een bericht in `inboxes/<naam>.json`, daarna een nieuwe user-regel in zijn gesprek ✓ |
 | Gestopt | Nooit `finished`. De laatste regel is `[Request interrupted by user for tool use]` ✓ | Verdwijnt uit `members` in `config.json`. Zijn gesprek en `meta.json` blijven staan en zien eruit als klaar ✓ |
 
-Een subagent kan `end_turn` geven terwijl hij nog werkt (2026-11-15, Claude Code 2.1.325, in Cockpit) ✓:
+Een subagent kan `end_turn` geven terwijl hij nog werkt (2026-11-15, Claude Code 2.1.325, in Jera) ✓:
 - "Slaapt veertig seconden" startte zijn `sleep 40` op de achtergrond, gaf om 23:35:47 `end_turn`, en leverde pas om 23:36:27 zijn rapport in. Claude Code toonde hem intussen als *waiting on its own background work*.
 - Zijn rapport gaat met de tool `SubagentHandback`. De laatste regel van zijn gesprek is dan het toolresultaat ("Report delivered"), geen `end_turn`.
 - Lees een subagent dus alleen als klaar met `finished`. Voor een teamlid blijft `end_turn` de enige aanwijzing.
@@ -48,9 +48,9 @@ Een teamlid krijgt nooit `finished`. Dat verklaart een deel van de 74 subagents 
 - De sessie gaat pas naar `idle` als alles klaar is, op dezelfde milliseconde als het laatste teamlid ✓.
 - Een teamlid dat klaar is maar nog bestaat, houdt de sessie niet op `busy` ✓.
 
-De status die Cockpit nu toont, klopt dus al met agents erbij. Agents geven extra inzicht: wie er werkt en waaraan.
+De status die Jera nu toont, klopt dus al met agents erbij. Agents geven extra inzicht: wie er werkt en waaraan.
 
-## Koppelen aan een sessie in Cockpit
+## Koppelen aan een sessie in Jera
 
 - `sessions/<pid>.json` geeft het `sessionId`. Daaruit volgen de map `subagents/` en de teamnaam `session-<id8>`.
 - Een teammap blijft soms staan nadat de sessie is gestopt (g): `teams/eurekaweek/` is van maart. Controleer of `leadProcess.pid` nog draait.

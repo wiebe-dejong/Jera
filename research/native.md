@@ -45,7 +45,7 @@ Onderdelen volgens de README (b):
 - "120 FPS".
 
 **Webview** ✓ (`crates/webview`, gebouwd op Wry):
-- op macOS is het WKWebView. Dat heeft geen CDP (zie `zelf-bouwen.md`);
+- op macOS is het WKWebView. Dat heeft geen CDP;
 - de README noemt het experimenteel, met beperkte functies;
 - op `gpui-pre` ligt de webview boven alle GPUI-inhoud in zijn vlak, dus ook boven popovers, dialogen, menu's en tooltips, en hij is niet te clippen;
 - met de backend `gpui-fast` kunnen overlays op macOS boven de webview komen (b).
@@ -130,7 +130,7 @@ Niets hiervan is gebouwd of getest met Claude Code.
 
 ## Proef: Claude Code in een zelfgetekende terminal (2026-11-14)
 
-De code staat in `proef/terminal`: één bestand van ongeveer 550 regels, met `gpui-kit` 0.9.1 en `alacritty_terminal` 0.26.0.
+De proef was één bestand van ongeveer 550 regels, met `gpui-kit` 0.9.1 en `alacritty_terminal` 0.26.0. Ze is overgenomen in `app/src/terminal.rs` en daarna verwijderd.
 
 Gemeten op deze Mac (✓):
 
@@ -145,7 +145,7 @@ Door mij in het venster geprobeerd op 2026-11-14: het werken in het venster is g
 
 Niet gebouwd: een pad aanklikken, letters met een accent via een dode toets, en de muis doorgeven aan het programma.
 
-Het venster bewaart zichzelf als afbeelding met `cargo run --features schermafdruk` en `COCKPIT_SHOT=<pad>`. Zo zijn de opnamen gemaakt.
+Het venster bewaart zichzelf als afbeelding met `cargo run --features schermafdruk` en `JERA_SHOT=<pad>`. Zo zijn de opnamen gemaakt.
 
 ## Bronnen
 
