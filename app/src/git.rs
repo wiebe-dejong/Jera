@@ -446,7 +446,9 @@ pub fn bericht(map: &Path) -> Option<String> {
         }
     };
     let mut kind = cmd
-        .args(["-p", "--model", "haiku"])
+        // kaal: zonder tools, MCP, skills en instellingen, en een korte systeemprompt; scheelt de helft
+        .args(["-p", "--model", "haiku", "--tools", "", "--strict-mcp-config", "--disable-slash-commands", "--no-session-persistence"])
+        .args(["--setting-sources", "", "--system-prompt", "Je schrijft commitberichten."])
         .current_dir(std::env::temp_dir())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())

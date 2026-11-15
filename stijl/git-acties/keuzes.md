@@ -21,7 +21,7 @@ Leidraad: alleen tonen wat de graaf en de actieregel niet al zeggen. Een PR maak
 
 | | |
 |---|---|
-| Veld | voorstel uit de diff, `claude -p`, ± 1 s |
+| Veld | voorstel uit de diff, `claude -p` kaal, ± 2,5 s |
 | Enter | commit alle gewijzigde bestanden |
 | Typen | past het voorstel aan |
 | Escape | terug |
@@ -52,11 +52,12 @@ Leidraad: alleen tonen wat de graaf en de actieregel niet al zeggen. Een PR maak
 | Raakvlak | het dichtstbijzijnde punt binnen 30 px opzij en 20 px boven en onder |
 | Loslaten | na 150 ms |
 
-## 06 Onder de muis: tekst · A: Geen
+## 06 Onder de muis: tekst · Wie en hoe laat bij een commit (2026-11-15)
 
 | | |
 |---|---|
-| Tekst | geen |
+| Commit | het kaartje van 09, zolang de muis erop staat |
+| Branch | geen tekst, het kaartje na een klik |
 
 ## 07 Klikken: gekozen en details · B: Kaartje blijft staan
 

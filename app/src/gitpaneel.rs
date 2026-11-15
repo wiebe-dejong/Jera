@@ -1105,8 +1105,8 @@ fn teken_branch(tek: &mut Tekening, ind: &Indeling, staat: &Staat, i: usize, hh:
         } else {
             boven.push(Vorm::Vlak { x: xi, y: yy, z: if dub { DUB } else { PUNT } * 0.9, kleur: kleur(k, a) });
         }
-        // een losse commit uit een uitgeklapte groep klapt hem weer in; anders: wie en hoe laat
-        let kaart = if key.is_some() { Vec::new() } else { vec![(format!("{} · {}", c.auteur, wanneer(c.ts, repo.nu)), Soort::Gewoon)] };
+        // wie en hoe laat; een klik op een losse commit uit een uitgeklapte groep klapt hem weer in
+        let kaart = vec![(format!("{} · {}", c.auteur, wanneer(c.ts, repo.nu)), Soort::Gewoon)];
         doelen.push(doel(xi, yy, 6.0, i, format!("c:{}", c.h), kaart, key.map(Klik::Groep)));
     };
     for c in &v.vast {
@@ -1311,8 +1311,9 @@ fn verf(tek: &Tekening, staat: &Staat, bounds: Bounds<Pixels>, th: &Thema, windo
         let b = Bounds::new(p(d.x - 9.0, d.y - 9.0), size(px(18.0), px(18.0)));
         window.paint_quad(quad(b, px(0.0), transparent_black(), px(1.0), rgb(th.ink), BorderStyle::default()));
     }
-    // het kaartje van het gekozen punt, naast het punt, met de streep in accent
-    let Some(d) = staat.gekozen.as_ref().and_then(|id| tek.doelen.iter().find(|d| d.id == *id)).filter(|d| !d.kaart.is_empty()) else {
+    // het kaartje van de aangewezen commit, anders van het gekozen punt, naast het punt, met de streep in accent
+    let gekozen = staat.gekozen.as_ref().and_then(|id| tek.doelen.iter().find(|d| d.id == *id));
+    let Some(d) = aangewezen.filter(|d| d.id.starts_with("c:")).or(gekozen).filter(|d| !d.kaart.is_empty()) else {
         return;
     };
     let (wd, hh) = (f32::from(bounds.size.width), f32::from(bounds.size.height));
