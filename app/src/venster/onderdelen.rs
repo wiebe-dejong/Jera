@@ -128,8 +128,12 @@ pub(super) fn scheiding(th: &Thema) -> Div {
     div().h(px(t::LIJN)).my(px(4.0)).bg(rgb(th.line))
 }
 
-/// Het kaartje met één woord dat onder de muis verschijnt, zoals het kaartje in het git-paneel.
-pub(super) struct Tip(pub(super) &'static str);
+/// Zo breed wordt een kaartje hoogstens; een langere regel loopt door op de volgende.
+const TIP_BREED: f32 = 360.0;
+
+/// Het kaartje dat onder de muis verschijnt, zoals het kaartje in het git-paneel.
+/// De eerste regel in `ink`, de regels daarna in `mute`.
+pub(super) struct Tip(pub(super) Vec<SharedString>);
 
 impl Render for Tip {
     fn render(&mut self, window: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
@@ -144,6 +148,9 @@ impl Render for Tip {
             .font_family(t::LETTER)
             .text_size(px(t::TEKST))
             .line_height(relative(t::REGEL))
-            .child(self.0)
+            .max_w(px(TIP_BREED))
+            .children(
+                self.0.iter().enumerate().map(|(i, regel)| div().when(i > 0, |d| d.text_color(rgb(th.mute))).child(regel.clone())),
+            )
     }
 }

@@ -65,16 +65,16 @@ Elke sessie toont één icoon van `icoon` groot, voor de titel, zonder woord. He
 
 ## Onder de muis
 
-- Een rij die aan te klikken is krijgt het vlak `sel`, zonder streep en zonder vet: een sessieregel, een teamlid, het kopje `team`, de kop `oud`, een dag en een sessie in het blok oud, een regel in de bestandsboom, in Openen en in het Contextmenu.
+- Een rij die aan te klikken is krijgt het vlak `sel`, zonder streep en zonder vet: een sessieregel, een agent, de kop `oud`, een dag en een sessie in het blok oud, een regel in de bestandsboom, in Openen en in het Contextmenu.
 - Een woord of teken in `mute` dat aan te klikken is wordt `ink`: een niet-actieve tab, `+ map`, `sessies` en `bestanden`, `git`, het plusteken bij een map, het pijltje van agents.
 - Een knop met een rand krijgt het vlak `sel`. De eigenaar in het git-paneel ook, zo hoog als de knop ernaast.
-- Het statusicoon van een sessie toont na een halve seconde zijn woord in een kaartje: `bg` met een rand in `line-strong`, zoals het kaartje in het git-paneel.
+- Het statusicoon van een sessie toont na een halve seconde zijn woord in een kaartje: `bg` met een rand in `line-strong`, zoals het kaartje in het git-paneel. Een agent toont zo zijn opdracht en wat hij doet, zie Agents.
 - De gekozen rij en het actieve woord veranderen niet. Wat niet aan te klikken is ook niet.
 - De muisaanwijzer blijft een pijl.
 
 ## Onderdelen
 
-Alle onderdelen zijn gekozen: Tab, Schakelaar, Sessieregel, Agents (de teamleden en het aantal subagents onder een sessie), Statusicoon, RenderRegel, Terminal, GitPaneel, Knop, Bestandsboom, EerderRegel (de regel in het blok oud), Poortenpaneel, Dialoog en LegeStaat.
+Alle onderdelen zijn gekozen: Tab, Schakelaar, Sessieregel, Agents (de agents onder een sessie: de subagents die bezig zijn en de teamleden), Statusicoon, RenderRegel, Terminal, GitPaneel, Knop, Bestandsboom, EerderRegel (de regel in het blok oud), Poortenpaneel, Dialoog en LegeStaat.
 
 - Voorstel: Contextmenu, het menu van een twee-vingerklik in de bestandsboom. Al gebouwd in de app.
 - Voorstel: Openen, het scherm waarin ik een project kies of een nieuw maak. Al gebouwd in de app.

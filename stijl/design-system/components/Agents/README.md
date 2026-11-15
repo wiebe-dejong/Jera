@@ -1,16 +1,17 @@
-De agents van een sessie, onder haar sessieregel: de teamleden met hun stand, en het aantal subagents.
+De agents van een sessie, onder haar sessieregel: de subagents die bezig zijn en de teamleden.
 
-**Status:** gekozen op het keuzebord, ronde 4 (15 november 2026).
+**Status:** gekozen op 15 november 2026, ronde 5: één lijst zonder team en subagents apart, een subagent verdwijnt zodra hij klaar is, en wat een agent doet in een kaartje.
 
-Geef per sessie haar agents: van een teamlid de naam, de kleur die Claude Code hem gaf en de stand, en het aantal subagents. Waar Jera dat leest, staat in `research/agents.md`.
+Geef per sessie haar agents, subagents en teamleden door elkaar, met hun naam en stand. Waar Jera dat leest, staat in `research/agents.md`.
 
 - Ze staan direct onder de sessieregel, ingesprongen tot onder de titel: `pad` plus `icoon` plus `gap`. Elke regel is `h-rij` hoog.
-- Het pijltje rechts in de sessieregel klapt ze open en dicht. De gekozen sessie begint open. Dicht toont de sessieregel bezig en totaal, zie Sessieregel.
-- Eerst het team: een kopje in `klein` en `mute`, links `team`, rechts het pijltje van een map en helemaal rechts het aantal. Het pijltje klapt het team apart open en dicht.
-- Daaronder een kopje `subagents` met helemaal rechts alleen het aantal, zonder pijltje en zonder lijst.
-- Een kopje zonder agents valt weg.
-- Een teamlid toont zijn naam in zijn kleur, `team-blue` tot `team-red`. Die kleur houdt hij ook als hij klaar of gestopt is.
-- Voor de naam staat het statusicoon: bezig is het boogje in `ok`, klaar het vinkje in `ok`, gestopt het streepje in `mute`.
-- De volgorde is die van het starten. Klaar en gestopt blijven op hun plek.
+- Het pijltje rechts in de sessieregel klapt ze open en dicht. De gekozen sessie begint open. Dicht toont de sessieregel hoeveel er bezig zijn, zie Sessieregel.
+- Ze staan in de volgorde van starten, zonder kopje voor het team of de subagents.
+- Een subagent staat er alleen zolang hij bezig is. Klaar of gestopt verdwijnt hij meteen.
+- Een teamlid blijft staan zolang hij in zijn team zit, ook als hij klaar is: hij kan weer aan het werk. Gestopt, uit het team, verdwijnt hij.
+- Een agent toont zijn naam, of zonder naam zijn omschrijving.
+- Een teamlid toont zijn naam in zijn kleur, `team-blue` tot `team-red`. Die kleur houdt hij ook als hij klaar is. Een subagent staat in `ink`.
+- Voor de naam staat het statusicoon: bezig is het boogje in `ok`, klaar het vinkje in `ok`.
 - Een te lange naam wordt afgekapt met een beletselteken.
-- Een klik op een teamlid kiest zijn sessie, net als een klik op de sessieregel.
+- Onder de muis toont een agent na een halve seconde een kaartje: zijn opdracht in `ink`, en zolang hij bezig is daaronder in `mute` zijn laatste tool met het doel, zoals `Read agents.rs`. Het kaartje is hoogstens 360 px breed; een langere opdracht loopt door op de volgende regel.
+- Een klik op een agent kiest zijn sessie, net als een klik op de sessieregel.

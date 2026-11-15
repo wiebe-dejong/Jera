@@ -80,6 +80,8 @@ button:focus-visible{outline:var(--streep) solid var(--ink);outline-offset:-2px}
 .ck-ag{font-weight:400;padding-left:calc(var(--pad) + var(--icoon) + var(--gap))}
 .ck-agkop{display:flex;align-items:center;gap:6px;width:100%;height:20px;padding:0 var(--pad) 0 calc(var(--pad) + var(--icoon) + var(--gap));font-size:11px;color:var(--mute)}
 .ck-agkop b{flex:1;font-weight:400}
+.ck-kaart{display:flex;flex-direction:column;max-width:360px;padding:7px 10px;background:var(--bg);border:var(--lijn-dikte) solid var(--line-strong)}
+.ck-kaart span+span{color:var(--mute)}
 .t-blue{color:var(--team-blue)}.t-green{color:var(--team-green)}.t-yellow{color:var(--team-yellow)}.t-purple{color:var(--team-purple)}
 .t-orange{color:var(--team-orange)}.t-pink{color:var(--team-pink)}.t-cyan{color:var(--team-cyan)}.t-red{color:var(--team-red)}
 

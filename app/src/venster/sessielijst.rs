@@ -3,69 +3,40 @@
 use super::*;
 use crate::taal;
 
-/// De agents onder een sessieregel: het team onder een kopje dat dichtklapt, met elk teamlid,
-/// en daaronder een kopje met alleen het aantal subagents. Een klik op een teamlid kiest de sessie,
-/// die op plek `plek` van de tab staat.
+/// De agents onder een sessieregel. Een klik op een agent kiest de sessie, die op plek `plek` van de tab staat.
 pub(super) fn agent_rijen(sessie: &Sessie, plek: usize, th: &Thema, cx: &mut Context<Jera>) -> Vec<AnyElement> {
     let id = sessie.id;
     let inspring = px(t::PAD + t::ICOON + t::GAP);
-    let kopje = |label: &'static str| {
-        div()
-            .flex()
-            .items_center()
-            .gap(px(GAP_KLEIN))
-            .h(px(20.0))
-            .pl(inspring)
-            .pr(px(t::PAD))
-            .text_size(px(t::KLEIN))
-            .text_color(rgb(th.mute))
-            .child(div().flex_1().child(label))
-    };
-    let mut rijen = Vec::new();
-    let team: Vec<(usize, &Agent)> = sessie.agents.iter().enumerate().filter(|(_, a)| a.kleur.is_some()).collect();
-    if !team.is_empty() {
-        let dicht = sessie.team_dicht;
-        rijen.push(
-            kopje("team")
-                .id(("team", id))
+    sessie
+        .agents
+        .iter()
+        .enumerate()
+        .map(|(index, agent)| {
+            let mut tip: Vec<SharedString> = vec![agent.opdracht.clone().into()];
+            tip.extend(agent.bezig_met.clone().filter(|_| agent.stand == agents::Stand::Bezig).map(Into::into));
+            div()
+                .id(SharedString::from(format!("agent-{id}-{index}")))
+                .flex()
+                .items_center()
+                .gap(px(t::GAP))
+                .h(px(t::H_RIJ))
+                .pl(inspring)
+                .pr(px(t::PAD))
                 .hover(|d| d.bg(rgb(th.sel)))
-                .child(pijl(if dicht { PIJL_DICHT } else { PIJL_OPEN }, th))
-                .child(team.len().to_string())
-                .on_click(cx.listener(move |this, _, _, cx| this.wissel_team(id, cx)))
-                .into_any_element(),
-        );
-        if !dicht {
-            for (index, agent) in team {
-                rijen.push(
+                .child(agent_icoon(agent.stand, SharedString::from(format!("draai-{id}-{index}")), th))
+                .child(
                     div()
-                        .id(SharedString::from(format!("teamlid-{id}-{index}")))
-                        .flex()
-                        .items_center()
-                        .gap(px(t::GAP))
-                        .h(px(t::H_RIJ))
-                        .pl(inspring)
-                        .pr(px(t::PAD))
-                        .hover(|d| d.bg(rgb(th.sel)))
-                        .child(agent_icoon(agent.stand, SharedString::from(format!("draai-{id}-{index}")), th))
-                        .child(
-                            div()
-                                .flex_1()
-                                .min_w_0()
-                                .truncate()
-                                .text_color(rgb(th.team[agent.kleur.unwrap_or(0)]))
-                                .child(agent.tekst.clone()),
-                        )
-                        .on_click(cx.listener(move |this, _, window, cx| this.kies_sessie(plek, window, cx)))
-                        .into_any_element(),
-                );
-            }
-        }
-    }
-    let subagents = sessie.agents.iter().filter(|a| a.kleur.is_none()).count();
-    if subagents > 0 {
-        rijen.push(kopje("subagents").child(subagents.to_string()).into_any_element());
-    }
-    rijen
+                        .flex_1()
+                        .min_w_0()
+                        .truncate()
+                        .when_some(agent.kleur, |d, kleur| d.text_color(rgb(th.team[kleur])))
+                        .child(agent.tekst.clone()),
+                )
+                .tooltip(move |_, cx| cx.new(|_| Tip(tip.clone())).into())
+                .on_click(cx.listener(move |this, _, window, cx| this.kies_sessie(plek, window, cx)))
+                .into_any_element()
+        })
+        .collect()
 }
 
 /// Het statusicoon van een agent: bezig, klaar of gestopt.
@@ -228,7 +199,7 @@ impl Jera {
                                 .id(("status", sessie.id))
                                 .flex_none()
                                 .child(icoon(sessie.status, ("draai", sessie.id), th))
-                                .tooltip(move |_, cx| cx.new(|_| Tip(woord)).into())
+                                .tooltip(move |_, cx| cx.new(|_| Tip(vec![woord.into()])).into())
                         })
                         .child(match self.naam_veld.as_ref().filter(|v| matches!(v.doel, Doel::Sessie(s) if s == id)) {
                             Some(veld) => self.naam_invoer(veld, th, cx),
@@ -250,13 +221,13 @@ impl Jera {
                                         this.wissel_agents(id, open, cx);
                                     })),
                             )
-                            .when(!open, |d| {
+                            .when(!open && bezig > 0, |d| {
                                 d.child(
                                     div()
                                         .flex_none()
                                         .font_weight(FontWeight::NORMAL)
                                         .text_color(rgb(th.mute))
-                                        .child(format!("{bezig}/{}", sessie.agents.len())),
+                                        .child(bezig.to_string()),
                                 )
                             })
                         })
@@ -289,14 +260,6 @@ impl Jera {
     pub(super) fn wissel_agents(&mut self, id: usize, open: bool, cx: &mut Context<Self>) {
         if let Some(sessie) = self.tabs.iter_mut().flat_map(|tab| tab.sessies.iter_mut()).find(|s| s.id == id) {
             sessie.agents_open = Some(!open);
-        }
-        cx.notify();
-    }
-
-    /// Klapt het team van sessie `id` open of dicht.
-    pub(super) fn wissel_team(&mut self, id: usize, cx: &mut Context<Self>) {
-        if let Some(sessie) = self.tabs.iter_mut().flat_map(|tab| tab.sessies.iter_mut()).find(|s| s.id == id) {
-            sessie.team_dicht = !sessie.team_dicht;
         }
         cx.notify();
     }

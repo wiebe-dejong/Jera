@@ -69,7 +69,6 @@ struct Sessie {
     agents: Vec<Agent>,
     /// Agents onder de sessieregel open of dicht. Zolang ik niets koos, is alleen de gekozen sessie open.
     agents_open: Option<bool>,
-    team_dicht: bool,
     /// De naam die ik de sessie gaf, in plaats van de titel van Claude.
     naam: Option<String>,
 }
@@ -217,7 +216,6 @@ impl Jera {
             gestart: Instant::now(),
             agents: Vec::new(),
             agents_open: None,
-            team_dicht: false,
             naam: None,
         });
         tab.gekozen = tab.sessies.len() - 1;
@@ -284,9 +282,7 @@ impl Jera {
             }
             // Een idle sessie heeft geen agent meer aan het werk: een die nog bezig lijkt, is gestopt.
             if stand == Some(Gelezen::Klaar) {
-                for agent in agents.iter_mut().filter(|a| a.stand == agents::Stand::Bezig) {
-                    agent.stand = agents::Stand::Gestopt;
-                }
+                agents.retain(|a| a.stand != agents::Stand::Bezig);
             }
             veranderd |= status != sessie.status || agents != sessie.agents;
             sessie.status = status;
@@ -308,7 +304,7 @@ impl Jera {
     /// daarin, "naam tekst" typt die naam in het veld en drukt op Enter. "openen" opent het scherm
     /// Openen, "nieuw" opent het met het naamveld, "zoek tekst" typt in het veld, "github" toont de
     /// repo's van GitHub. "agents" klapt
-    /// de agents van de gekozen sessie open of dicht, "team" het team daarvan. "sessiemenu" opent
+    /// de agents van de gekozen sessie open of dicht. "sessiemenu" opent
     /// het menu van de gekozen sessie, "sluit" sluit de actieve tab, of vraagt dat eerst.
     #[cfg(feature = "schermafdruk")]
     pub fn test_stap(&mut self, stap: &str, window: &mut Window, cx: &mut Context<Self>) {
@@ -317,14 +313,11 @@ impl Jera {
             "bestanden" => self.stand = Stand::Bestanden,
             "git" => self.git_open = !self.git_open,
             "oud" => self.wissel_oud(cx),
-            "agents" | "team" => {
+            "agents" => {
                 let Some(tab) = self.tabs.get(self.actief) else { return };
                 let Some(sessie) = tab.sessies.get(tab.gekozen) else { return };
                 let id = sessie.id;
-                match stap {
-                    "agents" => self.wissel_agents(id, sessie.agents_open.unwrap_or(true), cx),
-                    _ => self.wissel_team(id, cx),
-                }
+                self.wissel_agents(id, sessie.agents_open.unwrap_or(true), cx);
             }
             "sessiemenu" => self.sessie_menu = self.gekozen_id().map(|id| (id, point(px(160.0), px(110.0)))),
             "sluit" => {
@@ -507,7 +500,7 @@ impl Jera {
                         .id(("tabstatus", index))
                         .flex_none()
                         .child(icoon(status, ("tabdraai", index), th))
-                        .tooltip(move |_, cx| cx.new(|_| Tip(woord)).into())
+                        .tooltip(move |_, cx| cx.new(|_| Tip(vec![woord.into()])).into())
                 }))
                 .child(naam(&tab.root))
                 .child(div().flex().justify_center().min_w(px(t::ICOON)).font_weight(FontWeight::NORMAL).child(rechts))

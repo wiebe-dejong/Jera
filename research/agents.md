@@ -11,9 +11,11 @@ Hoe Jera kan zien welke agents een sessie heeft en wat ze doen.
 
 | Soort | Ontstaat door | Bij mij |
 |---|---|---|
-| Subagent | De Agent-tool zonder naam | 219 in een week, in 24 sessies (g) |
-| Teamlid | De Agent-tool met een naam | 17 in één sessie van `vydar-site` (g) |
+| Subagent | De Agent-tool, met of zonder naam | 219 in een week, in 24 sessies (g) |
+| Teamlid | De Agent-tool met een naam, in een team | 17 in één sessie van `vydar-site` (g) |
 | Achtergrondtaak | `jobs/`, een sessie zonder terminal | 3, de laatste uit juli (g). Niet gemeten |
+
+Een naam maakt nog geen teamlid (2026-11-15, (g)): drie agents in een sessie van Jera hebben `name` maar geen `teamName` en geen `color`, wel `finished: true`, en ontbreken in elk `config.json`. Herken een teamlid daarom aan `teamName` (en `taskKind: in_process_teammate`), niet aan `name`.
 
 Elke sessie heeft vanaf de start een eigen team, `session-<eerste 8 tekens van het sessie-id>`, met alleen `team-lead` erin ✓.
 
@@ -41,6 +43,11 @@ Een subagent kan `end_turn` geven terwijl hij nog werkt (2026-11-15, Claude Code
 - Lees een subagent dus alleen als klaar met `finished`. Voor een teamlid blijft `end_turn` de enige aanwijzing.
 
 Een teamlid krijgt nooit `finished`. Dat verklaart een deel van de 74 subagents zonder `finished` van de afgelopen week; de rest is gestopt of nog bezig.
+
+## Wat een agent doet
+
+- De laatste assistant-regel in zijn gesprek met een `tool_use` geeft de tool en zijn invoer, zoals `Bash` met `description` "Build Jera release" ✓ (2026-11-15, een subagent die bezig was).
+- Tussen de regels van een gesprek staan ook regels van het type `api-request`, `api-request-blob` en `attachment` (g, in ruim 900 gesprekken). Een gesprek dat klaar is, eindigt wel steeds op een assistant- of user-regel.
 
 ## De sessie zelf
 

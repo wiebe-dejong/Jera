@@ -10,6 +10,6 @@ Geef per sessie de status en de titel, en per groep de naam van de map.
 - Een te lange titel wordt afgekapt met een beletselteken.
 - Boven elke groep staat de map in `mute`, met rechts een plusteken om daar een sessie te starten.
 - Elke regel is `h-rij` hoog. Maak geen regel van twee regels tekst.
-- Een sessie met agents heeft rechts het pijltje van een map in `mute`; het klapt Agents onder de regel open en dicht. Dicht staat helemaal rechts, na het pijltje, in `mute` hoeveel agents bezig zijn en hoeveel er zijn: `2/4`. Zie Agents.
+- Een sessie met agents heeft rechts het pijltje van een map in `mute`; het klapt Agents onder de regel open en dicht. Dicht staat helemaal rechts, na het pijltje, in `mute` hoeveel agents bezig zijn: `2`. Is er geen bezig, dan staat er geen getal. Zie Agents.
 - Een twee-vingerklik opent het menu van de sessie, zie Contextmenu. Zolang het open is, heeft de regel het vlak `sel`.
 - Een naam die ik de sessie gaf, staat in plaats van de titel van Claude. Leeg maken zet de titel terug.
