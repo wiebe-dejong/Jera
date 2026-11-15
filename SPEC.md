@@ -78,6 +78,7 @@ Gemeten op 2026-11-04:
 | Uiterlijk, overige onderdelen | Knop, bestandsboom, de regel in het blok oud, het paneel met poorten, de dialoog en het lege scherm zijn gekozen zoals ze in het design system staan | 2026-11-14 |
 | Uiterlijk, bestandsiconen | In de bestandsboom staat links van de naam een icoon in kleur: voor bestanden de iconen van GitLab, voor mappen die van Catppuccin. Gekozen uit 25 pakketten, https://claude.ai/artifact/4RPw8CGnNfEKgS9jmvFkLm | 2026-11-14 |
 | Iconen, keuze | In de menubalk, onder Jera › Iconen, kies ik tussen Kleur (GitLab en Catppuccin) en Zwartwit (de iconen van Zed, in één kleur). Zwartwit is de standaard. Jera onthoudt de keuze | 2026-11-14 |
+| Tab in de terminal | Tab en Shift-Tab gaan naar de sessie, niet naar het volgende onderdeel van het venster | 2026-11-15 |
 | Git, branchnamen | De branchnamen staan boven de lijnen, getrapt: elke naam op een eigen regel | 2026-11-14 |
 | Git, stijl | Recht: commits, groepen en eindpunten zijn vierkantjes, een branch splitst af met een rechte hoek, lijnen van 2 px. Geen datumkolom: de dag en het moment van ophalen staan rechts op hun lijn. Gekozen uit drie | 2026-11-14 |
 | Git, inklappen | De knop git in de Render-regel klapt het paneel in en uit. Bij het openen van Jera is het ingeklapt | 2026-11-14 |

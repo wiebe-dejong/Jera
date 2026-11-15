@@ -46,6 +46,9 @@ pub fn init(cx: &mut App) {
         KeyBinding::new("cmd-q", Stop, None),
         KeyBinding::new("cmd-o", OpenProject, None),
         KeyBinding::new("cmd-n", NieuwProject, None),
+        // GPUI Kit maakt van Tab en Shift-Tab een focussprong; in de terminal gaan ze naar de sessie.
+        KeyBinding::new("tab", NoAction, Some("Terminal")),
+        KeyBinding::new("shift-tab", NoAction, Some("Terminal")),
     ]);
     menu(cx);
 }

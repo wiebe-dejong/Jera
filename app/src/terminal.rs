@@ -324,6 +324,7 @@ impl Render for TerminalView {
         div()
             .size_full()
             .bg(rgb(thema.bg))
+            .key_context("Terminal")
             .track_focus(&self.focus)
             .on_key_down(cx.listener(Self::on_key))
             .on_scroll(cx.listener(Self::on_scroll))
