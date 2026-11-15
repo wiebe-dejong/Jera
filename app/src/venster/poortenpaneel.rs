@@ -1,5 +1,5 @@
-//! Het paneel met poorten en agent-browsers, gegroepeerd onder de sessie die ze startte.
-//! Daaronder wat geen sessie startte, en de wezen: wat bij een sessie hoort die niet meer draait.
+//! Het paneel met drie kopjes: poorten, browsers en artifacts. Een kopje zonder regels staat er niet.
+//! Elke regel noemt de sessie die het startte; "wees" als die sessie niet meer draait.
 
 use super::*;
 use crate::artifacts::{self, Artifact};
@@ -25,7 +25,7 @@ impl Jera {
             sessie.as_ref().and_then(|id| self.poorten.sessies.get(id)).is_some_and(|(ouder, _)| *ouder == shell)
         };
         let poorten = self.poorten.poorten.iter().filter(|p| van(&p.sessie)).map(|p| format!("{}  {}", p.nummer, p.commando));
-        let browsers = self.poorten.browsers.iter().filter(|b| van(&b.sessie)).map(|b| format!("browser  {}", b.naam));
+        let browsers = self.poorten.browsers.iter().filter(|b| van(&b.sessie)).map(|_| "browser".to_string());
         poorten.chain(browsers).map(Into::into).collect()
     }
 
@@ -55,57 +55,33 @@ impl Jera {
             }))
     }
 
+    /// Bij wie iets hoort: de titel van de sessie, haar naam als ze niet in Jera draait, of "wees".
+    fn van_wie(&self, sessie: &Option<String>, cx: &App) -> Option<String> {
+        let id = sessie.as_ref()?;
+        Some(match (self.sessie_van(id, cx), self.poorten.sessies.get(id)) {
+            (Some(sessie), _) => titel(sessie, cx),
+            (None, Some((_, naam))) => naam.clone(),
+            (None, None) => t("wees", "orphan").into(),
+        })
+    }
+
     pub(super) fn poortenpaneel(&self, th: &Thema, cx: &mut Context<Self>) -> impl IntoElement {
         let stand = &self.poorten;
-        let standaard: Vec<&Poort> = stand.standaard().collect();
-
-        // De sessies: die van Jera in de volgorde van de tabs, daarna die van elders.
-        let volgorde: Vec<u32> = self.tabs.iter().flat_map(|tab| &tab.sessies).filter_map(|s| s.terminal.read(cx).pid).collect();
-        let mut sessies: Vec<&String> = stand
-            .poorten
-            .iter()
-            .filter_map(|p| p.sessie.as_ref())
-            .chain(stand.browsers.iter().filter_map(|b| b.sessie.as_ref()))
-            .chain(self.artifacts.keys())
-            .filter(|id| stand.sessies.contains_key(*id))
-            .collect();
-        // Eerst alle dubbele weg: een sessie kan een poort, een browser en artifacts hebben.
-        sessies.sort();
-        sessies.dedup();
-        sessies.sort_by_key(|id| {
-            let (ouder, naam) = &stand.sessies[*id];
-            (volgorde.iter().position(|p| p == ouder).unwrap_or(usize::MAX), naam.clone())
-        });
-
         let mut rijen: Vec<AnyElement> = Vec::new();
-        for id in sessies {
-            let kop = match self.sessie_van(id, cx) {
-                Some(sessie) => titel(sessie, cx),
-                None => stand.sessies[id].1.clone(),
-            };
-            rijen.push(groepkop(kop, th).into_any_element());
-            for poort in stand.poorten.iter().filter(|p| p.sessie.as_ref() == Some(id)) {
-                rijen.push(self.poort_rij(poort, th, cx));
-            }
-            for browser in stand.browsers.iter().filter(|b| b.sessie.as_ref() == Some(id)) {
-                rijen.extend(self.browser_rijen(browser, th, cx));
-            }
-            for artifact in self.artifacts.get(id).into_iter().flatten() {
-                rijen.push(artifact_rij(artifact, th, cx));
-            }
-        }
 
-        // Zonder sessie: standaard alleen wat uit de thuismap is gestart, met Alles de rest.
-        let zonder: Vec<&Poort> = match self.alles {
-            true => stand.poorten.iter().filter(|p| p.sessie.is_none()).collect(),
-            false => standaard.iter().copied().filter(|p| p.sessie.is_none()).collect(),
-        };
-        let browsers_zonder: Vec<&Browser> = stand.browsers.iter().filter(|b| b.sessie.is_none()).collect();
+        // Poorten: standaard alleen die van een sessie of uit de thuismap, met Alles de rest.
+        let standaard: Vec<&Poort> = stand.standaard().collect();
         let verborgen = stand.poorten.len() - standaard.len();
-        if !zonder.is_empty() || !browsers_zonder.is_empty() || verborgen > 0 {
+        let poorten: Vec<&Poort> = match self.alles {
+            true => stand.poorten.iter().collect(),
+            false => standaard,
+        };
+        // Ook zonder regels, als er iets verborgen luistert: dan staat Alles erin.
+        if !poorten.is_empty() || verborgen > 0 {
             let alles = self.alles;
+            let wezen: Vec<u32> = poorten.iter().filter(|p| stand.wees(&p.sessie)).map(|p| p.pid).collect();
             rijen.push(
-                groepkop(t("zonder sessie", "no session").into(), th)
+                groepkop(t("Poorten", "Ports").into(), th)
                     .when(verborgen > 0, |d| {
                         d.child(
                             div()
@@ -123,44 +99,53 @@ impl Jera {
                                 })),
                         )
                     })
+                    .when(!wezen.is_empty(), |d| {
+                        d.child(gevaar_knop("stop-wezen", t("Stop wezen", "Stop orphans"), th).mr(px(t::PAD)).on_click(
+                            cx.listener(move |_, _, _, cx| {
+                                let wezen = wezen.clone();
+                                cx.background_executor().spawn(async move { wezen.into_iter().for_each(poorten::stop) }).detach();
+                            }),
+                        ))
+                    })
                     .into_any_element(),
             );
-            for poort in zonder {
+            for poort in poorten {
                 rijen.push(self.poort_rij(poort, th, cx));
             }
-            for browser in browsers_zonder {
+        }
+
+        if !stand.browsers.is_empty() {
+            let wezen: Vec<String> = stand.browsers.iter().filter(|b| stand.wees(&b.sessie)).map(|b| b.naam.clone()).collect();
+            rijen.push(
+                groepkop(t("Browsers", "Browsers").into(), th)
+                    .when(!wezen.is_empty(), |d| {
+                        d.child(gevaar_knop("sluit-wezen", t("Sluit wezen", "Close orphans"), th).mr(px(t::PAD)).on_click(
+                            cx.listener(move |_, _, _, cx| {
+                                let wezen = wezen.clone();
+                                cx.background_executor().spawn(async move { wezen.iter().for_each(|naam| poorten::sluit(naam)) }).detach();
+                            }),
+                        ))
+                    })
+                    .into_any_element(),
+            );
+            for browser in &stand.browsers {
                 rijen.extend(self.browser_rijen(browser, th, cx));
             }
         }
 
-        // De wezen, met één knop die ze allemaal stopt.
-        let wees_poorten: Vec<&Poort> = stand.poorten.iter().filter(|p| stand.wees(&p.sessie)).collect();
-        let wees_browsers: Vec<&Browser> = stand.browsers.iter().filter(|b| stand.wees(&b.sessie)).collect();
-        if !wees_poorten.is_empty() || !wees_browsers.is_empty() {
-            let pids: Vec<u32> = wees_poorten.iter().map(|p| p.pid).collect();
-            let namen: Vec<String> = wees_browsers.iter().map(|b| b.naam.clone()).collect();
-            rijen.push(
-                groepkop(t("wezen", "orphans").into(), th)
-                    .child(
-                        gevaar_knop("stop-alle", t("Stop alle", "Stop all"), th)
-                            .mr(px(t::PAD))
-                            .on_click(cx.listener(move |_, _, _, cx| {
-                                let (pids, namen) = (pids.clone(), namen.clone());
-                                cx.background_executor()
-                                    .spawn(async move {
-                                        pids.into_iter().for_each(poorten::stop);
-                                        namen.iter().for_each(|naam| poorten::sluit(naam));
-                                    })
-                                    .detach();
-                            })),
-                    )
-                    .into_any_element(),
-            );
-            for poort in wees_poorten {
-                rijen.push(self.poort_rij(poort, th, cx));
-            }
-            for browser in wees_browsers {
-                rijen.extend(self.browser_rijen(browser, th, cx));
+        // Artifacts van de sessies die draaien, in de volgorde van de tabs.
+        let volgorde: Vec<u32> = self.tabs.iter().flat_map(|tab| &tab.sessies).filter_map(|s| s.terminal.read(cx).pid).collect();
+        let mut sessies: Vec<&String> = self.artifacts.keys().filter(|id| stand.sessies.contains_key(*id)).collect();
+        sessies.sort_by_key(|id| {
+            let (ouder, naam) = &stand.sessies[*id];
+            (volgorde.iter().position(|p| p == ouder).unwrap_or(usize::MAX), naam.clone())
+        });
+        let artifacts: Vec<(&String, &Artifact)> =
+            sessies.into_iter().flat_map(|id| self.artifacts[id].iter().map(move |a| (id, a))).collect();
+        if !artifacts.is_empty() {
+            rijen.push(groepkop(t("Artifacts", "Artifacts").into(), th).into_any_element());
+            for (id, artifact) in artifacts {
+                rijen.push(artifact_rij(artifact, self.van_wie(&Some(id.clone()), cx), th, cx));
             }
         }
 
@@ -170,10 +155,10 @@ impl Jera {
         div().pb(px(8.0)).children(rijen)
     }
 
-    /// Eén poort: het nummer in vet, het commando, de map in `mute`, Openen en Stoppen.
+    /// Eén poort: het nummer in vet, het commando, de sessie (of zonder sessie de map) in `mute`, Openen en Stoppen.
     fn poort_rij(&self, poort: &Poort, th: &Thema, cx: &mut Context<Self>) -> AnyElement {
         let (nummer, pid) = (poort.nummer, poort.pid);
-        let map = naam(&poort.map);
+        let map = self.van_wie(&poort.sessie, cx).unwrap_or_else(|| naam(&poort.map));
         let tip: Vec<SharedString> = vec![poort.commando.clone().into(), poort.map.display().to_string().into()];
         div()
             .id(("poort", nummer as usize))
@@ -207,9 +192,10 @@ impl Jera {
             .into_any_element()
     }
 
-    /// Een agent-browser: de naam, Sluiten, en eronder het plaatje van wat hij nu toont.
+    /// Een agent-browser: de sessie die hem startte, Sluiten, en eronder het plaatje van wat hij nu toont.
     fn browser_rijen(&self, browser: &Browser, th: &Thema, cx: &mut Context<Self>) -> Vec<AnyElement> {
         let naam = browser.naam.clone();
+        let wie = self.van_wie(&browser.sessie, cx).unwrap_or_else(|| t("zonder sessie", "no session").into());
         let rij = div()
             .flex()
             .items_center()
@@ -222,8 +208,7 @@ impl Jera {
                     .flex_1()
                     .min_w_0()
                     .gap(px(8.0))
-                    .child("browser")
-                    .child(div().min_w_0().truncate().text_color(rgb(th.mute)).child(naam.clone())),
+                    .child(div().min_w_0().truncate().child(wie)),
             )
             .child(
                 gevaar_knop(SharedString::from(format!("sluit-{naam}")), t("Sluiten", "Close"), th).on_click(cx.listener(
@@ -256,8 +241,8 @@ impl Jera {
     }
 }
 
-/// Een artifact: de titel en Openen. De link staat onder de muis.
-fn artifact_rij(artifact: &Artifact, th: &Thema, cx: &mut Context<Jera>) -> AnyElement {
+/// Een artifact: de titel, de sessie in `mute` en Openen. De link staat onder de muis.
+fn artifact_rij(artifact: &Artifact, wie: Option<String>, th: &Thema, cx: &mut Context<Jera>) -> AnyElement {
     let url = artifact.url.clone();
     let tip: Vec<SharedString> = vec![url.clone().into()];
     div()
@@ -275,6 +260,7 @@ fn artifact_rij(artifact: &Artifact, th: &Thema, cx: &mut Context<Jera>) -> AnyE
                 .child(artifact.titel.clone())
                 .tooltip(move |_, cx| cx.new(|_| Tip(tip.clone())).into()),
         )
+        .children(wie.map(|wie| div().flex_none().max_w(px(120.0)).truncate().text_color(rgb(th.mute)).child(wie)))
         .child(
             knop_vak(th)
                 .id(SharedString::from(format!("artifact-open-{url}")))
