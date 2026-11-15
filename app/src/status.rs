@@ -4,6 +4,7 @@
 use std::{collections::HashMap, path::PathBuf, process::Command};
 
 use crate::claude;
+use crate::taal::t;
 
 /// Van dringend naar niet dringend: de kleinste is de dringendste.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
@@ -29,10 +30,10 @@ impl Status {
     /// Het woord van de status, voor onder de muis.
     pub fn woord(self) -> &'static str {
         match self {
-            Status::Bezig => "bezig",
-            Status::Antwoord => "wacht op antwoord",
-            Status::Toestemming => "wacht op toestemming",
-            Status::NetKlaar => "net klaar",
+            Status::Bezig => t("bezig", "working"),
+            Status::Antwoord => t("wacht op antwoord", "waiting for answer"),
+            Status::Toestemming => t("wacht op toestemming", "waiting for permission"),
+            Status::NetKlaar => t("net klaar", "just finished"),
             Status::Idle => "idle",
         }
     }
