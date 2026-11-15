@@ -2,7 +2,7 @@
 
 Bord: https://claude.ai/artifact/AjZ1hqvzhSfY1fJhWCLvuo · bron: `keuzebord.html`. Gaat over `app/src/venster/poortenpaneel.rs` en `app/src/venster.rs`: poorten, browsers en artifacts gaan van het paneel rechts (onder git) naar rechtsonder in het venster.
 
-Stand na ronde 3 (2026-11-15): 0 open, 0 deels, 0 later, 4 vast. Gebouwd; in het design system als voorstel Statusbalk, token `h-statusbalk`.
+Stand na ronde 3 (2026-11-15): 0 open, 0 deels, 0 later, 4 vast. Gebouwd; in het design system als voorstel Statusbalk.
 
 ## Vast zonder bord
 
@@ -13,12 +13,13 @@ Stand na ronde 3 (2026-11-15): 0 open, 0 deels, 0 later, 4 vast. Gebouwd; in het
 
 | | |
 |---|---|
-| Plek | balk onder het hele venster, rechts |
-| Breedte | hele venster, ook onder de sessielijst |
-| Hoogte | 24 px, vlak bar, lijn erboven |
+| Plek | rij onderaan rechts van de linkerkolom, op één lijn met de kop oud |
+| Breedte | terminal en kolom rechts |
+| Hoogte | h-rij (26 px), op bg, lijn erboven |
 | Links | leeg |
 | Open | streep accent boven |
-| Alle 3 op 0 | balk blijft staan, leeg |
+| Alle 3 op 0 | rij blijft staan, leeg |
+| Na de bouw | eerst 24 px op bar onder het hele venster; daarna gelijk gemaakt aan de rij oud |
 
 ## 02 Teller · A: Woord en aantal
 

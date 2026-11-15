@@ -19,7 +19,6 @@ pub const H_RIJ: f32 = 26.0;
 pub const H_TITELBALK: f32 = 40.0;
 pub const H_SCHAKELAAR: f32 = 30.0;
 pub const H_RENDER: f32 = 30.0;
-pub const H_STATUSBALK: f32 = 24.0;
 pub const B_KOLOM: f32 = 290.0;
 
 pub const H_KNOP: f32 = 20.0;

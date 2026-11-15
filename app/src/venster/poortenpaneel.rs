@@ -1,4 +1,4 @@
-//! De teller rechts in de statusbalk en de lade erboven met drie kopjes: poorten, browsers en
+//! De teller rechts in de regel onderaan en de lade erboven met drie kopjes: poorten, browsers en
 //! artifacts, van het project in de actieve tab.
 //! Een kopje zonder regels staat er niet.
 //! Elke regel noemt de sessie die het startte; "sessie gestopt" als die sessie niet meer draait.
@@ -54,7 +54,7 @@ impl Jera {
         sessies.into_iter().flat_map(|id| self.artifacts[id].iter().map(move |a| (id, a))).collect()
     }
 
-    /// De teller rechts in de statusbalk: per soort het woord in `mute` en het aantal in `ink`, vet.
+    /// De teller rechts in de regel onderaan: per soort het woord in `mute` en het aantal in `ink`, vet.
     /// Een soort met 0 staat er niet. Open heeft hij een streep in `accent` erboven.
     pub(super) fn teller(&self, th: &Thema, cx: &mut Context<Self>) -> Option<impl IntoElement> {
         let root = self.tabs.get(self.actief).map(|tab| tab.root.as_path())?;
@@ -119,11 +119,11 @@ impl Jera {
             .border_b_0()
             .border_color(rgb(th.line_strong))
             .child(self.poortenpaneel(th, cx));
-        // Tussen de titelbalk en de statusbalk, onderaan.
+        // Tussen de titelbalk en de regel onderaan, onderaan.
         let vak = div()
             .absolute()
             .top(px(t::H_TITELBALK))
-            .bottom(px(t::H_STATUSBALK))
+            .bottom(px(t::H_RIJ + t::LIJN))
             .right_0()
             .flex()
             .flex_col()

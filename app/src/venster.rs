@@ -940,10 +940,10 @@ impl Render for Jera {
                                     .min_h_0()
                                     .child(div().flex_1().min_w_0().children(terminal).children(leeg))
                                     .children(self.rechts(th)),
-                            ),
+                            )
+                            .child(self.statusbalk(th, cx)),
                     ),
             )
-            .child(self.statusbalk(th, cx))
             .when(self.poorten_open, |d| d.child(self.lade(th, cx)))
             .children(self.menu.as_ref().map(|menu| self.menu_vak(menu, th, cx)))
             .children(self.sessie_menu.and_then(|(id, plek)| self.sessie_menu_vak(id, plek, th, cx)))
@@ -961,18 +961,16 @@ impl Jera {
         Some(div().flex_none().h_full().border_l(px(t::LIJN)).border_color(rgb(th.line)).child(git))
     }
 
-    /// De balk onder het hele venster, met rechts de teller.
+    /// De regel onderaan rechts van de linkerkolom, op één lijn met de kop oud, met rechts de teller.
     fn statusbalk(&self, th: &Thema, cx: &mut Context<Self>) -> impl IntoElement {
         let teller = self.teller(th, cx);
-        div()
-            .flex()
-            .flex_none()
-            .h(px(t::H_STATUSBALK))
-            .bg(rgb(th.bar))
-            .border_t(px(t::LIJN))
-            .border_color(rgb(th.line))
-            .child(div().flex_1())
-            .when_some(teller, |d, teller| d.child(lijn(th)).child(teller))
+        div().flex_none().border_t(px(t::LIJN)).border_color(rgb(th.line)).child(
+            div()
+                .flex()
+                .h(px(t::H_RIJ))
+                .child(div().flex_1())
+                .when_some(teller, |d, teller| d.child(lijn(th)).child(teller)),
+        )
     }
 }
 
