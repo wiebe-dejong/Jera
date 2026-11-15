@@ -8,7 +8,7 @@ publish = false
 gpui-kit = { version = "0.9.1", default-features = false }
 alacritty_terminal = "0.26.0"
 flume = "0.12"
-serde_json = "1"
+serde_json = { version = "1", features = ["preserve_order"] }
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 gpui-pre = { version = "=0.3.12", features = ["test-support"], optional = true }
 gpui-pre-platform = { version = "=0.3.12", features = ["test-support"], optional = true }
@@ -16,6 +16,10 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 objc2 = "0.6"
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSDockTile", "NSImage", "NSResponder"] }
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSData", "NSString"] }
+csv = "1.4.0"
+calamine = { version = "0.38.0", features = ["dates"] }
+objc2-core-graphics = { version = "0.3.2", default-features = false, features = ["std", "CGPDFDocument", "CGPDFPage", "CGContext", "CGBitmapContext", "CGColorSpace", "CGImage"] }
+objc2-core-foundation = { version = "0.3.2", default-features = false, features = ["std", "CFURL", "CFCGTypes", "CFString"] }
 
 [features]
 # Alleen om te testen: bewaart het venster als afbeelding, zie `main::testhulp`.

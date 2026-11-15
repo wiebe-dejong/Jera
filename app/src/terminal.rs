@@ -347,7 +347,11 @@ impl TerminalView {
         if event.modifiers.platform {
             match self.link_onder(event.position).map(|link| link.doel) {
                 Some(Doel::Url(url)) => cx.open_url(&url),
-                Some(Doel::Pad(pad)) => cx.open_with_system(&pad),
+                Some(Doel::Pad(pad)) => {
+                    if !crate::documenten::open(&pad, cx) {
+                        cx.open_with_system(&pad);
+                    }
+                }
                 None => {}
             }
             return;

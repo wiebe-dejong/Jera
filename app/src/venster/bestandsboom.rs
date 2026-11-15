@@ -78,6 +78,8 @@ pub(super) enum Keuze {
     Plak,
     Hernoem,
     Prullenmand,
+    /// In de app die macOS ervoor heeft, in plaats van in Documenten.
+    InApp,
 }
 
 /// Deze namen staan niet in de bestandsboom.
@@ -108,11 +110,18 @@ pub(super) fn kort_pad(map: &Path) -> String {
 }
 
 impl Jera {
-    /// Een map gaat open of dicht, een bestand opent in de app die macOS ervoor heeft.
+    /// Een map gaat open of dicht. Een bestand opent in Documenten als Jera het zelf toont,
+    /// anders in de app die macOS ervoor heeft.
     pub(super) fn klik_boom(&mut self, pad: &Path, cx: &mut Context<Self>) {
         let Some(tab) = self.tabs.get_mut(self.actief) else { return };
         if !pad.is_dir() {
-            cx.open_with_system(pad);
+            let p = pad.to_path_buf();
+            // Na deze klik: Documenten opent een venster, en dat kan niet midden in het bijwerken van dit.
+            cx.defer(move |cx| {
+                if !crate::documenten::open(&p, cx) {
+                    cx.open_with_system(&p);
+                }
+            });
             tab.bestand = Some(pad.to_path_buf());
         } else if tab.open.contains_key(pad) {
             // Dicht, met alles eronder.
@@ -165,6 +174,7 @@ impl Jera {
                 cx.write_to_clipboard(ClipboardItem::new_string(tekst));
             }
             Keuze::Plak => self.plak_in(plakbaar, map, false, cx),
+            Keuze::InApp => cx.open_with_system(&pad),
             Keuze::Prullenmand => {
                 bewerk::prullenmand(&pad);
                 if tab.bestand.as_ref().is_some_and(|b| b.starts_with(&pad)) {
@@ -328,6 +338,20 @@ impl Jera {
                     }))
                     .child(
                         vak()
+                            .when(crate::documenten::kan(&menu.pad), |d| {
+                                let icoon = bestandsicoon::bestand(&menu.pad, th);
+                                d.child(
+                                    regel("in-app", icoon, t("in app openen", "open in app"), None)
+                                        .on_hover(cx.listener(|this, hover: &bool, _, cx| {
+                                            if *hover {
+                                                this.zet_sub(None, cx);
+                                            }
+                                        }))
+                                        .hover(|d| d.bg(rgb(th.sel)))
+                                        .on_click(cx.listener(|this, _, window, cx| this.kies(Keuze::InApp, window, cx))),
+                                )
+                                .child(scheiding())
+                            })
                             .child(met_lijst("nieuw", NIEUW, t("nieuw", "new"), Sub::Nieuw))
                             .child(scheiding())
                             .child(actie(Keuze::Kopieer, KOPIEER, t("kopiëren", "copy"), true))

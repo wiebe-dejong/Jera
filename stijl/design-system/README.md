@@ -78,5 +78,6 @@ Alle onderdelen zijn gekozen: Tab, Schakelaar, Sessieregel, Agents (de agents on
 
 - Voorstel: Contextmenu, het menu van een twee-vingerklik in de bestandsboom. Al gebouwd in de app.
 - Voorstel: Openen, het scherm waarin ik een project kies of een nieuw maak. Al gebouwd in de app.
+- Voorstel: Documenten, het venster dat markdown, tabellen, json, afbeeldingen en pdf toont. Al gebouwd in de app.
 - Verander niets aan een onderdeel zonder nieuwe keuze.
 - Bouw een nieuw scherm uit bestaande onderdelen. Is er een nieuw onderdeel nodig, voeg het dan eerst hier toe als voorstel.

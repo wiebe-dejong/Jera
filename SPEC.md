@@ -15,7 +15,7 @@ Erin:
 
 Niet erin:
 - een browser: openen gaat in Safari;
-- viewers voor documenten: die openen in een externe app;
+- viewers voor andere documenten dan die in Documenten: die openen in een externe app;
 - een IDE: voor de debugger blijft PyCharm.
 
 ## Gemeten werkwijze
@@ -39,7 +39,7 @@ Gemeten op 2026-11-04:
 | Sessie | Eén regel per sessie, met de titel die Claude Code eraan geeft en de status. Zolang er nog geen titel is, staat er de naam die Claude Code van de map afleidt | 2026-11-14 |
 | Linkerkolom | Eén kolom met een schakelaar: Sessies of Bestanden | 2026-11-14 |
 | Sessies | De lijst toont alle sessies van de tab, ook als hun terminal niet open staat | 2026-11-14 |
-| Bestanden | De mappen en bestanden van het project. Een klik op een bestand opent het in een externe app. Bij elke map kan ik er een sessie starten | 2026-11-14 |
+| Bestanden | De mappen en bestanden van het project. Een klik op een bestand opent het in Documenten, of in een externe app als Documenten het niet toont. Bij elke map kan ik er een sessie starten | 2026-11-15 |
 | Terminals in beeld | Standaard één. Een tweede ernaast door een sessie te slepen of met "open ernaast" | 2026-11-14 |
 | Sessiestatus | Per sessie is te zien: bezig, wacht op antwoord op een vraag, wacht op toestemming, net klaar, of idle (klaar en doet niets) | 2026-11-14 |
 | Schermen bij de start | Vraagt Claude Code bij de start of ik de map vertrouw of een MCP-server wil gebruiken, dan toont de sessie "wacht op toestemming" | 2026-11-14 |
@@ -52,8 +52,10 @@ Gemeten op 2026-11-04:
 | Oude sessies | Onderaan de kolom Sessies staat het blok oud, standaard dicht. Open schuift de kop omhoog en zijn er eronder 8 regels te zien; de rest scrolt binnen het blok. Het toont de oude sessies van de tab, alleen met hun titel, gegroepeerd per dag van het laatste bericht onder een klein kopje dat dichtklapt, met het pijltje rechts. Een klik op een oude sessie zet die voort in een nieuwe terminal. Dit verving de stand Eerder in de schakelaar | 2026-11-14 |
 | Browser | Geen browser in de app. Openen gaat in Safari | 2026-11-14 |
 | agent-browser | Ik zie wanneer er een agent-browser draait, en ik kan die sluiten | 2026-11-14 |
-| Bestand openen | In de standaard-app die macOS voor dat bestandstype heeft | 2026-11-14 |
-| Paden in de terminal | Een pad in de terminal is aan te klikken en opent het bestand | 2026-11-14 |
+| Bestand openen | Markdown, csv, tsv, xlsx (en xls, ods), json, png, jpg, gif, webp, svg en pdf in Documenten; al het andere, ook html, in de standaard-app die macOS voor dat bestandstype heeft | 2026-11-15 |
+| Documenten | Eén apart venster met een tab per bestand. Een bestand dat al open is, krijgt geen tweede tab. Verandert het bestand op schijf, dan toont de tab de nieuwe versie en blijft de plek. Rechts in de titelbalk `in app openen`, ook in het menu van een twee-vingerklik in Bestanden. ⌘W sluit een tab, de laatste sluit het venster | 2026-11-15 |
+| Documenten, per soort | Markdown opgemaakt, koppen vet en even groot als de tekst. Tabellen met rijnummers en alleen de rijen in beeld getekend; een werkboek met letters boven de kolommen en een tab per blad onderaan, kommagetallen met hoogstens vier decimalen. Json als boom, ⌥-klik klapt alles eronder. Pdf als pagina's op `bg`, getekend door CoreGraphics. Een afbeelding past in het venster, nooit groter dan hij is | 2026-11-15 |
+| Paden in de terminal | Een pad in de terminal is aan te klikken en opent het bestand, in Documenten als het dat toont | 2026-11-15 |
 | Poorten | Een lijst van de poorten waarop iets luistert, van het project in de actieve tab. Per poort: stoppen en openen | 2026-11-15 |
 | Poorten, welke | Alleen wat bij het project in de actieve tab hoort: een poort, browser of artifact van een sessie die in die map liep (ook als ze niet meer draait: dan heet het wees), of een poort van een proces dat in die map is gestart. Een poort van Docker hoort bij de map waaruit docker compose de container startte. De eigen poorten van Claude Code, macOS en apps uit Applications staan er niet bij. Er is geen knop Alles. De getallen op de knop in de tabbalk tellen hetzelfde | 2026-11-15 |
 | Poorten, indeling | Het paneel heeft drie kopjes: Poorten, Browsers, Artifacts. Een kopje zonder regels staat er niet. Elke regel noemt de sessie die het startte; een poort zonder sessie noemt zijn map. Een agent-browser heet naar zijn sessie, niet naar de naam die agent-browser hem geeft (zoals `default`). Vervangt de groepen per sessie | 2026-11-15 |

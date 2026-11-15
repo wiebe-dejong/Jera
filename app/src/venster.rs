@@ -23,7 +23,7 @@ use bestandsboom::{Gesleept, Item, Menu, kort_pad, lees_map};
 #[cfg(feature = "schermafdruk")]
 use bestandsboom::{Keuze, Sub};
 use naamveld::{Doel, NaamVeld};
-pub(crate) use onderdelen::knop_vak;
+pub(crate) use onderdelen::{PIJL_DICHT, PIJL_OPEN, knop_vak, lijn, pijl, tab_vak};
 use onderdelen::*;
 use poortenpaneel::{B_PANEEL, POORT};
 use sessielijst::titel;

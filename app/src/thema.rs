@@ -95,9 +95,15 @@ pub const LICHT: Thema = Thema {
 };
 
 /// De cursor van een invoerveld krijgt zijn kleur van GPUI Kit, dat van zichzelf licht is.
-/// Hier volgt die `ink`.
+/// Hier volgt die `ink`. Een tabel in markdown krijgt zo `bg`, en het label van een codeblok de
+/// letter van Jera.
 pub fn zet_kit(window: &Window, cx: &mut App) {
-    base::Theme::global_mut(cx).tokens.colors.foreground = rgb(thema(window).ink).into();
+    let th = thema(window);
+    let tokens = &mut base::Theme::global_mut(cx).tokens;
+    tokens.colors.foreground = rgb(th.ink).into();
+    tokens.colors.surface = rgb(th.bg).into();
+    tokens.colors.surface_foreground = rgb(th.ink).into();
+    tokens.typography.sans = LETTER.into();
 }
 
 /// Het thema volgt macOS.

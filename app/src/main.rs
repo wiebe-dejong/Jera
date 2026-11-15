@@ -9,6 +9,7 @@ mod artifacts;
 mod bestandsicoon;
 mod claude;
 mod bewerk;
+mod documenten;
 mod git;
 mod gitpaneel;
 mod instellingen;
@@ -61,6 +62,7 @@ fn main() {
     gpui_kit::application().run(move |cx| {
         gpui_kit::init(cx);
         instellingen::init(cx);
+        documenten::init(cx);
         cx.text_system()
             .add_fonts(LETTERS.iter().map(|bytes| Cow::Borrowed(*bytes)).collect())
             .expect("letters laden");
@@ -85,7 +87,7 @@ fn main() {
             }),
             ..Default::default()
         };
-        gpui_kit::open_window(options, cx, |window, cx| {
+        let (hoofd, _) = gpui_kit::open_window(options, cx, |window, cx| {
             cx.new(|cx| {
                 dock_icoon(window);
                 thema::zet_kit(window, cx);
@@ -105,11 +107,26 @@ fn main() {
                 Jera::volg(window, cx);
                 #[cfg(feature = "schermafdruk")]
                 testhulp(window, cx);
+                // JERA_DOC=pad|pad opent die bestanden bij de start in Documenten.
+                #[cfg(feature = "schermafdruk")]
+                if let Ok(paden) = std::env::var("JERA_DOC") {
+                    cx.defer(move |cx| {
+                        for pad in paden.split('|') {
+                            documenten::open(std::path::Path::new(pad), cx);
+                        }
+                    });
+                }
                 jera
             })
         })
         .expect("venster openen");
-        cx.on_window_closed(|cx, _| cx.quit()).detach();
+        // Jera stopt als het hoofdvenster dichtgaat, niet als Documenten dichtgaat.
+        cx.on_window_closed(move |cx, venster| {
+            if venster == hoofd.window_id() {
+                cx.quit();
+            }
+        })
+        .detach();
         cx.activate(true);
     });
 }

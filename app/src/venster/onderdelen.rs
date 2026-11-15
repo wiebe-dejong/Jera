@@ -3,7 +3,7 @@
 use super::*;
 
 /// Een vak in de titelbalk: vlak met een streep erboven als het actief is.
-pub(super) fn tab_vak(th: &Thema, actief: bool) -> Div {
+pub(crate) fn tab_vak(th: &Thema, actief: bool) -> Div {
     div()
         .flex()
         .items_center()
@@ -29,9 +29,9 @@ pub(super) const VINK: &[u8] = include_bytes!("../../iconen/klaar.svg");
 
 pub(super) const STREEPJE: &[u8] = include_bytes!("../../iconen/idle.svg");
 
-pub(super) const PIJL_DICHT: &[u8] = include_bytes!("../../iconen/pijl-dicht.svg");
+pub(crate) const PIJL_DICHT: &[u8] = include_bytes!("../../iconen/pijl-dicht.svg");
 
-pub(super) const PIJL_OPEN: &[u8] = include_bytes!("../../iconen/pijl-open.svg");
+pub(crate) const PIJL_OPEN: &[u8] = include_bytes!("../../iconen/pijl-open.svg");
 
 pub(super) const NIEUW: &[u8] = include_bytes!("../../iconen/nieuw.svg");
 
@@ -50,7 +50,7 @@ pub(super) fn actie_icoon(data: &'static [u8], th: &Thema) -> AnyElement {
     svg().data(data).flex_none().size(px(t::ICOON)).text_color(rgb(th.mute)).into_any_element()
 }
 
-pub(super) fn pijl(data: &[u8], th: &Thema) -> Svg {
+pub(crate) fn pijl(data: &[u8], th: &Thema) -> Svg {
     svg().data(data).flex_none().size(px(t::ICOON)).text_color(rgb(th.mute))
 }
 
@@ -93,7 +93,7 @@ pub(super) fn icoon(status: Status, id: impl Into<ElementId>, th: &Thema) -> Any
 }
 
 /// Een staande lijn tussen twee vakken.
-pub(super) fn lijn(th: &Thema) -> Div {
+pub(crate) fn lijn(th: &Thema) -> Div {
     div().flex_none().w(px(t::LIJN)).h_full().bg(rgb(th.line))
 }
 
