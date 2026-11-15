@@ -195,7 +195,12 @@ impl Jera {
         let index = match self.tabs.iter().position(|tab| tab.root == root) {
             Some(index) => index,
             None => {
-                let git = cx.new(|_| GitPaneel::new(root.clone()));
+                // De branches staan klaar voordat ik het git-paneel open.
+                let git = cx.new(|cx| {
+                    let mut git = GitPaneel::new(root.clone());
+                    git.ververs(cx);
+                    git
+                });
                 self.tabs.push(Tab::new(root.clone(), git));
                 self.laad_oud(root, cx);
                 self.tabs.len() - 1
@@ -290,7 +295,7 @@ impl Jera {
         if veranderd {
             cx.notify();
         }
-        if let Some(tab) = self.tabs.get(self.actief).filter(|_| self.git_open) {
+        if let Some(tab) = self.tabs.get(self.actief) {
             tab.git.update(cx, |git, cx| git.ververs(cx));
         }
     }
@@ -434,10 +439,10 @@ impl Jera {
         self.focus(window, cx);
     }
 
-    /// Sluit de tab met `root`. Werkt er een sessie of wacht die op mij, dan vraagt Jera het eerst.
+    /// Sluit de tab met `root`. Draait er nog een sessie, dan vraagt Jera het eerst.
     fn sluit_tab(&mut self, root: PathBuf, window: &mut Window, cx: &mut Context<Self>) {
         let Some(index) = self.tabs.iter().position(|tab| tab.root == root) else { return };
-        let vragen = self.sluiten.is_none() && self.tabs[index].sessies.iter().any(|s| s.status.bezig());
+        let vragen = self.sluiten.is_none() && !self.tabs[index].sessies.is_empty();
         if vragen {
             self.sluiten = Some(root);
             cx.notify();
@@ -637,10 +642,10 @@ impl Jera {
             })
     }
 
-    /// De vraag of de tab dicht mag terwijl er een sessie werkt, met de sessies waar het om gaat.
+    /// De vraag of de tab dicht mag terwijl er sessies draaien, met die sessies.
     fn sluit_vraag(&self, root: &Path, th: &Thema, cx: &mut Context<Self>) -> Option<impl IntoElement> {
         let tab = self.tabs.iter().find(|tab| tab.root == root)?;
-        let rijen = tab.sessies.iter().filter(|s| s.status.bezig()).map(|sessie| {
+        let rijen = tab.sessies.iter().map(|sessie| {
             div()
                 .flex()
                 .items_center()

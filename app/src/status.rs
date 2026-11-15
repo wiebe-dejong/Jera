@@ -22,11 +22,6 @@ impl Status {
         matches!(self, Status::Antwoord | Status::Toestemming | Status::NetKlaar)
     }
 
-    /// Claude werkt, of wacht midden in het werk op mij.
-    pub fn bezig(self) -> bool {
-        matches!(self, Status::Bezig | Status::Antwoord | Status::Toestemming)
-    }
-
     /// Het woord van de status, voor onder de muis.
     pub fn woord(self) -> &'static str {
         match self {
