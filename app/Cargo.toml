@@ -14,8 +14,8 @@ gpui-pre = { version = "=0.3.12", features = ["test-support"], optional = true }
 gpui-pre-platform = { version = "=0.3.12", features = ["test-support"], optional = true }
 image = { version = "0.25", default-features = false, features = ["png"] }
 objc2 = "0.6"
-objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSImage", "NSResponder"] }
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSData"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSDockTile", "NSImage", "NSResponder"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSData", "NSString"] }
 
 [features]
 # Alleen om te testen: bewaart het venster als afbeelding, zie `main::testhulp`.

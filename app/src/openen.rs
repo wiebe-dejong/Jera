@@ -408,7 +408,7 @@ impl Openen {
 }
 
 fn recent_pad() -> PathBuf {
-    crate::thuis().join("Library/Application Support/Jera/recent.json")
+    crate::gegevens().join("recent.json")
 }
 
 /// De mappen die ik in Jera opende, de laatste eerst. Een map die er niet meer is, valt weg.
@@ -476,7 +476,7 @@ pub struct GitHub {
 }
 
 fn cache_pad() -> PathBuf {
-    crate::thuis().join("Library/Application Support/Jera/github.json")
+    crate::gegevens().join("github.json")
 }
 
 impl GitHub {

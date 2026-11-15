@@ -21,7 +21,7 @@ pub fn zed() -> bool {
 }
 
 fn bestand() -> PathBuf {
-    crate::thuis().join("Library/Application Support/Jera/instellingen.json")
+    crate::gegevens().join("instellingen.json")
 }
 
 fn lees() -> serde_json::Value {

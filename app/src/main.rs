@@ -32,6 +32,12 @@ pub fn thuis() -> PathBuf {
     PathBuf::from(std::env::var("HOME").unwrap_or_default())
 }
 
+/// Waar Jera zijn gegevens bewaart. Een debug-build is de test-Jera en heeft een eigen map.
+pub fn gegevens() -> PathBuf {
+    let map = if cfg!(debug_assertions) { "Jera-test" } else { "Jera" };
+    thuis().join("Library/Application Support").join(map)
+}
+
 const LETTERS: [&[u8]; 5] = [
     include_bytes!("../fonts/JetBrainsMono-Regular.ttf"),
     include_bytes!("../fonts/JetBrainsMono-Italic.ttf"),
@@ -108,11 +114,11 @@ fn main() {
     });
 }
 
-/// Het icoon in het Dock, donker of licht zoals macOS.
+/// Het icoon in het Dock, donker of licht zoals macOS. De test-Jera heeft er `test` op.
 fn dock_icoon(window: &Window) {
     use objc2::{AllocAnyThread, MainThreadMarker};
     use objc2_app_kit::{NSApplication, NSImage};
-    use objc2_foundation::NSData;
+    use objc2_foundation::{NSData, NSString};
     let png: &[u8] = match window.appearance() {
         WindowAppearance::Light | WindowAppearance::VibrantLight => include_bytes!("../iconen/dock-licht.png"),
         WindowAppearance::Dark | WindowAppearance::VibrantDark => include_bytes!("../iconen/dock.png"),
@@ -121,6 +127,9 @@ fn dock_icoon(window: &Window) {
     let Some(beeld) = NSImage::initWithData(NSImage::alloc(), &NSData::with_bytes(png)) else { return };
     // Veilig: een geldig NSImage, op de main thread.
     unsafe { NSApplication::sharedApplication(mtm).setApplicationIconImage(Some(&beeld)) };
+    if cfg!(debug_assertions) {
+        NSApplication::sharedApplication(mtm).dockTile().setBadgeLabel(Some(&NSString::from_str("test")));
+    }
 }
 
 /// JERA_SHOT=pad bewaart elke seconde het venster als afbeelding.
