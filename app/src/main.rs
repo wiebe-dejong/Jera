@@ -5,6 +5,7 @@
 extern crate gpui_kit as gpui;
 
 mod agents;
+mod artifacts;
 mod bestandsicoon;
 mod claude;
 mod bewerk;

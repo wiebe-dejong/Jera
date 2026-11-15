@@ -29,6 +29,7 @@ use poortenpaneel::{B_PANEEL, POORT};
 use sessielijst::titel;
 
 use crate::agents::{self, Agent};
+use crate::artifacts::{self, Artifact};
 use crate::bestandsicoon;
 use crate::bewerk;
 use crate::gitpaneel::GitPaneel;
@@ -137,6 +138,8 @@ pub struct Jera {
     alles: bool,
     /// Het laatste plaatje van elke agent-browser.
     plaatjes: HashMap<String, Arc<RenderImage>>,
+    /// Per sessie-id de artifacts die de sessie publiceerde.
+    artifacts: HashMap<String, Vec<Artifact>>,
 }
 
 impl Jera {
@@ -183,6 +186,7 @@ impl Jera {
             poorten_open: false,
             alles: false,
             plaatjes: HashMap::new(),
+            artifacts: HashMap::new(),
         }
     }
 
@@ -274,10 +278,15 @@ impl Jera {
     fn volg_poorten(window: &mut Window, cx: &mut Context<Self>) {
         cx.spawn_in(window, async move |this, cx| {
             for ronde in 0u64.. {
-                let stand = cx.background_executor().spawn(async { poorten::lees() }).await;
+                let (stand, gepubliceerd) =
+                    cx.background_executor().spawn(async { (poorten::lees(), artifacts::lees()) }).await;
                 let Ok(namen) = this.update_in(cx, |this, window, cx| {
                     if this.poorten != stand {
                         this.poorten = stand;
+                        cx.notify();
+                    }
+                    if this.artifacts != gepubliceerd {
+                        this.artifacts = gepubliceerd;
                         cx.notify();
                     }
                     // Het plaatje van een browser die er niet meer is, gaat weg.

@@ -2,6 +2,7 @@
 //! Daaronder wat geen sessie startte, en de wezen: wat bij een sessie hoort die niet meer draait.
 
 use super::*;
+use crate::artifacts::{self, Artifact};
 use crate::poorten::{self, Browser, Poort};
 
 /// De breedte van de kolom rechts als het paneel open is.
@@ -65,13 +66,16 @@ impl Jera {
             .iter()
             .filter_map(|p| p.sessie.as_ref())
             .chain(stand.browsers.iter().filter_map(|b| b.sessie.as_ref()))
+            .chain(self.artifacts.keys())
             .filter(|id| stand.sessies.contains_key(*id))
             .collect();
+        // Eerst alle dubbele weg: een sessie kan een poort, een browser en artifacts hebben.
+        sessies.sort();
+        sessies.dedup();
         sessies.sort_by_key(|id| {
             let (ouder, naam) = &stand.sessies[*id];
             (volgorde.iter().position(|p| p == ouder).unwrap_or(usize::MAX), naam.clone())
         });
-        sessies.dedup();
 
         let mut rijen: Vec<AnyElement> = Vec::new();
         for id in sessies {
@@ -85,6 +89,9 @@ impl Jera {
             }
             for browser in stand.browsers.iter().filter(|b| b.sessie.as_ref() == Some(id)) {
                 rijen.extend(self.browser_rijen(browser, th, cx));
+            }
+            for artifact in self.artifacts.get(id).into_iter().flatten() {
+                rijen.push(artifact_rij(artifact, th, cx));
             }
         }
 
@@ -247,6 +254,34 @@ impl Jera {
         });
         std::iter::once(rij).chain(plaatje).collect()
     }
+}
+
+/// Een artifact: de titel en Openen. De link staat onder de muis.
+fn artifact_rij(artifact: &Artifact, th: &Thema, cx: &mut Context<Jera>) -> AnyElement {
+    let url = artifact.url.clone();
+    let tip: Vec<SharedString> = vec![url.clone().into()];
+    div()
+        .flex()
+        .items_center()
+        .gap(px(t::GAP))
+        .h(px(t::H_RIJ))
+        .px(px(t::PAD))
+        .child(
+            div()
+                .id(SharedString::from(format!("artifact-{url}")))
+                .flex_1()
+                .min_w_0()
+                .truncate()
+                .child(artifact.titel.clone())
+                .tooltip(move |_, cx| cx.new(|_| Tip(tip.clone())).into()),
+        )
+        .child(
+            knop_vak(th)
+                .id(SharedString::from(format!("artifact-open-{url}")))
+                .child(t("Openen", "Open"))
+                .on_click(cx.listener(move |_, _, _, _| artifacts::open(&url))),
+        )
+        .into_any_element()
 }
 
 /// De kop van een groep, in `mute`.
