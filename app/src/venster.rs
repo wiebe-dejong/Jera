@@ -510,17 +510,19 @@ impl Jera {
         cx.notify();
     }
 
-    /// Stopt de sessie `id`. Daarna staat hij bij oud.
+    /// Stopt de sessie `id`, met de poorten en browsers die ze startte. Daarna staat hij bij oud.
     fn stop_sessie(&mut self, id: usize, window: &mut Window, cx: &mut Context<Self>) {
         self.sessie_menu = None;
         if let Some(sessie) = self.tabs.iter().flat_map(|tab| &tab.sessies).find(|s| s.id == id) {
+            self.ruim_op(sessie, cx);
             sessie.terminal.read(cx).stop();
         }
         self.verwijder(id, cx);
         self.focus(window, cx);
     }
 
-    /// Sluit de tab met `root`. Draait er nog een sessie, dan vraagt Jera het eerst.
+    /// Sluit de tab met `root`, met de poorten en browsers die de sessies daarin startten.
+    /// Draait er nog een sessie, dan vraagt Jera het eerst.
     fn sluit_tab(&mut self, root: PathBuf, window: &mut Window, cx: &mut Context<Self>) {
         let Some(index) = self.tabs.iter().position(|tab| tab.root == root) else { return };
         let vragen = self.sluiten.is_none() && !self.tabs[index].sessies.is_empty();
@@ -532,6 +534,7 @@ impl Jera {
         self.sluiten = None;
         let tab = self.tabs.remove(index);
         for sessie in &tab.sessies {
+            self.ruim_op(sessie, cx);
             sessie.terminal.read(cx).stop();
         }
         if self.actief > index || self.actief >= self.tabs.len() {

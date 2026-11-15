@@ -1,6 +1,6 @@
 //! Het paneel met drie kopjes: poorten, browsers en artifacts, van het project in de actieve tab.
 //! Een kopje zonder regels staat er niet.
-//! Elke regel noemt de sessie die het startte; "wees" als die sessie niet meer draait.
+//! Elke regel noemt de sessie die het startte; "sessie gestopt" als die sessie niet meer draait.
 
 use super::*;
 use crate::artifacts::{self, Artifact};
@@ -19,15 +19,33 @@ impl Jera {
         self.tabs.iter().flat_map(|tab| &tab.sessies).find(|s| s.terminal.read(cx).pid == Some(*ouder))
     }
 
+    /// Hoort `sessie` bij de Claude-sessie in de terminal met deze shell.
+    fn van_shell(&self, sessie: &Option<String>, shell: u32) -> bool {
+        sessie.as_ref().and_then(|id| self.poorten.sessies.get(id)).is_some_and(|(ouder, _)| *ouder == shell)
+    }
+
     /// Wat de sessie heeft draaien, één regel per poort of browser, voor onder de muis.
     pub(super) fn draait(&self, sessie: &Sessie, cx: &App) -> Vec<SharedString> {
         let Some(shell) = sessie.terminal.read(cx).pid else { return Vec::new() };
-        let van = |sessie: &Option<String>| {
-            sessie.as_ref().and_then(|id| self.poorten.sessies.get(id)).is_some_and(|(ouder, _)| *ouder == shell)
-        };
+        let van = |sessie: &Option<String>| self.van_shell(sessie, shell);
         let poorten = self.poorten.poorten.iter().filter(|p| van(&p.sessie)).map(|p| format!("{}  {}", p.nummer, p.commando));
         let browsers = self.poorten.browsers.iter().filter(|b| van(&b.sessie)).map(|_| "browser".to_string());
         poorten.chain(browsers).map(Into::into).collect()
+    }
+
+    /// Stopt de poorten en sluit de browsers die de sessie startte. Voor als ik een sessie in Jera sluit.
+    pub(super) fn ruim_op(&self, sessie: &Sessie, cx: &App) {
+        let Some(shell) = sessie.terminal.read(cx).pid else { return };
+        let pids: Vec<u32> =
+            self.poorten.poorten.iter().filter(|p| self.van_shell(&p.sessie, shell)).map(|p| p.pid).collect();
+        let namen: Vec<String> =
+            self.poorten.browsers.iter().filter(|b| self.van_shell(&b.sessie, shell)).map(|b| b.naam.clone()).collect();
+        cx.background_executor()
+            .spawn(async move {
+                pids.into_iter().for_each(poorten::stop);
+                namen.iter().for_each(|naam| poorten::sluit(naam));
+            })
+            .detach();
     }
 
     /// De knop rechts in de tabbalk, met de aantallen. Open heeft hij een streep in `accent` eronder.
@@ -59,13 +77,13 @@ impl Jera {
             }))
     }
 
-    /// Bij wie iets hoort: de titel van de sessie, haar naam als ze niet in Jera draait, of "wees".
+    /// Bij wie iets hoort: de titel van de sessie, haar naam als ze niet in Jera draait, of "sessie gestopt".
     fn van_wie(&self, sessie: &Option<String>, cx: &App) -> Option<String> {
         let id = sessie.as_ref()?;
         Some(match (self.sessie_van(id, cx), self.poorten.sessies.get(id)) {
             (Some(sessie), _) => titel(sessie, cx),
             (None, Some((_, naam))) => naam.clone(),
-            (None, None) => t("wees", "orphan").into(),
+            (None, None) => t("sessie gestopt", "session ended").into(),
         })
     }
 
@@ -81,7 +99,7 @@ impl Jera {
             rijen.push(
                 groepkop(t("Poorten", "Ports").into(), th)
                     .when(!wezen.is_empty(), |d| {
-                        d.child(gevaar_knop("stop-wezen", t("Stop wezen", "Stop orphans"), th).mr(px(t::PAD)).on_click(
+                        d.child(gevaar_knop("stop-wezen", t("Stop gestopte", "Stop ended"), th).mr(px(t::PAD)).on_click(
                             cx.listener(move |_, _, _, cx| {
                                 let wezen = wezen.clone();
                                 cx.background_executor().spawn(async move { wezen.into_iter().for_each(poorten::stop) }).detach();
@@ -101,7 +119,7 @@ impl Jera {
             rijen.push(
                 groepkop(t("Browsers", "Browsers").into(), th)
                     .when(!wezen.is_empty(), |d| {
-                        d.child(gevaar_knop("sluit-wezen", t("Sluit wezen", "Close orphans"), th).mr(px(t::PAD)).on_click(
+                        d.child(gevaar_knop("sluit-wezen", t("Sluit gestopte", "Close ended"), th).mr(px(t::PAD)).on_click(
                             cx.listener(move |_, _, _, cx| {
                                 let wezen = wezen.clone();
                                 cx.background_executor().spawn(async move { wezen.iter().for_each(|naam| poorten::sluit(naam)) }).detach();

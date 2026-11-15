@@ -340,9 +340,18 @@ pub fn open(nummer: u16) {
     let _ = Command::new("open").arg(format!("http://localhost:{nummer}")).status();
 }
 
+/// `agent-browser`, ook als Jera buiten de shell start en Homebrew niet in het PATH staat.
+fn agent_browser() -> Command {
+    let pad = ["/opt/homebrew/bin/agent-browser", "/usr/local/bin/agent-browser"]
+        .into_iter()
+        .find(|p| Path::new(p).exists())
+        .unwrap_or("agent-browser");
+    Command::new(pad)
+}
+
 /// Sluit de agent-browser met deze naam.
 pub fn sluit(naam: &str) {
-    let _ = Command::new("agent-browser").args(["--session", naam, "close"]).output();
+    let _ = agent_browser().args(["--session", naam, "close"]).output();
 }
 
 /// Zo breed wordt een plaatje hoogstens bewaard, in pixels.
@@ -351,7 +360,7 @@ const B_PLAATJE: u32 = 720;
 /// Een plaatje van wat de agent-browser `naam` nu toont, in BGRA zoals GPUI het wil.
 pub fn plaatje(naam: &str) -> Option<image::RgbaImage> {
     let pad = std::env::temp_dir().join(format!("jera-plaatje-{naam}.png"));
-    let uit = Command::new("agent-browser").args(["--session", naam, "screenshot"]).arg(&pad).output().ok()?;
+    let uit = agent_browser().args(["--session", naam, "screenshot"]).arg(&pad).output().ok()?;
     let bytes = uit.status.success().then(|| std::fs::read(&pad).ok()).flatten();
     let _ = std::fs::remove_file(&pad);
     let beeld = image::load_from_memory_with_format(&bytes?, image::ImageFormat::Png).ok()?;
