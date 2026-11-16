@@ -1,6 +1,6 @@
 //! Het venster Documenten: markdown, tabellen (csv en xlsx), json, afbeeldingen en pdf, elk in een
 //! tab. Er is hoogstens één zo'n venster. Verandert een bestand op schijf, dan leest het venster
-//! het opnieuw. Markdown en json kan ik ook bewerken.
+//! het opnieuw. Markdown en json kan ik ook bewerken; een .env opent meteen om te bewerken.
 
 mod bewerk;
 mod json;
@@ -35,9 +35,14 @@ enum Soort {
     Json,
     Beeld,
     Pdf,
+    /// Een .env, .env.local enzovoort: tekst die alleen in de editor staat.
+    Tekst,
 }
 
 fn soort(pad: &Path) -> Option<Soort> {
+    if pad.file_name()?.to_str()?.starts_with(".env") {
+        return Some(Soort::Tekst);
+    }
     let ext = pad.extension()?.to_str()?.to_ascii_lowercase();
     Some(match ext.as_str() {
         "md" | "markdown" => Soort::Markdown,
@@ -170,11 +175,11 @@ enum Gelezen {
     Pdf(Vec<(f32, f32)>),
 }
 
-/// Wat in het bestand staat, en van markdown en json ook de tekst.
+/// Wat in het bestand staat, en van markdown, json en tekst ook de tekst.
 fn lees(pad: &Path, soort: Soort) -> (Gelezen, Option<SharedString>) {
     let fout = |f: String| Gelezen::Fout(f);
     let gelezen = match soort {
-        Soort::Markdown | Soort::Json => match std::fs::read(pad) {
+        Soort::Markdown | Soort::Json | Soort::Tekst => match std::fs::read(pad) {
             Ok(bytes) => {
                 let tekst = String::from_utf8_lossy(&bytes).into_owned();
                 return (uit_tekst(soort, &tekst), Some(tekst.into()));
@@ -253,6 +258,9 @@ impl Documenten {
         let gewijzigd = gewijzigd(&pad);
         self.tabs.push(Doc { id, pad, soort, gewijzigd, inhoud: Inhoud::Laden, tekst: SharedString::default(), bewerk: None });
         self.actief = self.tabs.len() - 1;
+        if soort == Soort::Tekst {
+            self.wissel(window, cx);
+        }
         self.lees(id, window, cx);
         cx.notify();
     }
@@ -410,25 +418,31 @@ impl Documenten {
         });
         let doc = self.tabs.get(self.actief);
         let pad = doc.map(|doc| doc.pad.clone());
-        // Markdown en json bewerk ik hier; de rest kan naar de app die macOS ervoor heeft.
+        // Markdown en json bewerk ik hier; de rest kan naar de app die macOS ervoor heeft. Tekst staat
+        // altijd in de editor.
         let rechts = match doc {
+            Some(doc) if doc.soort == Soort::Tekst => None,
             Some(doc) if bewerkbaar(doc.soort) => {
                 let bewerkt = doc.bewerk.as_ref().is_some_and(|bewerk| bewerk.aan);
-                tab_vak(th, false)
-                    .id("bewerken")
-                    .flex_none()
-                    .child(if bewerkt { t("lezen", "read") } else { t("bewerken", "edit") })
-                    .on_click(cx.listener(|this, _, window, cx| this.wissel(window, cx)))
+                Some(
+                    tab_vak(th, false)
+                        .id("bewerken")
+                        .flex_none()
+                        .child(if bewerkt { t("lezen", "read") } else { t("bewerken", "edit") })
+                        .on_click(cx.listener(|this, _, window, cx| this.wissel(window, cx))),
+                )
             }
-            _ => tab_vak(th, false)
-                .id("in-app")
-                .flex_none()
-                .child(t("in app openen", "open in app"))
-                .on_click(cx.listener(move |_, _, _, cx| {
-                    if let Some(pad) = &pad {
-                        cx.open_with_system(pad);
-                    }
-                })),
+            _ => Some(
+                tab_vak(th, false)
+                    .id("in-app")
+                    .flex_none()
+                    .child(t("in app openen", "open in app"))
+                    .on_click(cx.listener(move |_, _, _, cx| {
+                        if let Some(pad) = &pad {
+                            cx.open_with_system(pad);
+                        }
+                    })),
+            ),
         };
         let fout = doc.and_then(|doc| doc.bewerk.as_ref()).and_then(|bewerk| bewerk.fout.clone());
         div()
@@ -459,13 +473,12 @@ impl Documenten {
                     .text_color(rgb(th.mute))
                     .child(div().truncate().child(fout))
             }))
-            .child(lijn(th))
-            .child(rechts)
+            .children(rechts.into_iter().flat_map(|rechts| [lijn(th).into_any_element(), rechts.into_any_element()]))
     }
 }
 
 fn bewerkbaar(soort: Soort) -> bool {
-    matches!(soort, Soort::Markdown | Soort::Json)
+    matches!(soort, Soort::Markdown | Soort::Json | Soort::Tekst)
 }
 
 /// JERA_DOC_SHOT=pad bewaart elke seconde dit venster als afbeelding. JERA_DOC_TAB=n kiest na

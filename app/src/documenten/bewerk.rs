@@ -1,4 +1,4 @@
-//! Markdown en json bewerken: de editor van GPUI Kit, ⌘S bewaart. Schrijft een sessie in het
+//! Markdown, json en tekst bewerken: de editor van GPUI Kit, ⌘S bewaart. Schrijft een sessie in het
 //! bestand terwijl ik het open heb, dan neemt de editor dat over, tenzij ik zelf iets wijzigde
 //! dat nog niet bewaard is; dan vraagt bewaren of ik wil overschrijven.
 
@@ -40,7 +40,7 @@ impl Doc {
 impl Bewerk {
     fn nieuw(id: usize, soort: Soort, tekst: SharedString, window: &mut Window, cx: &mut Context<Documenten>) -> Self {
         let editor = cx.new(|cx| {
-            let mut editor = EditorState::new(window, cx).folding(false).line_number(soort == Soort::Json).soft_wrap(soort == Soort::Markdown);
+            let mut editor = EditorState::new(window, cx).folding(false).line_number(matches!(soort, Soort::Json | Soort::Tekst)).soft_wrap(soort == Soort::Markdown);
             editor.set_value(tekst, window, cx);
             editor
         });
@@ -108,6 +108,10 @@ impl Documenten {
     pub(super) fn wissel(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(doc) = self.tabs.get_mut(self.actief) else { return };
         let (id, soort) = (doc.id, doc.soort);
+        // Tekst heeft geen leesweergave.
+        if soort == Soort::Tekst && doc.bewerk.is_some() {
+            return;
+        }
         match &mut doc.bewerk {
             Some(bewerk) if bewerk.aan => {
                 bewerk.aan = false;
