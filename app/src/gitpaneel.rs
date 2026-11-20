@@ -686,7 +686,7 @@ impl<'a> Indeling<'a> {
         let l = volgorde(repo, staat.agents);
         let lane: HashMap<&str, usize> = l.iter().enumerate().map(|(i, &b)| (br[b].naam.as_str(), i)).collect();
         let in_l = |n: &str| lane.contains_key(n);
-        let doorlopend = |b: &Branch| doorlopend(repo, &l, b);
+        let doorlopend = |b: &Branch| doorlopend(repo, b);
         let kop_h = 16.0 + l.len() as f32 * RN;
         let top = kop_h + 26.0;
 
@@ -789,19 +789,19 @@ impl<'a> Indeling<'a> {
     }
 
     fn doorlopend(&self, b: &Branch) -> bool {
-        doorlopend(self.repo, &self.l, b)
+        doorlopend(self.repo, b)
     }
 }
 
-/// Een lijn die doorloopt tot onderaan: een basis, een vaste branch, een branch zonder basis,
-/// of een met commits van voor zijn merge-base.
-fn doorlopend(repo: &Repo, l: &[usize], b: &Branch) -> bool {
-    let br = &repo.branches;
-    let is_basis = b.naam == repo.hoofd || l.iter().any(|&c| br[c].basis.as_ref() == Some(&b.naam));
-    is_basis
-        || b.vast
-        || b.basis.as_ref().is_none_or(|n| !br.iter().any(|c| c.naam == *n))
-        || b.mb.as_ref().is_some_and(|mb| b.eigen.iter().any(|c| c.ts < mb.ts))
+/// Een lijn die doorloopt tot onderaan: een vaste branch, een branch zonder basis, een met commits
+/// van voor zijn aftakpunt, of een die aftakte voordat zijn basis dat deed: daar bestond de lijn
+/// van de basis nog niet. Al het andere is een zijtakje, ook als er een branch aan hangt.
+fn doorlopend(repo: &Repo, b: &Branch) -> bool {
+    let Some(basis) = b.basis.as_ref().and_then(|n| repo.branches.iter().find(|c| c.naam == *n)) else { return true };
+    b.vast
+        || b.mb.as_ref().is_some_and(|mb| {
+            b.eigen.iter().any(|c| c.ts < mb.ts) || (!doorlopend(repo, basis) && basis.mb.as_ref().is_some_and(|m| mb.ts < m.ts))
+        })
 }
 
 /// Een branch zonder eigen werk: zijn naam en eindpunt zijn vaag.
@@ -1053,6 +1053,7 @@ fn teken_branch(tek: &mut Tekening, ind: &Indeling, staat: &Staat, i: usize, hh:
         Some(o) if o.behind > 0 => y(&o.h),
         _ => yt,
     };
+    let uit_basis = b.basis.is_some() && b.eigen.first().is_some_and(|c| c.h == b.h && c.van == b.basis);
     // valt de hele branch onder de onderrand, dan een stompje onderaan met zijn naam en hoe oud hij is
     if hoogste > hh - 6.0 {
         onder.push(lijn(vec![(xi, hh), (xi, hh - 18.0)], LIJN, kleur(k, 1.0), None));
@@ -1093,6 +1094,10 @@ fn teken_branch(tek: &mut Tekening, ind: &Indeling, staat: &Staat, i: usize, hh:
         let dikke_merge = b.merged_into.as_ref().filter(|m| ind.rij.contains_key(m.h.as_str()) && basis.h == m.h);
         if let Some(m) = dikke_merge {
             pijl(onder, xi, xj, y(&m.h), k);
+        }
+        // nam de branch met zijn laatste commit zijn basis in zich op, dan komt die merge op het eindpunt aan
+        if uit_basis {
+            pijl(onder, xj, xi, yt, lk(th, j));
         }
         if !door {
             // een gewone branch takt hier af van zijn basis, met een rechte hoek
@@ -1167,8 +1172,10 @@ fn teken_branch(tek: &mut Tekening, ind: &Indeling, staat: &Staat, i: usize, hh:
     let ka = if b.alleen_origin { VAAG } else { 1.0 };
     boven.push(Vorm::Hol { x: xi, y: yt, z: rk * 0.9, rand: KOP_LIJN, kleur: kleur(k, ka), vul: if b.hier { kleur(k, 1.0) } else { bg } });
     doelen.push(doel(xi, yt, 9.0, Klik::Branch(b.naam.clone())));
-    // is het eindpunt zelf de merge van een branch, dan staat de ruit in het vierkant
-    if let Some(bron) = ind.l.iter().position(|&o| br[o].basis.as_ref() == Some(&b.naam) && br[o].merged_into.as_ref().is_some_and(|m| m.h == b.h)) {
+    // is het eindpunt zelf een merge, dan staat de ruit in het vierkant: van de branch die erin ging, of van de basis
+    let erin = ind.l.iter().position(|&o| br[o].basis.as_ref() == Some(&b.naam) && br[o].merged_into.as_ref().is_some_and(|m| m.h == b.h));
+    let basis = b.basis.as_deref().filter(|_| uit_basis).and_then(|n| ind.lane.get(n)).copied();
+    if let Some(bron) = erin.or(basis) {
         boven.push(Vorm::Ruit { x: xi, y: yt, r: RUIT_KOP, kleur: kleur(lk(th, bron), 1.0) });
     }
     // wat nog niet gecommit is: een open bolletje boven het eindpunt, met het aantal bestanden
@@ -1347,4 +1354,134 @@ fn schrijf(s: &str, grootte: f32, vet: bool, kleur: Hsla, plek: Point<Pixels>, r
     let regel = window.text_system().shape_line(s.to_string().into(), px(grootte), &[run], None);
     let plek = if rechts { point(plek.x - regel.width, plek.y) } else { plek };
     let _ = regel.paint(plek, px(RN), TextAlign::Left, None, window, cx);
+}
+
+#[cfg(test)]
+mod tests {
+    // geen `super::*`: dan komt `test` uit gpui mee
+    use super::{BOCHT, Branch, HashSet, Indeling, LIJN, PathBuf, RUIT_KOP, Repo, Staat, Vorm, breedte, git, t, teken, x};
+    use std::{path::Path, process::Command};
+
+    /// Een git-commando op een vast moment, in minuten na de eerste commit: zo staan de commits in een vaste volgorde.
+    fn g(map: &Path, minuut: i64, args: &[&str]) -> String {
+        let datum = format!("@{} +0000", 1_700_000_000 + minuut * 60);
+        let uit = Command::new("git").env("GIT_AUTHOR_DATE", &datum).env("GIT_COMMITTER_DATE", &datum).arg("-C").arg(map).args(args).output().unwrap();
+        assert!(uit.status.success(), "git {args:?}: {}", String::from_utf8_lossy(&uit.stderr));
+        String::from_utf8_lossy(&uit.stdout).trim().to_string()
+    }
+
+    fn commit(map: &Path, minuut: i64, naam: &str) {
+        std::fs::write(map.join(naam), naam).unwrap();
+        g(map, minuut, &["add", "-A"]);
+        g(map, minuut, &["commit", "-q", "-m", naam]);
+    }
+
+    /// Een repo met origin: staging (s0, s1, s2) op main, en tweestaps dat op s1 aftakt met één eigen commit.
+    /// Met `merge` nam tweestaps staging daarna in zich op; met `dataveiligheid` staat er een lege branch op zijn eindpunt.
+    fn proef(naam: &str, merge: bool, dataveiligheid: bool) -> PathBuf {
+        let wortel = std::env::temp_dir().join(format!("jera-gitpaneel-{naam}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&wortel);
+        let map = wortel.join("werk");
+        std::fs::create_dir_all(&map).unwrap();
+        for args in [&["init", "-q", "-b", "main"][..], &["config", "user.email", "t@t"], &["config", "user.name", "t"]] {
+            g(&map, 0, args);
+        }
+        commit(&map, 0, "a");
+        g(&map, 1, &["switch", "-q", "-c", "staging"]);
+        commit(&map, 1, "s0");
+        commit(&map, 2, "s1");
+        g(&map, 3, &["switch", "-q", "-c", "tweestaps"]);
+        commit(&map, 3, "t1");
+        g(&map, 4, &["switch", "-q", "staging"]);
+        commit(&map, 4, "s2");
+        if merge {
+            g(&map, 5, &["switch", "-q", "tweestaps"]);
+            g(&map, 5, &["merge", "-q", "--no-ff", "-m", "Merge branch 'staging' into tweestaps", "staging"]);
+        }
+        if dataveiligheid {
+            g(&map, 6, &["branch", "dataveiligheid", "tweestaps"]);
+        }
+        g(&map, 6, &["switch", "-q", "main"]);
+        let origin = wortel.join("origin.git");
+        g(&map, 6, &["init", "-q", "--bare", origin.to_str().unwrap()]);
+        g(&map, 6, &["remote", "add", "origin", origin.to_str().unwrap()]);
+        g(&map, 6, &["push", "-q", "origin", "main", "staging", "tweestaps"]);
+        map
+    }
+
+    fn branch<'a>(repo: &'a Repo, naam: &str) -> &'a Branch {
+        repo.branches.iter().find(|b| b.naam == naam).unwrap()
+    }
+
+    /// Tweestaps is een zijtakje van staging: van zijn aftakpunt tot zijn eindpunt, met alleen zijn eigen commit.
+    fn zijtakje(naam: &str, merge: bool, dataveiligheid: bool) {
+        let map = proef(naam, merge, dataveiligheid);
+        let repo = git::lees(&map).unwrap();
+        let staat = Staat { agents: false, open: HashSet::new() };
+        let ind = Indeling::new(&repo, &staat);
+        let tek = teken(&repo, &staat, breedte(&repo, false), 2000.0, &t::DONKER);
+        let lijnen: Vec<&Vec<(f32, f32)>> = tek.onder.iter().filter_map(|v| if let Vorm::Lijn { punten, .. } = v { Some(punten) } else { None }).collect();
+        let tak = branch(&repo, "tweestaps");
+        let (xs, xt, yt) = (x(ind.lane["staging"]), x(ind.lane["tweestaps"]), ind.y(&tak.h));
+        let aftak = g(&map, 0, &["rev-parse", "staging~1"]);
+
+        assert_eq!(tak.basis.as_deref(), Some("staging"));
+        assert_eq!(tak.mb.as_ref().unwrap().h, aftak);
+        assert!(!ind.doorlopend(tak));
+        // de rechte hoek vanaf staging, op het aftakpunt
+        assert!(lijnen.contains(&&vec![(xs, ind.y(&aftak)), (xt + LIJN / 2.0, ind.y(&aftak))]));
+        // onder het eindpunt alleen de eigen commit, niets van staging
+        let bolletjes = tek.boven.iter().filter(|v| matches!(v, Vorm::Bol { x, .. } if *x == xt)).count();
+        assert_eq!(bolletjes, usize::from(merge));
+        // de merge van staging komt met een bocht op het eindpunt aan, met de ruit in het vierkant
+        let bocht = lijnen.iter().any(|p| p[0] == (xs, yt + BOCHT) && p.last().is_some_and(|e| (e.0 - xt).abs() < 0.01 && (e.1 - yt).abs() < 0.01));
+        let ruit = tek.boven.iter().any(|v| matches!(v, Vorm::Ruit { x, y, r, .. } if (*x, *y, *r) == (xt, yt, RUIT_KOP)));
+        assert_eq!((bocht, ruit), (merge, merge));
+        if dataveiligheid {
+            // de lege branch hangt aan het eindpunt van tweestaps
+            assert_eq!(branch(&repo, "dataveiligheid").basis.as_deref(), Some("tweestaps"));
+            assert!(lijnen.contains(&&vec![(xt, yt), (x(ind.lane["dataveiligheid"]) + LIJN / 2.0, yt)]));
+        }
+        let _ = std::fs::remove_dir_all(map.parent().unwrap());
+    }
+
+    #[test]
+    fn zijtakje_na_een_merge_van_de_basis_met_een_branch_eraan() {
+        zijtakje("merge-branch", true, true);
+    }
+
+    #[test]
+    fn zijtakje_na_een_merge_van_de_basis() {
+        zijtakje("merge", true, false);
+    }
+
+    #[test]
+    fn zijtakje_met_een_branch_eraan() {
+        zijtakje("branch", false, true);
+    }
+
+    #[test]
+    fn zijtakje_zonder_meer() {
+        zijtakje("kaal", false, false);
+    }
+
+    #[test]
+    fn eerder_afgetakt_dan_zijn_basis_loopt_door() {
+        let map = proef("eerder", false, false);
+        // combinatie takte op s0 af van staging, voordat tweestaps dat deed, en nam tweestaps daarna in zich op:
+        // tweestaps is zijn basis, maar op s0 bestond de lijn van tweestaps nog niet
+        g(&map, 7, &["switch", "-q", "-c", "combinatie", "staging~2"]);
+        commit(&map, 7, "c1");
+        g(&map, 8, &["merge", "-q", "--no-ff", "-m", "Merge branch 'tweestaps' into combinatie", "tweestaps"]);
+        g(&map, 8, &["switch", "-q", "main"]);
+        let repo = git::lees(&map).unwrap();
+        let staat = Staat { agents: false, open: HashSet::new() };
+        let ind = Indeling::new(&repo, &staat);
+        let combinatie = branch(&repo, "combinatie");
+
+        assert_eq!(combinatie.basis.as_deref(), Some("tweestaps"));
+        assert!(ind.doorlopend(combinatie));
+        assert!(!ind.doorlopend(branch(&repo, "tweestaps")));
+        let _ = std::fs::remove_dir_all(map.parent().unwrap());
+    }
 }

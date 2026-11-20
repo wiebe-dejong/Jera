@@ -13,6 +13,9 @@ use std::{
 /// Branches die blijven bestaan. De eerste die er is, is de hoofdbranch.
 const VAST: [&str; 6] = ["main", "master", "staging", "develop", "development", "acceptatie"];
 
+/// Zoveel eigen commits leest `lees` hooguit per branch.
+const MEEST_EIGEN: usize = 300;
+
 pub struct Commit {
     pub h: String,
     pub ts: i64,
@@ -50,6 +53,7 @@ pub struct Branch {
     pub alleen_origin: bool,
     pub origin: Option<Origin>,
     pub basis: Option<String>,
+    /// Het aftakpunt: de commit waar de branch zijn basis verliet.
     pub mb: Option<Punt>,
     pub merged_into: Option<Punt>,
     pub eigen: Vec<Commit>,
@@ -246,7 +250,7 @@ pub fn lees(map: &Path) -> Option<Repo> {
         let (mut mb, mut merged_into, mut eigen, mut uniek) = (None, None, Vec::new(), 0);
         if let Some(b) = &basis {
             let mut m = info(&g(&["merge-base", &best(b), &top]));
-            eigen = lijst(n, &m.h, Some(&r), 300);
+            eigen = lijst(n, &m.h, Some(&r), MEEST_EIGEN);
             for regel in g(&["log", "--first-parent", "--merges", "-n60", "--format=%H|%ct|%P", &best(b)]).lines() {
                 let v: Vec<&str> = regel.split('|').collect();
                 if v.len() == 3 && v[2].split_whitespace().nth(1) == Some(m.h.as_str()) {
@@ -257,7 +261,7 @@ pub fn lees(map: &Path) -> Option<Repo> {
             // gemerged: de merge-base is dan het eindpunt zelf; het echte aftakpunt ligt onder de merge
             if let Some(mi) = &merged_into {
                 m = info(&g(&["merge-base", &format!("{}^1", mi.h), &top]));
-                eigen = lijst(n, &m.h, Some(&r), 300);
+                eigen = lijst(n, &m.h, Some(&r), MEEST_EIGEN);
             } else if !eigen.is_empty() {
                 // een squash-merge: een PR-commit op de basis met precies de wijziging van deze branch
                 let eigen_id = patch_id(map, &["diff", &m.h, &top]);
@@ -280,7 +284,10 @@ pub fn lees(map: &Path) -> Option<Repo> {
             if merged_into.is_some() {
                 uniek = eigen.len() as u32;
             }
-            mb = Some(m);
+            // het aftakpunt ligt onder de oudste eigen commit. Nam de branch zijn basis tussendoor in zich op,
+            // dan ligt de merge-base hoger: op de laatste commit die zo meekwam
+            let aftak = eigen.last().filter(|_| eigen.len() < MEEST_EIGEN).map(|c| info(&format!("{}^", c.h))).filter(|p| !p.h.is_empty());
+            mb = Some(aftak.unwrap_or(m));
         }
         let gezien: HashSet<&str> = eigen.iter().chain(&op_origin).map(|c| c.h.as_str()).collect();
         let oud: Vec<Commit> =
