@@ -552,6 +552,7 @@ enum Vorm {
     Ring { x: f32, y: f32, r: f32, kleur: Hsla, vul: Hsla },
     Hol { x: f32, y: f32, z: f32, rand: f32, kleur: Hsla, vul: Hsla },
     Wolk { x: f32, y: f32, kleur: Hsla, vul: Hsla },
+    Ruit { x: f32, y: f32, r: f32, kleur: Hsla },
     Knop { x: f32, y: f32, w: f32, h: f32, rand: Hsla, vul: Hsla },
     Tekst { x: f32, y: f32, tekst: String, grootte: f32, vet: bool, kleur: Hsla, rechts: bool },
 }
@@ -764,7 +765,7 @@ impl<'a> Indeling<'a> {
             for (&q, lijst) in &v.vakken {
                 let it = groepeer(b, lijst, &staat.open, &in_l);
                 let mut moet = straal_op_rij(&rijen, b, v, q) + straal_op_rij(&rijen, b, v, q + 1) + (it.len() + 1) as f32 * RUIMTE;
-                moet += it.len() as f32 * 2.0 * PUNT;
+                moet += it.iter().map(|o| 2.0 * straal(o, b, &in_l)).sum::<f32>();
                 if q + 1 < gaps.len() && gaps[q + 1] < moet {
                     gaps[q + 1] = moet;
                 }
@@ -891,6 +892,19 @@ fn pijl(onder: &mut Vec<Vorm>, x_van: f32, x_naar: f32, yy: f32, k: u32) {
 /// De straal van de bocht waarmee een merge de andere lijn in gaat.
 const BOCHT: f32 = 10.0;
 
+/// De ruit op een merge, in de kleur van de branch die binnenkomt: de halve hoogte op de lijn,
+/// en in het vierkant als de merge het eindpunt is.
+const RUIT: f32 = 6.5;
+const RUIT_KOP: f32 = 4.0;
+
+/// Hoe groot wat hier op de lijn van `b` staat: een merge uit een andere lijn is een ruit.
+fn straal(o: &Item, b: &Branch, in_l: &dyn Fn(&str) -> bool) -> f32 {
+    match o {
+        Item::Los { c, .. } if c.van.as_ref().is_some_and(|v| *v != b.naam && in_l(v)) => RUIT,
+        _ => PUNT,
+    }
+}
+
 /// Het paneel als SVG, zonder venster: dezelfde vormen als `verf` tekent.
 #[cfg(feature = "schermafdruk")]
 pub fn svg(map: &std::path::Path, licht: bool, hh: f32) -> Option<String> {
@@ -936,6 +950,9 @@ pub fn svg(map: &std::path::Path, licht: bool, hh: f32) -> Option<String> {
                     r2 = 4.6 * s,
                     r3 = 3.9 * s
                 )
+            }
+            Vorm::Ruit { x, y, r, kleur } => {
+                format!("<polygon points=\"{x},{} {},{y} {x},{} {},{y}\" fill=\"{}\"/>", y - r, x + r, y + r, x - r, k(kleur))
             }
             Vorm::Knop { x, y, w, h, rand, vul } => {
                 format!("<rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" fill=\"{}\" stroke=\"{}\" stroke-width=\"1\"/>", x + 0.5, y + 0.5, w - 1.0, h - 1.0, k(vul), k(rand))
@@ -1093,12 +1110,10 @@ fn teken_branch(tek: &mut Tekening, ind: &Indeling, staat: &Staat, i: usize, hh:
     }
     // een commit die alleen op GitHub staat is vaag
     let achter = b.origin.as_ref().is_some_and(|o| o.behind > 0);
-    let bolletje = |boven: &mut Vec<Vorm>, yy: f32, vaag: bool| {
-        let a = if b.alleen_origin || vaag || (achter && yy < yt - 0.5) { VAAG } else { 1.0 };
-        boven.push(Vorm::Bol { x: xi, y: yy, r: PUNT, kleur: kleur(k, a) });
-    };
+    let alfa = |yy: f32, vaag: bool| if b.alleen_origin || vaag || (achter && yy < yt - 0.5) { VAAG } else { 1.0 };
+    let bolletje = |boven: &mut Vec<Vorm>, yy: f32, vaag: bool| boven.push(Vorm::Bol { x: xi, y: yy, r: PUNT, kleur: kleur(k, alfa(yy, vaag)) });
 
-    // één bolletje per commit
+    // één bolletje per commit; waar een branch binnenkomt een ruit in de kleur van die branch
     let punt = |onder: &mut Vec<Vorm>, boven: &mut Vec<Vorm>, doelen: &mut Vec<Doel>, c: &Commit, yy: f32, vaag: bool, key: Option<String>| {
         if yy > hh + 10.0 {
             return;
@@ -1106,10 +1121,13 @@ fn teken_branch(tek: &mut Tekening, ind: &Indeling, staat: &Staat, i: usize, hh:
         let bron = c.van.as_deref().filter(|v| *v != b.naam).and_then(|v| ind.lane.get(v)).copied().or_else(|| {
             ind.l.iter().position(|&o| repo.branches[o].merged_into.as_ref().is_some_and(|m| m.h == c.h) && repo.branches[o].naam != b.naam)
         });
-        if let Some(bron) = bron {
-            pijl(onder, x(bron), xi, yy, lk(th, bron));
+        match bron {
+            Some(bron) => {
+                pijl(onder, x(bron), xi, yy, lk(th, bron));
+                boven.push(Vorm::Ruit { x: xi, y: yy, r: RUIT, kleur: kleur(lk(th, bron), alfa(yy, vaag)) });
+            }
+            None => bolletje(boven, yy, vaag),
         }
-        bolletje(boven, yy, vaag);
         // een klik op een losse commit uit een uitgeklapte groep klapt hem weer in
         if let Some(key) = key {
             doelen.push(doel(xi, yy, 6.0, Klik::Groep(key)));
@@ -1125,11 +1143,11 @@ fn teken_branch(tek: &mut Tekening, ind: &Indeling, staat: &Staat, i: usize, hh:
         // gelijke afstand van rand tot rand, ook tot het bolletje op de rij eronder en erboven
         let onderkant = y_laag - straal_op_rij(&ind.rijen, b, v, q);
         let bovenkant = y_hoog + straal_op_rij(&ind.rijen, b, v, q + 1);
-        let dik = it.len() as f32 * 2.0 * PUNT;
+        let dik = it.iter().map(|o| 2.0 * straal(o, b, &|n| ind.in_l(n))).sum::<f32>();
         let tussen = (onderkant - bovenkant - dik) / (it.len() + 1) as f32;
         let mut yy = onderkant;
         for o in it {
-            let r = PUNT;
+            let r = straal(&o, b, &|n| ind.in_l(n));
             yy -= tussen + r;
             match o {
                 Item::Groep { run, key, vaag } if yy <= hh + 10.0 => {
@@ -1149,6 +1167,10 @@ fn teken_branch(tek: &mut Tekening, ind: &Indeling, staat: &Staat, i: usize, hh:
     let ka = if b.alleen_origin { VAAG } else { 1.0 };
     boven.push(Vorm::Hol { x: xi, y: yt, z: rk * 0.9, rand: KOP_LIJN, kleur: kleur(k, ka), vul: if b.hier { kleur(k, 1.0) } else { bg } });
     doelen.push(doel(xi, yt, 9.0, Klik::Branch(b.naam.clone())));
+    // is het eindpunt zelf de merge van een branch, dan staat de ruit in het vierkant
+    if let Some(bron) = ind.l.iter().position(|&o| br[o].basis.as_ref() == Some(&b.naam) && br[o].merged_into.as_ref().is_some_and(|m| m.h == b.h)) {
+        boven.push(Vorm::Ruit { x: xi, y: yt, r: RUIT_KOP, kleur: kleur(lk(th, bron), 1.0) });
+    }
     // wat nog niet gecommit is: een open bolletje boven het eindpunt, met het aantal bestanden
     let open = b.wijzigingen + b.geparkeerd;
     if open > 0 {
@@ -1274,6 +1296,17 @@ fn verf(tek: &Tekening, bounds: Bounds<Pixels>, th: &Thema, window: &mut Window,
                 if zz > 0.0 {
                     let b = Bounds::new(p(x - zz, y - zz), size(px(2.0 * zz), px(2.0 * zz)));
                     window.paint_quad(quad(b, px(0.0), *vul, px(*rand), *kleur, BorderStyle::default()));
+                }
+            }
+            Vorm::Ruit { x, y, r, kleur } => {
+                let mut pad = PathBuilder::fill();
+                pad.move_to(p(*x, y - r));
+                pad.line_to(p(x + r, *y));
+                pad.line_to(p(*x, y + r));
+                pad.line_to(p(x - r, *y));
+                pad.close();
+                if let Ok(pad) = pad.build() {
+                    window.paint_path(pad, *kleur);
                 }
             }
             Vorm::Knop { x, y, w, h, rand, vul } => {

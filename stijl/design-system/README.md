@@ -9,8 +9,8 @@ Jera is een Mac-app waarin één persoon zijn Claude Code-sessies draait en over
 
 ## Kleur
 
-- Het venster is één vlak in `bg`. Scheid panelen met een lijn van `lijn-dikte` in `line`, nooit met een ander vlak of een schaduw.
-- Alleen de titelbalk (`bar`), de gekozen rij en wat onder de muis staat (`sel`) hebben een eigen vlak.
+- Het venster is één vlak in `bg`, op de linkerkolom na: die heeft het vlak `bar`, zoals de titelbalk. Scheid de andere panelen met een lijn van `lijn-dikte` in `line`, nooit met een ander vlak of een schaduw.
+- Alleen de titelbalk en de linkerkolom (`bar`), de gekozen rij en wat onder de muis staat (`sel`) hebben een eigen vlak.
 - Tekst is `ink`. Wat minder telt is `mute`: mapnamen, tellers, niet-actieve tabs, idle sessies.
 - `accent` is alleen een streep van `streep` dik. Die zegt wat actief of gekozen is. Maak er nooit een vlak of tekst van.
 - `ok`, `warn` en `bad` zijn alleen status. Gebruik ze nergens als versiering.
@@ -76,6 +76,7 @@ Elke sessie toont één icoon van `icoon` groot, voor de titel, zonder woord. He
 
 Alle onderdelen zijn gekozen: Tab, Schakelaar, Sessieregel, Agents (de agents onder een sessie: de subagents die bezig zijn en de teamleden), Statusicoon, RenderRegel, Terminal, GitPaneel, Knop, Bestandsboom, EerderRegel (de regel in het blok oud), Poortenpaneel, Dialoog en LegeStaat.
 
+- Voorstel: de vaste tab van de Jera-sessie, links in de titelbalk voor de projecten: het teken ᛃ in `ink`, de naam, en het statusicoon van de sessie erachter. Zo breed dat de lijn erachter op de lijn van de linkerkolom staat. Geen aantal en geen kruisje. Al gebouwd in de app.
 - Voorstel: Contextmenu, het menu van een twee-vingerklik in de bestandsboom. Al gebouwd in de app.
 - Voorstel: Openen, het scherm waarin ik een project kies of een nieuw maak. Al gebouwd in de app.
 - Voorstel: Statusbalk, de rij onderaan rechts van de linkerkolom: `h-rij` hoog, op `bg`, met een lijn erboven, op één lijn met de kop `oud`. Rechts de teller: `poorten`, `browsers` en `artifacts` met hun aantal; een soort met 0 staat er niet. Een klik opent het Poortenpaneel als lade boven de teller, over de terminal, rechts tegen de rand. Gekozen op het bord in `stijl/server/`. Al gebouwd in de app.

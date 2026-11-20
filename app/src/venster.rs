@@ -144,7 +144,9 @@ impl Jera {
         cx.subscribe_in(&openen, window, |this, _, event, window, cx| match event {
             OpenenEvent::Gekozen(map) => {
                 this.openen_open = false;
-                match this.tabs.iter().position(|tab| map.starts_with(&tab.root)) {
+                // Elke map ligt onder de thuismap: de tab daarvan telt alleen voor de thuismap zelf.
+                let thuis = crate::thuis();
+                match this.tabs.iter().position(|tab| map.starts_with(&tab.root) && (tab.root != thuis || *map == thuis)) {
                     Some(index) => {
                         this.actief = index;
                         this.focus(window, cx);
@@ -197,7 +199,10 @@ impl Jera {
 
     fn start_met(&mut self, map: PathBuf, commando: &str, window: &mut Window, cx: &mut Context<Self>) {
         let root = repo_root(&map);
-        crate::openen::onthoud(&root);
+        // De thuismap heeft haar eigen tab en staat niet bij de recente mappen.
+        if root != crate::thuis() {
+            crate::openen::onthoud(&root);
+        }
         let terminal = cx.new(|cx| TerminalView::new(map.clone(), commando, cx));
         let id = self.volgende_id;
         self.volgende_id += 1;
@@ -239,6 +244,20 @@ impl Jera {
         self.stand = Stand::Sessies;
         self.focus(window, cx);
         cx.notify();
+    }
+
+    /// De Jera-sessie: Claude in de thuismap, voor de hele computer. Draait ze al, dan gaat
+    /// Jera naar haar tab; anders start ze.
+    fn open_thuis(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let thuis = crate::thuis();
+        match self.tabs.iter().position(|tab| tab.root == thuis && !tab.sessies.is_empty()) {
+            Some(index) => {
+                self.actief = index;
+                self.focus(window, cx);
+                cx.notify();
+            }
+            None => self.start(thuis, window, cx),
+        }
     }
 
     pub fn gekozen_terminal(&self) -> Option<&Entity<TerminalView>> {
@@ -394,7 +413,8 @@ impl Jera {
     /// Openen, "nieuw" opent het met het naamveld, "zoek tekst" typt in het veld, "github" toont de
     /// repo's van GitHub. "agents" klapt
     /// de agents van de gekozen sessie open of dicht. "sessiemenu" opent
-    /// het menu van de gekozen sessie, "sluit" sluit de actieve tab, of vraagt dat eerst.
+    /// het menu van de gekozen sessie, "sluit" sluit de actieve tab, of vraagt dat eerst. "thuis"
+    /// klikt op de vaste tab van de Jera-sessie.
     #[cfg(feature = "schermafdruk")]
     pub fn test_stap(&mut self, stap: &str, window: &mut Window, cx: &mut Context<Self>) {
         match stap {
@@ -420,6 +440,7 @@ impl Jera {
                     self.sluit_tab(root, window, cx);
                 }
             }
+            "thuis" => self.open_thuis(window, cx),
             "openen" => self.toon_openen(false, window, cx),
             "nieuw" => self.toon_openen(true, window, cx),
             _ if stap.starts_with("zoek ") => {
@@ -573,7 +594,26 @@ impl Jera {
     }
 
     fn titelbalk(&self, th: &Thema, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let tabs = self.tabs.iter().enumerate().map(|(index, tab)| {
+        // De vaste tab van de Jera-sessie, voor de projecten: het teken, de naam en de status van de sessie.
+        // Zo breed dat de lijn erachter op de lijn van de linkerkolom staat.
+        let thuis = crate::thuis();
+        let thuis_tab = self.tabs.iter().position(|tab| tab.root == thuis);
+        let jera = tab_vak(th, thuis_tab == Some(self.actief))
+            .id("thuis")
+            .flex_none()
+            .w(px(t::B_KOLOM - t::B_LICHTEN - 2.0 * t::LIJN))
+            .child(svg().data(LOGO).flex_none().size(px(t::ICOON)).text_color(rgb(th.ink)))
+            .child("kernel")
+            .children(thuis_tab.and_then(|index| self.tabs[index].sessies.iter().map(|s| s.status).min()).map(|status| {
+                let woord = status.woord();
+                div()
+                    .id("thuisstatus")
+                    .flex_none()
+                    .child(icoon(status, "thuisdraai", th))
+                    .tooltip(move |_, cx| cx.new(|_| Tip(vec![woord.into()])).into())
+            }))
+            .on_click(cx.listener(|this, _, window, cx| this.open_thuis(window, cx)));
+        let tabs = self.tabs.iter().enumerate().filter(|(_, tab)| tab.root != thuis).map(|(index, tab)| {
             let actief = index == self.actief;
             // De slechtste status van de sessies in de tab: rood boven geel boven groen.
             let slechtste = tab.sessies.iter().map(|s| s.status).min();
@@ -636,6 +676,8 @@ impl Jera {
             .bg(rgb(th.bar))
             .border_b(px(t::LIJN))
             .border_color(rgb(th.line))
+            .child(lijn(th))
+            .child(jera)
             .children(tabs.flat_map(|tab| [lijn(th).into_any_element(), tab.into_any_element()]))
             .child(lijn(th))
             .child(
@@ -657,14 +699,6 @@ impl Jera {
                     }),
             )
             .child(lijn(th))
-            .child(div().flex_1())
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .px(px(t::PAD))
-                    .child(svg().data(LOGO).size(px(t::ICOON)).text_color(rgb(th.ink))),
-            )
     }
 
     fn kolom(&self, th: &Thema, cx: &mut Context<Self>) -> impl IntoElement {
@@ -750,6 +784,7 @@ impl Jera {
             .flex_col()
             .flex_none()
             .w(px(t::B_KOLOM))
+            .bg(rgb(th.bar))
             .border_r(px(t::LIJN))
             .border_color(rgb(th.line))
             .child(schakelaar)
@@ -1001,7 +1036,7 @@ fn toevoegen_vlak(th: &Thema) -> impl IntoElement {
         .items_center()
         .justify_center()
         .gap(px(t::GAP))
-        .bg(rgba((th.bg << 8) | 0xE6))
+        .bg(rgba((th.bar << 8) | 0xE6))
         .border(px(t::LIJN))
         .border_dashed()
         .border_color(rgb(th.accent))

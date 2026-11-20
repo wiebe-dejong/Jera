@@ -29,10 +29,13 @@ pub fn lees(root: &Path) -> Vec<Oud> {
         claude::sessies().iter().filter_map(|json| json["sessionId"].as_str().map(str::to_string)).collect();
     // De map van een submap begint met die van `root`; de map zelf staat in het gesprek.
     let code = claude::projectcode(root);
+    // Onder de thuismap ligt elk project: daar tellen alleen de sessies in de map zelf.
+    let thuis = root == crate::thuis();
     let mut uit = Vec::new();
     let Ok(projecten) = std::fs::read_dir(claude::map().join("projects")) else { return uit };
     for project in projecten.flatten() {
-        if !project.file_name().to_string_lossy().starts_with(&code) {
+        let naam = project.file_name().to_string_lossy().into_owned();
+        if !naam.starts_with(&code) || (thuis && naam != code) {
             continue;
         }
         let Ok(gesprekken) = std::fs::read_dir(project.path()) else { continue };
@@ -46,7 +49,7 @@ pub fn lees(root: &Path) -> Vec<Oud> {
                 continue;
             }
             let Some((map, titel)) = kop(&pad) else { continue };
-            if !map.starts_with(root) {
+            if !map.starts_with(root) || (thuis && map != root) {
                 continue;
             }
             let tijd = gesprek.metadata().and_then(|m| m.modified()).unwrap_or(SystemTime::UNIX_EPOCH);
