@@ -892,10 +892,9 @@ fn pijl(onder: &mut Vec<Vorm>, x_van: f32, x_naar: f32, yy: f32, k: u32) {
 /// De straal van de bocht waarmee een merge de andere lijn in gaat.
 const BOCHT: f32 = 10.0;
 
-/// De ruit op een merge, in de kleur van de branch die binnenkomt: de halve hoogte op de lijn,
+/// De ruit op een merge, in de kleur van de branch die binnenkomt: de halve hoogte, op de lijn
 /// en in het vierkant als de merge het eindpunt is.
-const RUIT: f32 = 6.5;
-const RUIT_KOP: f32 = 4.0;
+const RUIT: f32 = 4.0;
 
 /// Hoe groot wat hier op de lijn van `b` staat: een merge uit een andere lijn is een ruit.
 fn straal(o: &Item, b: &Branch, in_l: &dyn Fn(&str) -> bool) -> f32 {
@@ -1176,7 +1175,7 @@ fn teken_branch(tek: &mut Tekening, ind: &Indeling, staat: &Staat, i: usize, hh:
     let erin = ind.l.iter().position(|&o| br[o].basis.as_ref() == Some(&b.naam) && br[o].merged_into.as_ref().is_some_and(|m| m.h == b.h));
     let basis = b.basis.as_deref().filter(|_| uit_basis).and_then(|n| ind.lane.get(n)).copied();
     if let Some(bron) = erin.or(basis) {
-        boven.push(Vorm::Ruit { x: xi, y: yt, r: RUIT_KOP, kleur: kleur(lk(th, bron), 1.0) });
+        boven.push(Vorm::Ruit { x: xi, y: yt, r: RUIT, kleur: kleur(lk(th, bron), 1.0) });
     }
     // wat nog niet gecommit is: een open bolletje boven het eindpunt, met het aantal bestanden
     let open = b.wijzigingen + b.geparkeerd;
@@ -1359,7 +1358,7 @@ fn schrijf(s: &str, grootte: f32, vet: bool, kleur: Hsla, plek: Point<Pixels>, r
 #[cfg(test)]
 mod tests {
     // geen `super::*`: dan komt `test` uit gpui mee
-    use super::{BOCHT, Branch, HashSet, Indeling, LIJN, PathBuf, RUIT_KOP, Repo, Staat, Vorm, breedte, git, t, teken, x};
+    use super::{BOCHT, Branch, HashSet, Indeling, LIJN, PathBuf, RUIT, Repo, Staat, Vorm, breedte, git, t, teken, x};
     use std::{path::Path, process::Command};
 
     /// Een git-commando op een vast moment, in minuten na de eerste commit: zo staan de commits in een vaste volgorde.
@@ -1435,7 +1434,7 @@ mod tests {
         assert_eq!(bolletjes, usize::from(merge));
         // de merge van staging komt met een bocht op het eindpunt aan, met de ruit in het vierkant
         let bocht = lijnen.iter().any(|p| p[0] == (xs, yt + BOCHT) && p.last().is_some_and(|e| (e.0 - xt).abs() < 0.01 && (e.1 - yt).abs() < 0.01));
-        let ruit = tek.boven.iter().any(|v| matches!(v, Vorm::Ruit { x, y, r, .. } if (*x, *y, *r) == (xt, yt, RUIT_KOP)));
+        let ruit = tek.boven.iter().any(|v| matches!(v, Vorm::Ruit { x, y, r, .. } if (*x, *y, *r) == (xt, yt, RUIT)));
         assert_eq!((bocht, ruit), (merge, merge));
         if dataveiligheid {
             // de lege branch hangt aan het eindpunt van tweestaps
