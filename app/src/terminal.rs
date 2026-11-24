@@ -133,7 +133,7 @@ impl TerminalView {
 
         // Via de eigen shell, zodat `claude` hetzelfde doet als in de terminal.
         let options = tty::Options {
-            shell: Some(tty::Shell::new("/bin/zsh".into(), vec!["-ilc".into(), command.into()])),
+            shell: Some(tty::Shell::new("/bin/zsh".into(), shell_args(command))),
             working_directory: Some(dir.clone()),
             drain_on_exit: false,
             env: HashMap::from([
@@ -436,6 +436,14 @@ impl Render for TerminalView {
                 .size_full(),
             )
     }
+}
+
+/// Wat zsh meekrijgt. Een gewoon commando dat als laatste staat, voert zsh uit in plaats van
+/// zichzelf: het programma heeft dan het pid van de shell. Alleen met een functie `claude` in
+/// `.zshrc` bleef de shell de ouder. Met een regel erna blijft hij dat altijd; daar zoeken
+/// `status.rs` en `poorten.rs` het sessiebestand op.
+fn shell_args(command: &str) -> Vec<String> {
+    vec!["-ilc".into(), format!("{command}\n:")]
 }
 
 /// Opent de pty met de shell en start de lus die hem leest. Geeft de zender en het pid van de shell.
@@ -809,5 +817,20 @@ mod tests {
         // Doorlopend over twee regels.
         let t = term("xx https://example.com/abcdef", 12);
         assert_eq!(at(&t, 1, 2), Some(Doel::Url("https://example.com/abcdef".into())));
+    }
+
+    /// Zonder eigen `.zshrc` is `claude` een gewoon commando, zoals `sh` hier.
+    #[::core::prelude::v1::test]
+    fn shell_blijft_de_ouder() {
+        let shell = std::process::Command::new("/bin/zsh")
+            .args(shell_args("sh -c 'echo $PPID'"))
+            .env("ZDOTDIR", "/var/empty")
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .unwrap();
+        let pid = shell.id().to_string();
+        let uit = shell.wait_with_output().unwrap();
+        assert_eq!(String::from_utf8_lossy(&uit.stdout).trim(), pid);
     }
 }
